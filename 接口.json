@@ -1,0 +1,79 @@
+{
+    "wallpaper": "https://深色壁纸.xxooo.cf/",
+    "sites": [
+        {
+            "key": "豆瓣",
+            "name": "首页",
+            "type": 3,
+            "api": "./爬虫/豆瓣.py"
+        },
+        {
+            "key": "荐片",
+            "name": "荐片",
+            "type": 3,
+            "api": "https://raw.githubusercontent.com/wzxxcz/tvbox/refs/heads/main/js/cat_%E8%8D%90%E7%89%87app.js",
+            "ext": {
+                "host": "https://api.ztcgi.com",
+                "catesSet": "电影&电视剧&综艺&动漫&纪录片",
+                "tabsSet": "极速蓝光"
+            }
+        },
+        {
+            "key": "小苹果",
+            "name": "小苹果",
+            "type": 3,
+            "api": "https://raw.githubusercontent.com/tvbw/java/fa0bcde69d729c3b6629935cdc5fb9878adaad28/notes/py/Apple.py"
+        },
+        {
+            "key": "金牌",
+            "name": "金牌",
+            "type": 3,
+            "api": "https://raw.githubusercontent.com/alantang1977/X/04d655d5f4165e48a9f854652d09a3d7e784017c/py/%E9%87%91%E7%89%8C.py"
+        },
+        {
+            "key": "热播",
+            "name": "热播",
+            "type": 3,
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/py/%E6%A8%A1%E6%9D%BF/RJAPP.py",
+            "ext": "http://v.rbotv.cn"
+        },
+        {
+            "key": "看客联盟",
+            "name": "看客联盟",
+            "type": 3,
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/py/%E6%A8%A1%E6%9D%BF/skapp.py",
+            "ext": {
+                "host": "https://kankelm.cn:2024/appdomain.txt",
+                "key": "ygcnbcvybqqckwqy",
+                "iv": "1583560747143708"
+            }
+        },
+        {
+            "key": "4K影视",
+            "name": "4K影视",
+            "type": 3,
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/py/%E7%BB%BC/4K%E5%BD%B1%E8%A7%86.py"
+        },
+        {
+            "key": "看客TV",
+            "name": "看客TV",
+            "type": 3,
+            "api": "https://github.com/jak0099/dr/raw/refs/heads/master/py/%E7%BB%BC/%E7%9C%8B%E5%AE%A2TV.py"
+        },
+        {
+            "key": "界影视",
+            "name": "界影视",
+            "type": 3,
+            "api": "https://github.com/jak0099/dr/raw/refs/heads/master/py/%E7%BB%BC/%E7%95%8C%E5%BD%B1%E8%A7%86.py"
+        }
+    ],
+    "lives": [
+        {
+            "name": "广东IPTV",
+            "type": 0,
+            "url": "./广东IPTV组播.txt",
+            "playerType": 1,
+            "epg": "http://epg.51zmt.top:8000/api/diyp/?ch={name}&date={date}"
+        }
+    ]
+}
