@@ -18,19 +18,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         # 请求头信息，模拟正常浏览器访问豆瓣网站
         self.douban_header = {
             "User-Agent": self.user_agent,  # 浏览器标识
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",  # 接受的内容类型
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",  # 接受的语言
-            "Accept-Encoding": "gzip, deflate, br, zstd",  # 接受的压缩编码
-            "Sec-Ch-Ua": '"Not(A:Brand";v="8", "Chromium";v="144", "Microsoft Edge";v="144"',  # 安全请求相关字段
-            "Sec-Ch-Ua-Mobile": "?0",  # 是否移动设备
-            "Sec-Ch-Ua-Platform": '"Windows"',  # 平台信息
-            "Sec-Fetch-Dest": "document",  # 请求目标类型
-            "Sec-Fetch-Mode": "navigate",  # 请求模式
-            "Sec-Fetch-Site": "none",  # 跨站请求标志
-            "Sec-Fetch-User": "?1",  # 用户发起的请求
-            "Upgrade-Insecure-Requests": "1",  # 升级非安全请求
-            "DNT": "1",  # 不跟踪头部
-            "Priority": "u=0, i",  # 请求优先级
+            "Accept": "application/json", # 接收的数据格式
             "Referer": "https://www.douban.com/",  # 引用页面
         }
 
@@ -405,34 +393,13 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         # 延时1秒，避免请求过于频繁
         time.sleep(1)
         # 发送请求获取数据
-        try:
-            rsp = self.fetch(
-                url=self.douban_api, params=params, headers=self.douban_header
-            )
-            # 检查响应状态码
-            if rsp.status_code != 200:
-                self.log(f"豆瓣API请求失败，状态码: {rsp.status_code}")
-                return {"list": []}
-            
-            # 尝试解析JSON响应
-            json_data = rsp.json()
-            
-            # 检查是否有预期的键
-            if "data" not in json_data:
-                self.log(f"豆瓣API响应格式不正确: {json_data}")
-                return {"list": []}
-                
-        except ValueError as e:  # 捕获JSON解析错误
-            self.log(f"豆瓣API响应不是有效的JSON: {rsp.text if hasattr(rsp, 'text') else 'Response object'}")
-            return {"list": []}
-        except Exception as e:
-            self.log(f"豆瓣API请求过程中出现错误: {str(e)}")
-            return {"list": []}
-        
+        rsp = self.fetch(
+            url=self.douban_api, params=params, headers=self.douban_header
+        ).json()
         # 创建视频列表
         video_list = []
         # 遍历返回的视频数据
-        for item in json_data["data"]:
+        for item in rsp["data"]:
             # 构建视频信息对象
             video_info = self._build_video_info(item, "豆瓣")
             # 添加到视频列表
