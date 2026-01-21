@@ -405,13 +405,34 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         # 延时1秒，避免请求过于频繁
         time.sleep(1)
         # 发送请求获取数据
-        rsp = self.fetch(
-            url=self.douban_api, params=params, headers=self.douban_header
-        ).json()
+        try:
+            rsp = self.fetch(
+                url=self.douban_api, params=params, headers=self.douban_header
+            )
+            # 检查响应状态码
+            if rsp.status_code != 200:
+                self.log(f"豆瓣API请求失败，状态码: {rsp.status_code}")
+                return {"list": []}
+            
+            # 尝试解析JSON响应
+            json_data = rsp.json()
+            
+            # 检查是否有预期的键
+            if "data" not in json_data:
+                self.log(f"豆瓣API响应格式不正确: {json_data}")
+                return {"list": []}
+                
+        except ValueError as e:  # 捕获JSON解析错误
+            self.log(f"豆瓣API响应不是有效的JSON: {rsp.text if hasattr(rsp, 'text') else 'Response object'}")
+            return {"list": []}
+        except Exception as e:
+            self.log(f"豆瓣API请求过程中出现错误: {str(e)}")
+            return {"list": []}
+        
         # 创建视频列表
         video_list = []
         # 遍历返回的视频数据
-        for item in rsp["data"]:
+        for item in json_data["data"]:
             # 构建视频信息对象
             video_info = self._build_video_info(item, "豆瓣")
             # 添加到视频列表
@@ -506,4 +527,17 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
 if __name__ == "__main__":
     spider = Spider()
     spider.init()
-    print(len(spider.homeVideoContent()))
+
+    # 测试首页分类
+    print("=== 测试首页分类 ===")
+    res = spider.homeContent(True)
+    category_count = len(res["class"]) if res["class"] else 0
+    print(f"存在{category_count}个分类")
+    filter_count = len(res["filters"]) if res["filters"] else 0
+    print(f"存在{filter_count}个筛选条件")
+
+    # 测试首页推荐
+    print("\n=== 测试首页推荐 ===")
+    res = spider.homeVideoContent()
+    list_count = len(res["list"]) if res["list"] else 0
+    print(f"首页推荐列表包含{list_count}个视频")
