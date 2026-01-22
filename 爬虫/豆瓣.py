@@ -15,7 +15,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         # 非凡API接口地址
         self.ffzy_api = "https://ffzy.tv/index.php/ajax/data"
         # 用户代理字符串，模拟浏览器访问
-        self.user_agent= [
+        self.user_agent = [
             # Chrome - Windows
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -50,17 +50,29 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         ]
         # 请求头信息，模拟正常浏览器访问豆瓣网站
         self.douban_header = {
-            "Accept": "application/json", # 接收的数据格式
+            "Accept": "application/json",  # 接收的数据格式
             "Referer": "https://www.douban.com/",  # 引用页面
         }
 
-    def fetch(self, url, params=None, cookies=None, headers=None, timeout=5, verify=True, stream=False, allow_redirects=True):
+    def fetch(
+        self,
+        url,
+        params=None,
+        cookies=None,
+        headers=None,
+        timeout=5,
+        verify=True,
+        stream=False,
+        allow_redirects=True,
+    ):
         # 在请求前添加随机延迟 0.5-2 秒
         delay = random.uniform(0.5, 2.0)
         time.sleep(delay)
         # 调用父类的 fetch 方法
-        return super().fetch(url, params, cookies, headers, timeout, verify, stream, allow_redirects)
-    
+        return super().fetch(
+            url, params, cookies, headers, timeout, verify, stream, allow_redirects
+        )
+
     def getRandomHeader(self):
         """获取带有随机user-agent的请求头"""
         header = self.douban_header.copy()
@@ -378,7 +390,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             # 返回视频列表
             return {"list": video_list}
         except Exception as e:  # 捕获异常
-            self.log({"获取首页视频内容时出错：": e})
+            self.log(f"获取首页视频内容时出错：: {e}")
             # 出现错误时返回空列表
             return {"list": []}
 
@@ -511,14 +523,20 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 # 返回缓存的数据
                 return cached_data
             # 根据分类ID决定使用哪个API获取数据：豆瓣API或非凡API
-            if category_id == "电视剧" or category_id == "电影" or category_id == "综艺":
+            if (
+                category_id == "电视剧"
+                or category_id == "电影"
+                or category_id == "综艺"
+            ):
                 self.log(f"使用豆瓣API获取分类内容:{category_id}")
-                return self.douban_cate_content(category_id, page, filter, ext, cache_key)
+                return self.douban_cate_content(
+                    category_id, page, filter, ext, cache_key
+                )
             else:
                 self.log(f"使用非凡资源API获取分类内容:{category_id}")
                 return self.ffzy_cate_content(category_id, page, filter, ext, cache_key)
         except Exception as e:  # 捕获异常
-            self.log({"使用非凡资源获取分类内容": e})
+            self.log(f"使用非凡资源获取分类内容: {e}")
             # 出现错误时返回空列表
             return {"list": []}
 
