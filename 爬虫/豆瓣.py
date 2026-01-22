@@ -88,7 +88,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
     def homeContent(self, filter):  # 获取首页内容（分类信息）的方法
         # 定义视频内容的分类列表，包括非凡资源和豆瓣资源
         categories = [
-            {"type_id": "4", "type_name": "最新动漫"},  # 非凡动漫分类
+            {"type_id": 4, "type_name": "最新动漫"},  # 非凡动漫分类
             {"type_id": "2", "type_name": "最新剧集"},  # 非凡电视剧分类
             {"type_id": "电视剧", "type_name": "热门剧集"},  # 豆瓣电视剧分类
             {"type_id": "1", "type_name": "最新电影"},  # 非凡电影分类
