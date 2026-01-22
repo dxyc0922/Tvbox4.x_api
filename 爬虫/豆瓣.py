@@ -507,6 +507,9 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
     def categoryContent(self, category_id, page, filter, ext):
         """获取指定分类下的视频内容"""
         try:
+            # 确保ext是字典类型，如果不是则设为空字典
+            if not isinstance(ext, dict):
+                ext = {}
             # 生成缓存键名，包含分类ID和页数
             cache_params = f"cat_{category_id}_page_{page}"
             # 如果扩展参数存在，将其加入缓存键名中
