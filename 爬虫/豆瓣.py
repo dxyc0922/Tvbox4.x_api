@@ -359,7 +359,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 and len(cached_data["list"]) > 0
                 and "vod_id" in cached_data["list"][0]
             ):
-                self.log(f"首页推荐使用缓存数据:{cache_key}")
+                self.log(f"首页推荐使用缓存数据:{str(cache_key)}")
                 return cached_data
             # 构建请求参数
             params = {
@@ -371,11 +371,11 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 "tags": "",  # 根据分类筛选
                 "year_range": f"{current_year-1},{current_year}",  # 年份范围：去年到今年
             }
-            self.log(f"请求豆瓣首页推荐视频数据:{self.douban_api}?{params}")
+            self.log(f"请求豆瓣首页推荐视频数据:{str(self.douban_api)}?{str(params)}")
             rsp = self.fetch(
                 url=self.douban_api, params=params, headers=self.getRandomHeader()
             ).json()
-            self.log(f"豆瓣首页推荐视频数据:{rsp}")
+            self.log(f"豆瓣首页推荐视频数据:{str(rsp)}")
             video_list = []
             for item in rsp["data"]:
                 video_info = self._build_video_info(item, "豆瓣")
@@ -390,7 +390,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             # 返回视频列表
             return {"list": video_list}
         except Exception as e:  # 捕获异常
-            self.log(f"获取首页视频内容时出错：: {e}")
+            self.log(f"获取首页视频内容时出错：: {str(e)}")
             # 出现错误时返回空列表
             return {"list": []}
 
@@ -432,7 +432,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             "playable": "0",  # 是否只显示可播放的:0-否,1-是
             "start": str(start),  # 视频起始索引
             "limit": str(limit),  # 每页数量
-            "tags": category_id,  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
+            "tags": str(category_id),  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
         }
         # 如果扩展参数存在，将其加入请求参数中
         if ext and isinstance(ext, dict):
@@ -442,11 +442,11 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 params["sort"] = ext["排序"]  # 按指定排序方式排序
             if "地区" in ext:
                 params["countries"] = ext["地区"]  # 按地区筛选
-        self.log(f"请求豆瓣分类内容数据:{self.douban_api}?{params}")
+        self.log(f"请求豆瓣分类内容数据:{str(self.douban_api)}?{str(params)}")
         rsp = self.fetch(
             url=self.douban_api, params=params, headers=self.getRandomHeader()
         ).json()
-        self.log(f"豆瓣分类内容数据:{rsp}")
+        self.log(f"豆瓣分类内容数据:{str(rsp)}")
         video_list = []
         for item in rsp["data"]:
             video_info = self._build_video_info(item, "豆瓣")
@@ -465,7 +465,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         """获取非凡资源分类内容的方法"""
         params = {
             "mid": "1",
-            "tid": category_id,
+            "tid": str(category_id),
             "page": str(page),
             "limit": "30",  # 每页数量,最大支持30
         }
@@ -473,14 +473,14 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         if ext and isinstance(ext, dict):
             if "类型" in ext:
                 params["tid"] = ext["类型"]  # 按类型筛选
-        self.log(f"请求非凡资源分类内容数据:{self.ffzy_api}?{params}")
+        self.log(f"请求非凡资源分类内容数据:{str(self.ffzy_api)}?{str(params)}")
         # 发送请求获取数据
         rsp = self.fetch(
             url=self.ffzy_api,
             params=params,
             headers={"User-Agent": random.choice(self.user_agent)},
         ).json()
-        self.log(f"非凡资源分类内容数据:{rsp}")
+        self.log(f"非凡资源分类内容数据:{str(rsp)}")
         video_list = []
         for item in rsp["list"]:
             if "伦理片" in item["type_name"]:
@@ -528,20 +528,19 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 or category_id == "电影"
                 or category_id == "综艺"
             ):
-                self.log(f"使用豆瓣API获取分类内容:{category_id}")
+                self.log(f"使用豆瓣API获取分类内容:{str(category_id)}")
                 return self.douban_cate_content(
                     category_id, page, filter, ext, cache_key
                 )
             else:
-                self.log(f"使用非凡资源API获取分类内容:{category_id}")
+                self.log(f"使用非凡资源API获取分类内容:{str(category_id)}")
                 return self.ffzy_cate_content(category_id, page, filter, ext, cache_key)
         except Exception as e:  # 捕获异常
-            self.log(f"使用非凡资源获取分类内容: {e}")
+            self.log(f"使用非凡资源获取分类内容: {str(e)}")
             # 出现错误时返回空列表
             return {"list": []}
 
 
 if __name__ == "__main__":
-
     spider = Spider()
     spider.init()
