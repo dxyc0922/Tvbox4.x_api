@@ -117,7 +117,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             time.sleep(1)
             # 发送请求获取数据
             rsp = self.fetch(
-                url=self.api,
+                url=f"{self.api}/api/film/category/list",
                 params=params,
                 headers=self.header,
             ).json()
@@ -160,7 +160,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             time.sleep(1)
             # 发送请求获取数据
             rsp = self.fetch(
-                url=self.api,
+                url=f"{self.api}/api/film/search",
                 params=params,
                 headers=self.header,
             ).json()
@@ -195,7 +195,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             # 延时1秒，避免请求过于频繁
             time.sleep(1)
             rsp = self.fetch(
-                url=self.api,
+                url=f"{self.api}/api/film/detail",
                 params=params,
                 headers=self.header,
             ).json()
@@ -238,7 +238,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         """解析播放地址"""
         # 构建请求参数
         params = {"lineId": id}
-        rsp = self.fetch(url=self.api, params=params, headers=self.header)
+        rsp = self.fetch(url=f"{self.api}/api/line/play/parse", params=params, headers=self.header)
         return {
             "jx": "0",
             "parse": "0",
@@ -264,3 +264,8 @@ if __name__ == "__main__":
     res = spider.homeVideoContent()
     list_count = len(res["list"]) if res["list"] else 0
     print(f"首页推荐列表包含{list_count}个视频")
+
+    print("\n=== 测试分类内容 ===")
+    res = spider.categoryContent("1", "1", True, "")
+    list_count = len(res["list"]) if res["list"] else 0
+    print(f"分类内容列表包含{list_count}个视频")
