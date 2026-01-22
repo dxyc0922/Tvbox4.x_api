@@ -382,11 +382,11 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 "tags": "",  # 根据分类筛选
                 "year_range": f"{current_year-1},{current_year}",  # 年份范围：去年到今年
             }
-            self.log(f"请求豆瓣首页推荐视频数据:{self.douban_api}?{params}")
+            self.log(f"请求豆瓣首页推荐视频数据:params={params}")
             rsp = self.fetch(
                 url=self.douban_api,
                 params=params,
-                headers=self.getRandomHeader(self.douban_api),
+                headers=self.getRandomHeader(self.douban_header.copy()),
             ).json()
             self.log(f"豆瓣首页推荐视频数据:{rsp}")
             video_list = []
@@ -455,11 +455,11 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 params["sort"] = ext["排序"]  # 按指定排序方式排序
             if "地区" in ext:
                 params["countries"] = ext["地区"]  # 按地区筛选
-        self.log(f"请求豆瓣分类内容数据:{self.douban_api}?{params}")
+        self.log(f"请求豆瓣分类内容数据:params={params}")
         rsp = self.fetch(
             url=self.douban_api,
             params=params,
-            headers=self.getRandomHeader(self.douban_api),
+            headers=self.getRandomHeader(self.douban_header.copy()),
         ).json()
         self.log(f"豆瓣分类内容数据:{rsp}")
         video_list = []
@@ -488,7 +488,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         if ext and isinstance(ext, dict):
             if "类型" in ext:
                 params["tid"] = ext["类型"]  # 按类型筛选
-        self.log(f"请求非凡资源分类内容数据:{self.ffzy_api}, params: {params}")
+        self.log(f"请求非凡资源分类内容数据:params={params}")
         # 发送请求获取数据
         rsp = self.fetch(
             url=self.ffzy_api,

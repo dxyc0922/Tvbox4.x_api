@@ -74,20 +74,22 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             url, params, cookies, headers, timeout, verify, stream, allow_redirects
         )
 
-    def getRandomHeader(self,api):
+    def getRandomHeader(self):
         """获取带有随机user-agent的请求头"""
-        api["User-Agent"] = random.choice(self.user_agent)
-        return api
+        headers = self.header.copy()
+        headers["User-Agent"] = random.choice(self.user_agent)
+        return headers
 
     def homeContent(self, filter):  # 获取首页内容（分类信息）的方法
         try:
             url = f"{self.api}/api/category/top"
             cache_key = f"symx_home_category"
-            if self.getCache(cache_key):  # 如果缓存有效
+            cached_result = self.getCache(cache_key)
+            if cached_result:  # 如果缓存有效
                 self.log(f"获取首页分类信息缓存有效: {str(cache_key)}")
-                return self.getCache(cache_key)
+                return cached_result
             self.log(f"获取首页分类信息开始: {str(url)}")
-            rsp = self.fetch(url=url, headers=self.getRandomHeader(self.api)).json()
+            rsp = self.fetch(url=url, headers=self.getRandomHeader()).json()
             self.log(f"获取首页分类信息成功: {str(rsp)}")
             categories = []
             for item in rsp["data"]:
@@ -128,7 +130,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 self.log(f"获取首页推荐视频缓存有效: {str(cache_key)}")
                 return cached_data
             self.log(f"获取首页推荐视频开始: {str(url)}")
-            rsp = self.fetch(url=url, headers=self.getRandomHeader(self.api)).json()
+            rsp = self.fetch(url=url, headers=self.getRandomHeader()).json()
             self.log(f"获取首页推荐视频成功: {str(rsp)}")
             # 创建视频列表
             video_list = []
@@ -157,12 +159,12 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             # 出现错误时返回空列表
             return {"list": []}
 
-    def categoryContent(self, category_id, page, filter, ext):
+    def categoryContent(self, tid, pg, filter, extend):  # 参数名已按照基类定义修改
         """获取指定分类下的视频内容"""
         try:
             url = f"{self.api}/api/film/category/list"
             # 生成缓存键名，包含分类ID和页数
-            cache_key = f"symx_cat_{category_id}_page_{page}"
+            cache_key = f"symx_cat_{tid}_page_{pg}"
             # 尝试从缓存获取数据
             cached_data = self.getCache(cache_key)
             # 检查缓存是否有效
@@ -177,9 +179,9 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             # 构建请求参数
             params = {
                 "area": "1",
-                "categoryId": category_id,
+                "categoryId": tid,
                 "language": "",
-                "pageNum": str(page),
+                "pageNum": str(pg),
                 "pageSize": "30",
                 "sort": "updateTime",
                 "year": "",
@@ -188,7 +190,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             rsp = self.fetch(
                 url=url,
                 params=params,
-                headers=self.getRandomHeader(self.api),
+                headers=self.getRandomHeader(),
             ).json()
             self.log(f"获取分类视频成功: {str(rsp)}")
             video_list = []
@@ -229,7 +231,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             rsp = self.fetch(
                 url=url,
                 params=params,
-                headers=self.getRandomHeader(self.api),
+                headers=self.getRandomHeader(),
             ).json()
             self.log(f"搜索成功: {str(rsp)}")
             video_list = []
@@ -260,7 +262,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             rsp = self.fetch(
                 url=url,
                 params=params,
-                headers=self.getRandomHeader(self.api),
+                headers=self.getRandomHeader(),
             ).json()
             self.log(f"获取视频详情成功: {str(rsp)}")
             video_list = {}
@@ -309,8 +311,8 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             rsp = self.fetch(
                 url=url,
                 params=params,
-                headers=self.getRandomHeader(self.api),
-            )
+                headers=self.getRandomHeader(),
+            ).json()
             self.log(f"解析播放地址成功: {str(rsp)}")
             return {
                 "jx": "0",
@@ -330,3 +332,4 @@ if __name__ == "__main__":
     spider.searchContent("1", True)
     spider.detailContent(["1"])
     spider.playerContent("", "1", "")
+    
