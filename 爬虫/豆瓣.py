@@ -1,5 +1,6 @@
 import sys
 import time
+import random
 from datetime import datetime
 
 sys.path.append("..")
@@ -14,13 +15,57 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         # 非凡API接口地址
         self.ffzy_api = "https://ffzy.tv/index.php/ajax/data"
         # 用户代理字符串，模拟浏览器访问
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+        self.user_agent= [
+            # Chrome - Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            # Chrome - macOS
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            # Chrome - Linux
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            # Firefox - Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/120.0",
+            # Firefox - macOS
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/121.0",
+            # Firefox - Linux
+            "Mozilla/5.0 (X11; Linux i686; rv:109.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/121.0",
+            # Safari - iOS
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (iPad; CPU OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
+            # Safari - macOS
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+            # Edge - Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
+            # Samsung Browser - Android
+            "Mozilla/5.0 (Linux; Android 10; SAMSUNG SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.5790.166 Mobile Safari/537.36",
+            # Chrome - Android
+            "Mozilla/5.0 (Linux; Android 10; Pixel 4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+            "Mozilla/5.0 (Linux; Android 13; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
+            # Opera - Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/105.0.0.0",
+        ]
         # 请求头信息，模拟正常浏览器访问豆瓣网站
         self.douban_header = {
-            "User-Agent": self.user_agent,  # 浏览器标识
             "Accept": "application/json", # 接收的数据格式
             "Referer": "https://www.douban.com/",  # 引用页面
         }
+
+    def fetch(self, url, params=None, cookies=None, headers=None, timeout=5, verify=True, stream=False, allow_redirects=True):
+        # 在请求前添加随机延迟 0.5-2 秒
+        delay = random.uniform(0.5, 2.0)
+        time.sleep(delay)
+        # 调用父类的 fetch 方法
+        return super().fetch(url, params, cookies, headers, timeout, verify, stream, allow_redirects)
+    
+    def getRandomHeader(self):
+        """获取带有随机user-agent的请求头"""
+        header = self.douban_header.copy()
+        header["user-agent"] = random.choice(self.user_agent)
+        return header
 
     def getName(self):  # 获取爬虫名称的方法
         return self.name
@@ -302,7 +347,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 and len(cached_data["list"]) > 0
                 and "vod_id" in cached_data["list"][0]
             ):
-                # 返回缓存的数据
+                self.log(f"首页推荐使用缓存数据:{cache_key}")
                 return cached_data
             # 构建请求参数
             params = {
@@ -314,19 +359,14 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 "tags": "",  # 根据分类筛选
                 "year_range": f"{current_year-1},{current_year}",  # 年份范围：去年到今年
             }
-            # 延时1秒，避免请求过于频繁
-            time.sleep(1)
-            # 发送请求获取数据
+            self.log(f"请求豆瓣首页推荐视频数据:{self.douban_api}?{params}")
             rsp = self.fetch(
-                url=self.douban_api, params=params, headers=self.douban_header
+                url=self.douban_api, params=params, headers=self.getRandomHeader()
             ).json()
-            # 创建视频列表
+            self.log(f"豆瓣首页推荐视频数据:{rsp}")
             video_list = []
-            # 遍历返回的视频数据
             for item in rsp["data"]:
-                # 构建视频信息对象
                 video_info = self._build_video_info(item, "豆瓣")
-                # 添加到视频列表
                 video_list.append(video_info)
             # 设置带过期时间的缓存数据，7天后过期
             cache_with_expiry = {
@@ -338,7 +378,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             # 返回视频列表
             return {"list": video_list}
         except Exception as e:  # 捕获异常
-            self.log(f"获取首页视频内容时出错：{str(e)}")
+            self.log({"获取首页视频内容时出错：": e})
             # 出现错误时返回空列表
             return {"list": []}
 
@@ -352,7 +392,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             # 如果有封面图，则添加用户代理参数，防止防盗链
             if cover:
                 # 添加User-Agent和Referer参数，防止防盗链
-                cover = f"{cover}@User-Agent={self.user_agent}@Referer=https://www.douban.com/"
+                cover = f"{cover}@User-Agent={random.choice(self.user_agent)}@Referer=https://www.douban.com/"
             # 构建视频信息对象
             return {
                 "vod_id": item["id"],  # 视频ID
@@ -390,19 +430,14 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 params["sort"] = ext["排序"]  # 按指定排序方式排序
             if "地区" in ext:
                 params["countries"] = ext["地区"]  # 按地区筛选
-        # 延时1秒，避免请求过于频繁
-        time.sleep(1)
-        # 发送请求获取数据
+        self.log(f"请求豆瓣分类内容数据:{self.douban_api}?{params}")
         rsp = self.fetch(
-            url=self.douban_api, params=params, headers=self.douban_header
+            url=self.douban_api, params=params, headers=self.getRandomHeader()
         ).json()
-        # 创建视频列表
+        self.log(f"豆瓣分类内容数据:{rsp}")
         video_list = []
-        # 遍历返回的视频数据
         for item in rsp["data"]:
-            # 构建视频信息对象
             video_info = self._build_video_info(item, "豆瓣")
-            # 添加到视频列表
             video_list.append(video_info)
         # 设置带过期时间的缓存数据，7天后过期
         cache_with_expiry = {
@@ -416,7 +451,6 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
 
     def ffzy_cate_content(self, category_id, page, filter, ext, cache_key):
         """获取非凡资源分类内容的方法"""
-        # 构建请求参数
         params = {
             "mid": "1",
             "tid": category_id,
@@ -427,23 +461,19 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         if ext and isinstance(ext, dict):
             if "类型" in ext:
                 params["tid"] = ext["类型"]  # 按类型筛选
-        # 延时1秒，避免请求过于频繁
-        time.sleep(1)
+        self.log(f"请求非凡资源分类内容数据:{self.ffzy_api}?{params}")
         # 发送请求获取数据
         rsp = self.fetch(
             url=self.ffzy_api,
             params=params,
-            headers={"User-Agent": self.user_agent},
+            headers={"User-Agent": random.choice(self.user_agent)},
         ).json()
-        # 创建视频列表
+        self.log(f"非凡资源分类内容数据:{rsp}")
         video_list = []
-        # 遍历返回的视频数据
         for item in rsp["list"]:
             if "伦理片" in item["type_name"]:
                 continue
-            # 构建视频信息对象
             video_info = self._build_video_info(item, "非凡")
-            # 添加到视频列表
             video_list.append(video_info)
         # 设置带过期时间的缓存数据，10分钟后过期
         cache_with_expiry = {
@@ -482,31 +512,18 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 return cached_data
             # 根据分类ID决定使用哪个API获取数据：豆瓣API或非凡API
             if category_id == "电视剧" or category_id == "电影" or category_id == "综艺":
-                # 使用豆瓣API获取数据
+                self.log(f"使用豆瓣API获取分类内容:{category_id}")
                 return self.douban_cate_content(category_id, page, filter, ext, cache_key)
             else:
-                # 使用非凡API获取数据
+                self.log(f"使用非凡资源API获取分类内容:{category_id}")
                 return self.ffzy_cate_content(category_id, page, filter, ext, cache_key)
         except Exception as e:  # 捕获异常
-            self.log(f"获取分类内容时出错：{str(e)}")
+            self.log({"使用非凡资源获取分类内容": e})
             # 出现错误时返回空列表
             return {"list": []}
 
 
 if __name__ == "__main__":
+
     spider = Spider()
     spider.init()
-
-    # 测试首页分类
-    print("=== 测试首页分类 ===")
-    res = spider.homeContent(True)
-    category_count = len(res["class"]) if res["class"] else 0
-    print(f"存在{category_count}个分类")
-    filter_count = len(res["filters"]) if res["filters"] else 0
-    print(f"存在{filter_count}个筛选条件")
-
-    # 测试首页推荐
-    print("\n=== 测试首页推荐 ===")
-    res = spider.homeVideoContent()
-    list_count = len(res["list"]) if res["list"] else 0
-    print(f"首页推荐列表包含{list_count}个视频")
