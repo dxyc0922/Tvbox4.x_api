@@ -79,9 +79,8 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
 
     def getRandomHeader(self, api):
         """获取带有随机user-agent的请求头"""
-        header = api.copy()
-        header["User-Agent"] = random.choice(self.user_agent)
-        return header
+        api["User-Agent"] = random.choice(self.user_agent)
+        return api
 
     def getName(self):  # 获取爬虫名称的方法
         return self.name
