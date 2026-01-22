@@ -77,10 +77,18 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             url, params, cookies, headers, timeout, verify, stream, allow_redirects
         )
 
-    def getRandomHeader(self, api):
+    def getRandomHeader(self, api_or_headers):
         """获取带有随机user-agent的请求头"""
-        api["User-Agent"] = random.choice(self.user_agent)
-        return api
+        # 判断参数是字典还是字符串URL
+        if isinstance(api_or_headers, dict):
+            # 如果传入的是字典类型的headers，则更新该字典
+            headers_copy = api_or_headers.copy()
+            headers_copy["User-Agent"] = random.choice(self.user_agent)
+            return headers_copy
+        else:
+            # 如果传入的是字符串类型的URL，则创建新的字典
+            header = {"User-Agent": random.choice(self.user_agent)}
+            return header
 
     def getName(self):  # 获取爬虫名称的方法
         return self.name
@@ -88,7 +96,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
     def homeContent(self, filter):  # 获取首页内容（分类信息）的方法
         # 定义视频内容的分类列表，包括非凡资源和豆瓣资源
         categories = [
-            {"type_id": 4, "type_name": "最新动漫"},  # 非凡动漫分类
+            {"type_id": "4", "type_name": "最新动漫"},  # 非凡动漫分类
             {"type_id": "2", "type_name": "最新剧集"},  # 非凡电视剧分类
             {"type_id": "电视剧", "type_name": "热门剧集"},  # 豆瓣电视剧分类
             {"type_id": "1", "type_name": "最新电影"},  # 非凡电影分类
@@ -426,9 +434,110 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 "vod_remarks": item.get("vod_remarks"),
             }
 
+    def douban_cate_content(self, category_id, page, filter, ext, cache_key):
+        """获取豆瓣分类内容的方法，支持多种筛选条件"""
+        limit = 100  # 设置每页数量
+        start = (int(page) - 1) * limit  # 计算每次分页起始索引
+        # 构建请求参数
+        params = {
+            "sort": "U",  # 排序:近期热度
+            "range": "0,10",  # 评分区间:0-10分
+            "playable": "0",  # 是否只显示可播放的:0-否,1-是
+            "start": str(start),  # 视频起始索引
+            "limit": str(limit),  # 每页数量
+            "tags": category_id,  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
+        }
+        # 如果扩展参数存在，将其加入请求参数中
+        if ext and isinstance(ext, dict):
+            if "类型" in ext:
+                params["genres"] = ext["类型"]  # 按类型筛选
+            if "排序" in ext:
+                params["sort"] = ext["排序"]  # 按指定排序方式排序
+            if "地区" in ext:
+                params["countries"] = ext["地区"]  # 按地区筛选
+        self.log(f"请求豆瓣分类内容数据:{self.douban_api}?{params}")
+        rsp = self.fetch(
+            url=self.douban_api,
+            params=params,
+            headers=self.getRandomHeader(self.douban_api),
+        ).json()
+        self.log(f"豆瓣分类内容数据:{rsp}")
+        video_list = []
+        for item in rsp["data"]:
+            video_info = self._build_video_info(item, "豆瓣")
+            video_list.append(video_info)
+        # 设置带过期时间的缓存数据，7天后过期
+        cache_with_expiry = {
+            "list": video_list,
+            "expiresAt": int(time.time()) + 604800,
+        }
+        # 存储到缓存
+        self.setCache(cache_key, cache_with_expiry)
+        # 返回视频列表
+        return {"list": video_list}
+
+    def ffzy_cate_content(self, category_id, page, filter, ext, cache_key):
+        """获取非凡资源分类内容的方法"""
+        params = {
+            "mid": "1",
+            "tid": category_id,
+            "page": str(page),
+            "limit": "30",  # 每页数量,最大支持30
+        }
+        # 如果扩展参数存在，将其加入请求参数中
+        if ext and isinstance(ext, dict):
+            if "类型" in ext:
+                params["tid"] = ext["类型"]  # 按类型筛选
+        self.log(f"请求非凡资源分类内容数据:{self.ffzy_api}, params: {params}")
+        # 发送请求获取数据
+        rsp = self.fetch(
+            url=self.ffzy_api,
+            params=params,
+            headers=self.getRandomHeader(self.ffzy_header.copy()), # 使用正确的请求头
+        ).json()
+        self.log(f"非凡资源分类内容数据:{rsp}")
+        video_list = []
+        if 'list' in rsp and rsp['list']:  # 检查响应中是否有list字段
+            for item in rsp["list"]:
+                if "伦理片" in item.get("type_name", ""):
+                    continue
+                video_info = self._build_video_info(item, "非凡")
+                video_list.append(video_info)
+        # 设置带过期时间的缓存数据，10分钟后过期
+        cache_with_expiry = {
+            "list": video_list,
+            "expiresAt": int(time.time()) + 600,
+        }
+        # 存储到缓存
+        self.setCache(cache_key, cache_with_expiry)
+        # 返回视频列表
+        return {"list": video_list}
+
     def categoryContent(self, category_id, page, filter, ext):
         """获取指定分类下的视频内容"""
         try:
+            # 生成缓存键名，包含分类ID和页数
+            cache_params = f"cat_{category_id}_page_{page}"
+            # 如果扩展参数存在，将其加入缓存键名中
+            if ext and isinstance(ext, dict):
+                if "类型" in ext:
+                    cache_params += f"_genre_{ext['类型']}"  # 添加类型参数到缓存键
+                if "排序" in ext:
+                    cache_params += f"_sort_{ext['排序']}"  # 添加排序参数到缓存键
+                if "地区" in ext:
+                    cache_params += f"_country_{ext['地区']}"  # 添加地区参数到缓存键
+            cache_key = f"douban_category_{cache_params}"
+            # 尝试从缓存获取数据
+            cached_data = self.getCache(cache_key)
+            # 检查缓存是否有效
+            if (
+                cached_data
+                and "list" in cached_data
+                and len(cached_data["list"]) > 0
+                and "vod_id" in cached_data["list"][0]
+            ):
+                # 返回缓存的数据
+                return cached_data
             # 根据分类ID决定使用哪个API获取数据：豆瓣API或非凡API
             if (
                 category_id == "电视剧"
@@ -436,132 +545,14 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 or category_id == "综艺"
             ):
                 self.log(f"使用豆瓣API获取分类内容:{category_id}")
-                # 生成缓存键名，包含分类ID和页数
-                cache_params = f"cat_{category_id}_page_{page}"
-                # 如果扩展参数存在，将其加入缓存键名中
-                if ext and isinstance(ext, dict):
-                    if "类型" in ext:
-                        cache_params += f"_genre_{ext['类型']}"  # 添加类型参数到缓存键
-                    if "排序" in ext:
-                        cache_params += f"_sort_{ext['排序']}"  # 添加排序参数到缓存键
-                    if "地区" in ext:
-                        cache_params += (
-                            f"_country_{ext['地区']}"  # 添加地区参数到缓存键
-                        )
-                cache_key = f"douban_category_{cache_params}"
-                # 尝试从缓存获取数据
-                cached_data = self.getCache(cache_key)
-                # 检查缓存是否有效
-                if (
-                    cached_data
-                    and "list" in cached_data
-                    and len(cached_data["list"]) > 0
-                    and "vod_id" in cached_data["list"][0]
-                ):
-                    # 返回缓存的数据
-                    return cached_data
-                """获取豆瓣分类内容的方法，支持多种筛选条件"""
-                limit = 100  # 设置每页数量
-                start = (int(page) - 1) * limit  # 计算每次分页起始索引
-                # 构建请求参数
-                params = {
-                    "sort": "U",  # 排序:近期热度
-                    "range": "0,10",  # 评分区间:0-10分
-                    "playable": "0",  # 是否只显示可播放的:0-否,1-是
-                    "start": str(start),  # 视频起始索引
-                    "limit": str(limit),  # 每页数量
-                    "tags": category_id,  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
-                }
-                # 如果扩展参数存在，将其加入请求参数中
-                if ext and isinstance(ext, dict):
-                    if "类型" in ext:
-                        params["genres"] = ext["类型"]  # 按类型筛选
-                    if "排序" in ext:
-                        params["sort"] = ext["排序"]  # 按指定排序方式排序
-                    if "地区" in ext:
-                        params["countries"] = ext["地区"]  # 按地区筛选
-                self.log(f"请求豆瓣分类内容数据:{self.douban_api}?{params}")
-                rsp = self.fetch(
-                    url=self.douban_api,
-                    params=params,
-                    headers=self.getRandomHeader(self.douban_api),
-                ).json()
-                self.log(f"豆瓣分类内容数据:{rsp}")
-                video_list = []
-                for item in rsp["data"]:
-                    video_info = self._build_video_info(item, "豆瓣")
-                    video_list.append(video_info)
-                # 设置带过期时间的缓存数据，7天后过期
-                cache_with_expiry = {
-                    "list": video_list,
-                    "expiresAt": int(time.time()) + 604800,
-                }
-                # 存储到缓存
-                self.setCache(cache_key, cache_with_expiry)
-                # 返回视频列表
-                return {"list": video_list}
+                return self.douban_cate_content(
+                    category_id, page, filter, ext, cache_key
+                )
             else:
                 self.log(f"使用非凡资源API获取分类内容:{category_id}")
-                # 生成缓存键名，包含分类ID和页数
-                cache_params = f"cat_{category_id}_page_{page}"
-                # 如果扩展参数存在，将其加入缓存键名中
-                if ext and isinstance(ext, dict):
-                    if "类型" in ext:
-                        cache_params += f"_genre_{ext['类型']}"  # 添加类型参数到缓存键
-                    if "排序" in ext:
-                        cache_params += f"_sort_{ext['排序']}"  # 添加排序参数到缓存键
-                    if "地区" in ext:
-                        cache_params += (
-                            f"_country_{ext['地区']}"  # 添加地区参数到缓存键
-                        )
-                cache_key = f"ffzy_category_{cache_params}"
-                # 尝试从缓存获取数据
-                cached_data = self.getCache(cache_key)
-                # 检查缓存是否有效
-                if (
-                    cached_data
-                    and "list" in cached_data
-                    and len(cached_data["list"]) > 0
-                    and "vod_id" in cached_data["list"][0]
-                ):
-                    # 返回缓存的数据
-                    return cached_data
-                """获取非凡资源分类内容的方法"""
-                params = {
-                    "mid": "1",
-                    "tid": category_id,
-                    "page": str(page),
-                    "limit": "30",  # 每页数量,最大支持30
-                }
-                # 如果扩展参数存在，将其加入请求参数中
-                if ext and isinstance(ext, dict):
-                    if "类型" in ext:
-                        params["tid"] = ext["类型"]  # 按类型筛选
-                self.log(f"请求非凡资源分类内容数据:{self.ffzy_api}?{params}")
-                # 发送请求获取数据
-                rsp = self.fetch(
-                    url=self.ffzy_api,
-                    params=params,
-                    headers=self.getRandomHeader(self.ffzy_api),
-                ).json()
-                self.log(f"非凡资源分类内容数据:{rsp}")
-                video_list = []
-                for item in rsp["list"]:
-                    if "伦理片" in item["type_name"]:
-                        continue
-                    video_info = self._build_video_info(item, "非凡")
-                    video_list.append(video_info)
-                # 设置带过期时间的缓存数据，10分钟后过期
-                cache_with_expiry = {
-                    "list": video_list,
-                    "expiresAt": int(time.time()) + 600,
-                }
-                # 存储到缓存
-                self.setCache(cache_key, cache_with_expiry)
-                # 返回视频列表
-                return {"list": video_list}
+                return self.ffzy_cate_content(category_id, page, filter, ext, cache_key)
         except Exception as e:  # 捕获异常
-            self.log(f"使用非凡资源获取分类内容: {e}")
+            self.log(f"获取分类内容时出错：{str(e)}")  # 显示完整的错误信息
             # 出现错误时返回空列表
             return {"list": []}
 
@@ -571,4 +562,4 @@ if __name__ == "__main__":
     spider.init()
     # 测试非凡分类
     print("=== 测试非凡分类 ===")
-    res = spider.categoryContent("电影", 1, "", "")
+    res = spider.categoryContent("1", "1", "", "")
