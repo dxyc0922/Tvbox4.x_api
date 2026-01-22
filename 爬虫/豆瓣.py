@@ -395,7 +395,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             # 返回视频列表
             return {"list": video_list}
         except Exception as e:  # 捕获异常
-            self.log(f"获取首页视频内容时出错：: {str(e)}")
+            self.log(f"获取首页视频内容时出错：: {e}")
             # 出现错误时返回空列表
             return {"list": []}
 
@@ -543,7 +543,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 self.log(f"使用非凡资源API获取分类内容:{category_id}")
                 return self.ffzy_cate_content(category_id, page, filter, ext, cache_key)
         except Exception as e:  # 捕获异常
-            self.log(f"使用非凡资源获取分类内容: {str(e)}")
+            self.log(f"使用非凡资源获取分类内容: {e}")
             # 出现错误时返回空列表
             return {"list": []}
 
