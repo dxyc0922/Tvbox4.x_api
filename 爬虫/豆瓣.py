@@ -16,43 +16,46 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         self.ffzy_api = "https://ffzy.tv/index.php/ajax/data"
         # 用户代理字符串，模拟浏览器访问
         self.user_agent = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
-            # # Chrome - Windows
-            # "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            # "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            # # Chrome - macOS
-            # "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            # "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            # # Chrome - Linux
-            # "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            # # Firefox - Windows
-            # "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
-            # "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/120.0",
-            # # Firefox - macOS
-            # "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/121.0",
-            # # Firefox - Linux
-            # "Mozilla/5.0 (X11; Linux i686; rv:109.0) Gecko/20100101 Firefox/121.0",
-            # "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/121.0",
-            # # Safari - iOS
-            # "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
-            # "Mozilla/5.0 (iPad; CPU OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
-            # # Safari - macOS
-            # "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
-            # # Edge - Windows
-            # "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
-            # "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
-            # # Samsung Browser - Android
-            # "Mozilla/5.0 (Linux; Android 10; SAMSUNG SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.5790.166 Mobile Safari/537.36",
-            # # Chrome - Android
-            # "Mozilla/5.0 (Linux; Android 10; Pixel 4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-            # "Mozilla/5.0 (Linux; Android 13; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
-            # # Opera - Windows
-            # "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/105.0.0.0",
+            # Chrome - Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            # Chrome - macOS
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            # Chrome - Linux
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            # Firefox - Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/120.0",
+            # Firefox - macOS
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/121.0",
+            # Firefox - Linux
+            "Mozilla/5.0 (X11; Linux i686; rv:109.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/121.0",
+            # Safari - iOS
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (iPad; CPU OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
+            # Safari - macOS
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+            # Edge - Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
+            # Samsung Browser - Android
+            "Mozilla/5.0 (Linux; Android 10; SAMSUNG SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.5790.166 Mobile Safari/537.36",
+            # Chrome - Android
+            "Mozilla/5.0 (Linux; Android 10; Pixel 4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+            "Mozilla/5.0 (Linux; Android 13; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
+            # Opera - Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/105.0.0.0",
         ]
         # 请求头信息，模拟正常浏览器访问豆瓣网站
         self.douban_header = {
             "Accept": "application/json",  # 接收的数据格式
             "Referer": "https://www.douban.com/",  # 引用页面
+        }
+        self.ffzy_header = {
+            "Accept": "application/json",
+            "Referer": "https://ffzy.tv/",
         }
 
     def fetch(
@@ -74,10 +77,10 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             url, params, cookies, headers, timeout, verify, stream, allow_redirects
         )
 
-    def getRandomHeader(self):
+    def getRandomHeader(self, api):
         """获取带有随机user-agent的请求头"""
-        header = self.douban_header.copy()
-        header["user-agent"] = random.choice(self.user_agent)
+        header = api.copy()
+        header["User-Agent"] = random.choice(self.user_agent)
         return header
 
     def getName(self):  # 获取爬虫名称的方法
@@ -374,7 +377,9 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             }
             self.log(f"请求豆瓣首页推荐视频数据:{str(self.douban_api)}?{str(params)}")
             rsp = self.fetch(
-                url=self.douban_api, params=params, headers=self.getRandomHeader()
+                url=self.douban_api,
+                params=params,
+                headers=self.getRandomHeader(self.douban_api),
             ).json()
             self.log(f"豆瓣首页推荐视频数据:{str(rsp)}")
             video_list = []
@@ -445,7 +450,9 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 params["countries"] = ext["地区"]  # 按地区筛选
         self.log(f"请求豆瓣分类内容数据:{str(self.douban_api)}?{str(params)}")
         rsp = self.fetch(
-            url=self.douban_api, params=params, headers=self.getRandomHeader()
+            url=self.douban_api,
+            params=params,
+            headers=self.getRandomHeader(self.douban_api),
         ).json()
         self.log(f"豆瓣分类内容数据:{str(rsp)}")
         video_list = []
@@ -479,7 +486,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         rsp = self.fetch(
             url=self.ffzy_api,
             params=params,
-            headers={"User-Agent": random.choice(self.user_agent)},
+            headers=self.getRandomHeader(self.ffzy_api),
         ).json()
         self.log(f"非凡资源分类内容数据:{str(rsp)}")
         video_list = []

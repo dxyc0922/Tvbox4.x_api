@@ -74,10 +74,10 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             url, params, cookies, headers, timeout, verify, stream, allow_redirects
         )
 
-    def getRandomHeader(self):
+    def getRandomHeader(self,api):
         """获取带有随机user-agent的请求头"""
-        header = self.header.copy()
-        header["user-agent"] = random.choice(self.user_agent)
+        header = api.copy()
+        header["User-Agent"] = random.choice(self.user_agent)
         return header
 
     def homeContent(self, filter):  # 获取首页内容（分类信息）的方法
@@ -88,7 +88,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 self.log(f"获取首页分类信息缓存有效: {str(cache_key)}")
                 return self.getCache(cache_key)
             self.log(f"获取首页分类信息开始: {str(url)}")
-            rsp = self.fetch(url=url, headers=self.getRandomHeader()).json()
+            rsp = self.fetch(url=url, headers=self.getRandomHeader(self.api)).json()
             self.log(f"获取首页分类信息成功: {str(rsp)}")
             categories = []
             for item in rsp["data"]:
@@ -129,7 +129,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 self.log(f"获取首页推荐视频缓存有效: {str(cache_key)}")
                 return cached_data
             self.log(f"获取首页推荐视频开始: {str(url)}")
-            rsp = self.fetch(url=url, headers=self.getRandomHeader()).json()
+            rsp = self.fetch(url=url, headers=self.getRandomHeader(self.api)).json()
             self.log(f"获取首页推荐视频成功: {str(rsp)}")
             # 创建视频列表
             video_list = []
@@ -189,7 +189,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             rsp = self.fetch(
                 url=url,
                 params=params,
-                headers=self.getRandomHeader(),
+                headers=self.getRandomHeader(self.api),
             ).json()
             self.log(f"获取分类视频成功: {str(rsp)}")
             video_list = []
@@ -230,7 +230,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             rsp = self.fetch(
                 url=url,
                 params=params,
-                headers=self.getRandomHeader(),
+                headers=self.getRandomHeader(self.api),
             ).json()
             self.log(f"搜索成功: {str(rsp)}")
             video_list = []
@@ -261,7 +261,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             rsp = self.fetch(
                 url=url,
                 params=params,
-                headers=self.getRandomHeader(),
+                headers=self.getRandomHeader(self.api),
             ).json()
             self.log(f"获取视频详情成功: {str(rsp)}")
             video_list = {}
@@ -310,7 +310,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             rsp = self.fetch(
                 url=url,
                 params=params,
-                headers=self.getRandomHeader(),
+                headers=self.getRandomHeader(self.api),
             )
             self.log(f"解析播放地址成功: {str(rsp)}")
             return {
