@@ -210,7 +210,9 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 # 解析线路下的播放源
                 line_urls = []
                 for line in play_line.get("lines", []):
-                    line_urls.append(f"{line.get("name", "")}${line.get("id", "")}")
+                    line_name = line.get("name", "")
+                    line_id = line.get("id", "")
+                    line_urls.append(f"{line_name}${line_id}")
                 play_url_list.append("#".join(line_urls))
 
             video_list.update(
