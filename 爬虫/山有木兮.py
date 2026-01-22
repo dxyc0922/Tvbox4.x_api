@@ -178,7 +178,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             # 构建请求参数
             params = {
                 "area": "1",
-                "categoryId": str(category_id),
+                "categoryId": category_id,
                 "language": "",
                 "pageNum": str(page),
                 "pageSize": "30",
@@ -256,7 +256,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         """获取视频详情"""
         try:
             url = f"{self.api}/api/film/detail"
-            params = {"id": str(ids[0])}
+            params = {"id": ids[0]}
             self.log(f"获取视频详情开始: {str(url)}, params: {str(params)}")
             rsp = self.fetch(
                 url=url,

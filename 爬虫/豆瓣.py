@@ -432,7 +432,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             "playable": "0",  # 是否只显示可播放的:0-否,1-是
             "start": str(start),  # 视频起始索引
             "limit": str(limit),  # 每页数量
-            "tags": str(category_id),  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
+            "tags": category_id,  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
         }
         # 如果扩展参数存在，将其加入请求参数中
         if ext and isinstance(ext, dict):
@@ -465,7 +465,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         """获取非凡资源分类内容的方法"""
         params = {
             "mid": "1",
-            "tid": str(category_id),
+            "tid": category_id,
             "page": str(page),
             "limit": "30",  # 每页数量,最大支持30
         }
@@ -528,12 +528,12 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 or category_id == "电影"
                 or category_id == "综艺"
             ):
-                self.log(f"使用豆瓣API获取分类内容:{str(category_id)}")
+                self.log(f"使用豆瓣API获取分类内容:{category_id}")
                 return self.douban_cate_content(
                     category_id, page, filter, ext, cache_key
                 )
             else:
-                self.log(f"使用非凡资源API获取分类内容:{str(category_id)}")
+                self.log(f"使用非凡资源API获取分类内容:{category_id}")
                 return self.ffzy_cate_content(category_id, page, filter, ext, cache_key)
         except Exception as e:  # 捕获异常
             self.log(f"使用非凡资源获取分类内容: {str(e)}")
