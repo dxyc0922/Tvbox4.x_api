@@ -1,6 +1,5 @@
 import sys
 import time
-from datetime import datetime
 
 sys.path.append("..")
 from base.spider import Spider
@@ -13,19 +12,9 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         self.api = "https://film.symx.club"
         # 请求头信息，模拟正常浏览器访问网站
         self.header = {
-            "accept": "application/json, text/plain, */*",
-            "accept-encoding": "gzip, deflate, br, zstd",
-            "accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
-            "dnt": "1",
-            "priority": "u=1, i",
-            "referer": f"{self.api}/index",
-            "sec-ch-ua": '"Not(A:Brand";v="8", "Chromium";v="144", "Microsoft Edge";v="144"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-origin",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0",
+            "Accept": "application/json",  # 接收的数据格式
+            "referer": f"{self.api}/index",  # 请求的来源
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0",  # 浏览器标识
             "x-platform": "web",
         }
 
