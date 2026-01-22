@@ -245,7 +245,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             "jx": "0",
             "parse": "0",
             "url": rsp.get("data", ""),
-            "header": {"User-Agent": self.headers["User-Agent"]},
+            "header": {"User-Agent": self.header["User-Agent"]},
         }
 
 

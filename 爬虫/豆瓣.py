@@ -439,6 +439,8 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         video_list = []
         # 遍历返回的视频数据
         for item in rsp["list"]:
+            if "伦理片" in item["type_name"]:
+                continue
             # 构建视频信息对象
             video_info = self._build_video_info(item, "非凡")
             # 添加到视频列表
