@@ -466,7 +466,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                     cache_params += f"_sort_{ext['排序']}"  # 添加排序参数到缓存键
                 if "地区" in ext:
                     cache_params += f"_country_{ext['地区']}"  # 添加地区参数到缓存键
-            cache_key = f"category_{cache_params}"
+            cache_key = f"douban_category_{cache_params}"
             # 尝试从缓存获取数据
             cached_data = self.getCache(cache_key)
             # 检查缓存是否有效
