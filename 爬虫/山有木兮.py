@@ -1,3 +1,8 @@
+"""
+脚本说明：脚本仅用于学习,限制了请求和内容缓存，如若侵犯你的权益请联系删除
+请勿用于商业用途，请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任
+"""
+
 import sys
 import time
 import random
@@ -6,9 +11,9 @@ sys.path.append("..")
 from base.spider import Spider
 
 
-class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
-    def init(self, extend=""):  # 初始化函数，设置爬虫的基本配置信息
-        self.name = "山有木兮"  # 爬虫名称
+class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
+    def init(self, extend=""):  # 初始化脚本的基本配置信息
+        self.name = "山有木兮"  # 脚本名称
         # API接口地址，用于获取搜索结果
         self.api = "https://film.symx.club"
         # 用户代理字符串，模拟浏览器访问
@@ -49,10 +54,20 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         self.header = {
             "Accept": "application/json",  # 接收的数据格式
             "referer": f"{self.api}/index",  # 请求的来源
-            "x-platform": "web",
+            "x-platform": "web",  # 网站要求提供平台来源
+        }
+        # 添加标志以追踪是否为首次请求,非首次请求时，添加随机延迟,防止对网站的访问频率过快
+        self.first_request = True
+
+        # 缓存时间配置（单位：秒）,首次请求后,对常用请求内容进行缓存,避免浪费网络资源
+        self.cache_times = {
+            # 天*时*分*秒
+            "home_category": 7 * 24 * 3600,  # 首页分类信息，7天
+            "home_video": 1 * 24 * 3600,  # 首页推荐视频，1天
+            "category": 1 * 1 * 10 * 60,  # 分类内容，10分钟
         }
 
-    def getName(self):  # 获取爬虫名称的方法
+    def getName(self):  # 获取脚本名称的方法
         return self.name
 
     def fetch(
@@ -66,9 +81,13 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         stream=False,
         allow_redirects=True,
     ):
-        # 在请求前添加随机延迟 0.5-2 秒
-        delay = random.uniform(0.5, 2.0)
-        time.sleep(delay)
+        # 如果不是第一次请求，则添加随机延迟 0.5-2 秒
+        if not self.first_request:
+            delay = random.uniform(0.5, 2.0)
+            time.sleep(delay)
+        else:
+            # 第一次请求后将标志设为False
+            self.first_request = False
         # 调用父类的 fetch 方法
         return super().fetch(
             url, params, cookies, headers, timeout, verify, stream, allow_redirects
@@ -80,160 +99,23 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         headers["User-Agent"] = random.choice(self.user_agent)
         return headers
 
-    def homeContent(self, filter):  # 获取首页内容（分类信息）的方法
-        try:
-            url = f"{self.api}/api/category/top"
-            cache_key = f"symx_home_category"
-            cached_result = self.getCache(cache_key)
-            if cached_result:  # 如果缓存有效
-                self.log(f"获取首页分类信息缓存有效: {str(cache_key)}")
-                return cached_result
-            self.log(f"获取首页分类信息开始: {str(url)}")
-            rsp = self.fetch(url=url, headers=self.getRandomHeader()).json()
-            self.log(f"获取首页分类信息成功: {str(rsp)}")
-            categories = []
-            for item in rsp["data"]:
-                if isinstance(item, dict) and "id" in item and "name" in item:
-                    categories.append(
-                        {"type_id": item["id"], "type_name": item["name"]}
-                    )
-                else:
-                    self.log(f"json解析出错: {str(item)}")
-            # 设置带过期时间的缓存数据，7天后过期
-            cache_with_expiry = {
-                "list": categories,
-                "expiresAt": int(time.time()) + 604800,
-            }
-            # 存储到缓存
-            self.setCache(cache_key, cache_with_expiry)
-            # 返回分类
-            return {"class": categories}
-        except Exception as e:  # 捕获异常
-            self.log(f"获取首页分类信息时出错: {str(e)}")
-            # 获取失败时返回空列表
-            return {"class": []}
-
-    def homeVideoContent(self):  # 获取首页推荐视频内容的方法
-        try:
-            url = f"{self.api}/api/film/category"
-            # 生成缓存键名
-            cache_key = f"symx_home_video"
-            # 尝试从缓存获取数据
-            cached_data = self.getCache(cache_key)
-            # 检查缓存是否有效：存在、包含list字段、list不为空、list中第一个元素有vod_id字段
-            if (
-                cached_data
-                and "list" in cached_data
-                and len(cached_data["list"]) > 0
-                and "vod_id" in cached_data["list"][0]
-            ):
-                self.log(f"获取首页推荐视频缓存有效: {str(cache_key)}")
-                return cached_data
-            self.log(f"获取首页推荐视频开始: {str(url)}")
-            rsp = self.fetch(url=url, headers=self.getRandomHeader()).json()
-            self.log(f"获取首页推荐视频成功: {str(rsp)}")
-            # 创建视频列表
-            video_list = []
-            # 遍历返回的视频数据
-            for item in rsp["data"]:
-                for film in item["filmList"]:
-                    video_list.append(
-                        {
-                            "vod_id": film.get("id", ""),
-                            "vod_name": film.get("name", ""),
-                            "vod_pic": film.get("cover", ""),
-                            "vod_remarks": film.get("doubanScore", ""),
-                        }
-                    )
-            # 设置带过期时间的缓存数据，10分钟后过期
-            cache_with_expiry = {
-                "list": video_list,
-                "expiresAt": int(time.time()) + 600,
-            }
-            # 存储到缓存
-            self.setCache(cache_key, cache_with_expiry)
-            # 返回视频列表
-            return {"list": video_list}
-        except Exception as e:  # 捕获异常
-            self.log(f"获取首页视频内容时出错：{str(e)}")
-            # 出现错误时返回空列表
-            return {"list": []}
-
-    def categoryContent(self, tid, pg, filter, extend):  # 参数名已按照基类定义修改
-        """获取指定分类下的视频内容"""
-        try:
-            url = f"{self.api}/api/film/category/list"
-            # 生成缓存键名，包含分类ID和页数
-            cache_key = f"symx_cat_{tid}_page_{pg}"
-            # 尝试从缓存获取数据
-            cached_data = self.getCache(cache_key)
-            # 检查缓存是否有效
-            if (
-                cached_data
-                and "list" in cached_data
-                and len(cached_data["list"]) > 0
-                and "vod_id" in cached_data["list"][0]
-            ):
-                self.log(f"获取分类视频缓存有效: {str(cache_key)}")
-                return cached_data
-            # 构建请求参数
-            params = {
-                "area": "1",
-                "categoryId": tid,
-                "language": "",
-                "pageNum": str(pg),
-                "pageSize": "30",
-                "sort": "updateTime",
-                "year": "",
-            }
-            self.log(f"获取分类视频开始: {str(url)}, params: {str(params)}")
-            rsp = self.fetch(
-                url=url,
-                params=params,
-                headers=self.getRandomHeader(),
-            ).json()
-            self.log(f"获取分类视频成功: {str(rsp)}")
-            video_list = []
-            for item in rsp["data"]["list"]:
-                video_list.append(
-                    {
-                        "vod_id": item.get("id", ""),
-                        "vod_name": item.get("name", ""),
-                        "vod_pic": item.get("cover", ""),
-                        "vod_remarks": item.get("updateStatus", ""),
-                    }
-                )
-            # 设置带过期时间的缓存数据，10分钟后过期
-            cache_with_expiry = {
-                "list": video_list,
-                "expiresAt": int(time.time()) + 600,
-            }
-            # 存储到缓存
-            self.setCache(cache_key, cache_with_expiry)
-            # 返回视频列表
-            return {"list": video_list}
-        except Exception as e:  # 捕获异常
-            self.log(f"获取分类内容时出错：{str(e)}")
-            # 出现错误时返回空列表
-            return {"list": []}
-
     def searchContent(self, key, quick, pg="1"):
         """搜索指定视频内容"""
         try:
             url = f"{self.api}/api/film/search"
             params = {
-                "keyword": str(key),
-                "pageNum": str(pg),
+                "keyword": key,
+                "pageNum": pg,
                 "pageSize": "10",
             }
-            self.log(f"搜索开始: {str(url)}, params: {str(params)}")
+            self.log(f"搜索开始: {url}, params: {params}")
             # 发送请求获取数据
             rsp = self.fetch(
                 url=url,
                 params=params,
                 headers=self.getRandomHeader(),
             ).json()
-            self.log(f"搜索成功: {str(rsp)}")
+            self.log(f"搜索成功: {rsp}")
             video_list = []
             for item in rsp["data"]["list"]:
                 video_list.append(
@@ -249,7 +131,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 )
             return {"list": video_list}
         except Exception as e:  # 捕获异常
-            self.log(f"获取搜索内容时出错：{str(e)}")
+            self.log(f"获取搜索内容时出错：{e}")
             # 出现错误时返回空列表
             return {"list": []}
 
@@ -258,13 +140,13 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         try:
             url = f"{self.api}/api/film/detail"
             params = {"id": ids[0]}
-            self.log(f"获取视频详情开始: {str(url)}, params: {str(params)}")
+            self.log(f"获取视频详情开始: {url}, params: {params}")
             rsp = self.fetch(
                 url=url,
                 params=params,
                 headers=self.getRandomHeader(),
             ).json()
-            self.log(f"获取视频详情成功: {str(rsp)}")
+            self.log(f"获取视频详情成功: {rsp}")
             video_list = {}
             play_from_list = []
             play_url_list = []
@@ -296,9 +178,10 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                     "vod_play_url": "$$$".join(play_url_list),
                 }
             )
-            return {"list": [video_list]}
+            result = {"list": [video_list]}
+            return result
         except Exception as e:  # 漏捕获异常
-            self.log(f"获取视频详情出错: {str(e)}")
+            self.log(f"获取视频详情出错: {e}")
             # 出现错误时返回空列表
             return {"list": []}
 
@@ -306,22 +189,23 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         """解析播放地址"""
         try:
             url = f"{self.api}/api/line/play/parse"
-            params = {"lineId": str(id)}
-            self.log(f"解析播放地址开始: {str(url)}, params: {str(params)}")
+            params = {"lineId": id}
+            self.log(f"解析播放地址开始: {url}, params: {params}")
             rsp = self.fetch(
                 url=url,
                 params=params,
                 headers=self.getRandomHeader(),
             ).json()
-            self.log(f"解析播放地址成功: {str(rsp)}")
-            return {
+            self.log(f"解析播放地址成功: {rsp}")
+            result = {
                 "jx": "0",
                 "parse": "0",
                 "url": rsp.get("data", ""),
                 "header": {"User-Agent": random.choice(self.user_agent)},
             }
+            return result
         except Exception as e:  # 漏捕获异常
-            self.log(f"解析播放地址出错: {str(e)}")
+            self.log(f"解析播放地址出错: {e}")
             # 出现错误时返回空列表
             return {"parse": "0", "url": ""}
 
@@ -329,7 +213,3 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
 if __name__ == "__main__":
     spider = Spider()
     spider.init()
-    spider.searchContent("1", True)
-    spider.detailContent(["1"])
-    spider.playerContent("", "1", "")
-    

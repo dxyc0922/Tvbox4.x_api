@@ -1,3 +1,7 @@
+"""
+脚本说明：脚本仅用于学习,限制了请求和内容缓存，如若侵犯你的权益请联系删除
+请勿用于商业用途，请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任
+"""
 import sys
 import time
 import random
@@ -7,9 +11,9 @@ sys.path.append("..")
 from base.spider import Spider
 
 
-class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
-    def init(self, extend=""):  # 初始化函数，设置爬虫的基本配置信息
-        self.name = "首页"  # 爬虫名称
+class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
+    def init(self, extend=""):  # 初始化函数，设置脚本的基本配置信息
+        self.name = "首页"  # 脚本名称
         # 豆瓣API接口地址，用于获取搜索结果
         self.douban_api = "https://movie.douban.com/j/new_search_subjects"
         # 非凡API接口地址
@@ -57,6 +61,15 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             "Accept": "application/json",
             "Referer": "https://ffzy.tv/",
         }
+        # 添加标志以追踪是否为首次请求
+        self.first_request = True
+        # 缓存时间配置（单位：秒）,首次请求后,对常用请求内容进行缓存,避免浪费网络资源
+        self.cache_times = {
+            # 天*时*分*秒
+            "home_video": 1 * 24 * 60 * 60,  # 首页推荐视频，1天,首页推荐一般少变动,每天刷新可以看看有没有新的推荐
+            "douban_category": 1 * 24 * 60 * 60,  # 分类内容，1天,豆瓣分类内容一般少变动,只有新出影视才会有变动
+            "ffzy_category": 1 * 1 * 10 * 60,  # 分类内容，10分钟,非凡资源经常变动,适合追剧看看有没有最新集
+        }
 
     def fetch(
         self,
@@ -69,9 +82,13 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         stream=False,
         allow_redirects=True,
     ):
-        # 在请求前添加随机延迟 0.5-2 秒
-        delay = random.uniform(0.5, 2.0)
-        time.sleep(delay)
+        # 如果不是第一次请求，则添加随机延迟 0.5-2 秒
+        if not self.first_request:
+            delay = random.uniform(0.5, 2.0)
+            time.sleep(delay)
+        else:
+            # 第一次请求后将标志设为False
+            self.first_request = False
         # 调用父类的 fetch 方法
         return super().fetch(
             url, params, cookies, headers, timeout, verify, stream, allow_redirects
@@ -90,7 +107,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             header = {"User-Agent": random.choice(self.user_agent)}
             return header
 
-    def getName(self):  # 获取爬虫名称的方法
+    def getName(self):  # 获取脚本名称的方法
         return self.name
 
     def homeContent(self, filter):  # 获取首页内容（分类信息）的方法
@@ -396,7 +413,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             # 设置带过期时间的缓存数据，7天后过期
             cache_with_expiry = {
                 "list": video_list,
-                "expiresAt": int(time.time()) + 604800,
+                "expiresAt": int(time.time()) + self.cache_times["home_video"],
             }
             # 存储到缓存
             self.setCache(cache_key, cache_with_expiry)
@@ -434,10 +451,10 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 "vod_remarks": item.get("vod_remarks"),
             }
 
-    def douban_cate_content(self, category_id, page, filter, ext, cache_key):
+    def douban_cate_content(self, tid, pg, filter, extend, cache_key):
         """获取豆瓣分类内容的方法，支持多种筛选条件"""
         limit = 100  # 设置每页数量
-        start = (int(page) - 1) * limit  # 计算每次分页起始索引
+        start = (int(pg) - 1) * limit  # 计算每次分页起始索引
         # 构建请求参数
         params = {
             "sort": "U",  # 排序:近期热度
@@ -445,16 +462,16 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
             "playable": "0",  # 是否只显示可播放的:0-否,1-是
             "start": str(start),  # 视频起始索引
             "limit": str(limit),  # 每页数量
-            "tags": category_id,  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
+            "tags": tid,  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
         }
         # 如果扩展参数存在，将其加入请求参数中
-        if ext and isinstance(ext, dict):
-            if "类型" in ext:
-                params["genres"] = ext["类型"]  # 按类型筛选
-            if "排序" in ext:
-                params["sort"] = ext["排序"]  # 按指定排序方式排序
-            if "地区" in ext:
-                params["countries"] = ext["地区"]  # 按地区筛选
+        if extend and isinstance(extend, dict):
+            if "类型" in extend:
+                params["genres"] = extend["类型"]  # 按类型筛选
+            if "排序" in extend:
+                params["sort"] = extend["排序"]  # 按指定排序方式排序
+            if "地区" in extend:
+                params["countries"] = extend["地区"]  # 按地区筛选
         self.log(f"请求豆瓣分类内容数据:params={params}")
         rsp = self.fetch(
             url=self.douban_api,
@@ -469,25 +486,25 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         # 设置带过期时间的缓存数据，7天后过期
         cache_with_expiry = {
             "list": video_list,
-            "expiresAt": int(time.time()) + 604800,
+            "expiresAt": int(time.time()) + self.cache_times["douban_category"],
         }
         # 存储到缓存
         self.setCache(cache_key, cache_with_expiry)
         # 返回视频列表
         return {"list": video_list}
 
-    def ffzy_cate_content(self, category_id, page, filter, ext, cache_key):
+    def ffzy_cate_content(self, tid, pg, filter, extend, cache_key):
         """获取非凡资源分类内容的方法"""
         params = {
             "mid": "1",
-            "tid": category_id,
-            "page": str(page),
+            "tid": tid,
+            "page": pg,
             "limit": "30",  # 每页数量,最大支持30
         }
         # 如果扩展参数存在，将其加入请求参数中
-        if ext and isinstance(ext, dict):
-            if "类型" in ext:
-                params["tid"] = ext["类型"]  # 按类型筛选
+        if extend and isinstance(extend, dict):
+            if "类型" in extend:
+                params["tid"] = extend["类型"]  # 按类型筛选
         self.log(f"请求非凡资源分类内容数据:params={params}")
         # 发送请求获取数据
         rsp = self.fetch(
@@ -506,27 +523,27 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
         # 设置带过期时间的缓存数据，10分钟后过期
         cache_with_expiry = {
             "list": video_list,
-            "expiresAt": int(time.time()) + 600,
+            "expiresAt": int(time.time()) + self.cache_times["ffzy_category"],
         }
         # 存储到缓存
         self.setCache(cache_key, cache_with_expiry)
         # 返回视频列表
         return {"list": video_list}
 
-    def categoryContent(self, category_id, page, filter, ext):
+    def categoryContent(self, tid, pg, filter, extend):
         """获取指定分类下的视频内容"""
         try:
             # 生成缓存键名，包含分类ID和页数
-            cache_params = f"cat_{category_id}_page_{page}"
+            cache_params = f"cat_{tid}_page_{pg}"
             # 如果扩展参数存在，将其加入缓存键名中
-            if ext and isinstance(ext, dict):
-                if "类型" in ext:
-                    cache_params += f"_genre_{ext['类型']}"  # 添加类型参数到缓存键
-                if "排序" in ext:
-                    cache_params += f"_sort_{ext['排序']}"  # 添加排序参数到缓存键
-                if "地区" in ext:
-                    cache_params += f"_country_{ext['地区']}"  # 添加地区参数到缓存键
-            cache_key = f"douban_category_{cache_params}"
+            if extend and isinstance(extend, dict):
+                if "类型" in extend:
+                    cache_params += f"_genre_{extend['类型']}"  # 添加类型参数到缓存键
+                if "排序" in extend:
+                    cache_params += f"_sort_{extend['排序']}"  # 添加排序参数到缓存键
+                if "地区" in extend:
+                    cache_params += f"_country_{extend['地区']}"  # 添加地区参数到缓存键
+            cache_key = f"category_{cache_params}"
             # 尝试从缓存获取数据
             cached_data = self.getCache(cache_key)
             # 检查缓存是否有效
@@ -540,19 +557,19 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
                 return cached_data
             # 根据分类ID决定使用哪个API获取数据：豆瓣API或非凡API
             if (
-                category_id == "电视剧"
-                or category_id == "电影"
-                or category_id == "综艺"
+                tid == "电视剧"
+                or tid == "电影"
+                or tid == "综艺"
             ):
-                self.log(f"使用豆瓣API获取分类内容:{category_id}")
+                self.log(f"使用豆瓣API获取分类内容:{tid}")
                 return self.douban_cate_content(
-                    category_id, page, filter, ext, cache_key
+                    tid, pg, filter, extend, cache_key
                 )
             else:
-                self.log(f"使用非凡资源API获取分类内容:{category_id}")
-                return self.ffzy_cate_content(category_id, page, filter, ext, cache_key)
+                self.log(f"使用非凡资源API获取分类内容:{tid}")
+                return self.ffzy_cate_content(tid, pg, filter, extend, cache_key)
         except Exception as e:  # 捕获异常
-            self.log(f"获取分类内容时出错：{str(e)}")  # 显示完整的错误信息
+            self.log(f"获取分类内容时出错：{e}")  # 显示完整的错误信息
             # 出现错误时返回空列表
             return {"list": []}
 
@@ -560,6 +577,3 @@ class Spider(Spider):  # 继承基类Spider，实现具体的爬虫逻辑
 if __name__ == "__main__":
     spider = Spider()
     spider.init()
-    # 测试非凡分类
-    print("=== 测试非凡分类 ===")
-    res = spider.categoryContent("1", "1", "", "")
