@@ -1,11 +1,12 @@
 """
-脚本说明：脚本仅用于学习,对请求频率做了限制，如若侵犯你的权益请联系删除
+脚本说明：脚本仅用于学习，如若侵犯你的权益请联系删除
 请勿用于商业用途，请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任
 """
 
 import sys
 import time
 import random
+import re
 
 sys.path.append("..")
 from base.spider import Spider
@@ -94,20 +95,21 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
     def searchContent(self, key, quick, pg="1"):
         """搜索指定视频内容"""
         try:
+            # 检查"第*季"前面是否有空格，如果没有空格则在前面加一个空格,兼容xxx第x季这种没空格的搜索
+            processed_key = re.sub(r"(?<!\s)(\w)(第\d+季)", r"\1 \2", key)
+
             url = f"{self.api}/api/film/search"
             params = {
-                "keyword": key,
-                "pageNum": pg,
+                "keyword": str(processed_key),
+                "pageNum": str(pg),
                 "pageSize": "10",
             }
-            self.log(f"搜索开始: {url}, params: {params}")
             # 发送请求获取数据
             rsp = self.fetch(
                 url=url,
                 params=params,
                 headers=self.getRandomHeader(),
             ).json()
-            self.log(f"搜索成功: {rsp}")
             video_list = []
             for item in rsp["data"]["list"]:
                 video_list.append(
@@ -122,23 +124,19 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
                     }
                 )
             return {"list": video_list}
-        except Exception as e:  # 捕获异常
-            self.log(f"获取搜索内容时出错：{e}")
-            # 出现错误时返回空列表
+        except Exception as e:
             return {"list": []}
 
     def detailContent(self, ids):
         """获取视频详情"""
         try:
             url = f"{self.api}/api/film/detail"
-            params = {"id": ids[0]}
-            self.log(f"获取视频详情开始: {url}, params: {params}")
+            params = {"id": str(ids[0])}  # 确保id参数是字符串类型
             rsp = self.fetch(
                 url=url,
                 params=params,
                 headers=self.getRandomHeader(),
             ).json()
-            self.log(f"获取视频详情成功: {rsp}")
             video_list = {}
             play_from_list = []
             play_url_list = []
@@ -172,23 +170,19 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
             )
             result = {"list": [video_list]}
             return result
-        except Exception as e:  # 漏捕获异常
-            self.log(f"获取视频详情出错: {e}")
-            # 出现错误时返回空列表
+        except Exception as e:
             return {"list": []}
 
     def playerContent(self, flag, id, vipFlags):
         """解析播放地址"""
         try:
             url = f"{self.api}/api/line/play/parse"
-            params = {"lineId": id}
-            self.log(f"解析播放地址开始: {url}, params: {params}")
+            params = {"lineId": str(id)}
             rsp = self.fetch(
                 url=url,
                 params=params,
                 headers=self.getRandomHeader(),
             ).json()
-            self.log(f"解析播放地址成功: {rsp}")
             result = {
                 "jx": "0",
                 "parse": "0",
@@ -196,12 +190,11 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
                 "header": {"User-Agent": random.choice(self.user_agent)},
             }
             return result
-        except Exception as e:  # 漏捕获异常
-            self.log(f"解析播放地址出错: {e}")
-            # 出现错误时返回空列表
+        except Exception as e:
             return {"parse": "0", "url": ""}
 
 
 if __name__ == "__main__":
     spider = Spider()
     spider.init()
+    print(spider.searchContent("一人之下", "", "1"))

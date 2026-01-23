@@ -1,5 +1,5 @@
 # Tvbox4.x_api
-适配电视ok影视2.5.0安卓4.x的tvbox接口
+适配安卓4.x的tvbox接口
 
 源地址：https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/refs/heads/main/接口.json
 

@@ -1,7 +1,8 @@
 """
-脚本说明：脚本仅用于学习,对请求频率做了限制，如若侵犯你的权益请联系删除
+脚本说明：脚本仅用于学习，如若侵犯你的权益请联系删除
 请勿用于商业用途，请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任
 """
+
 import sys
 import time
 import random
@@ -66,9 +67,12 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
         # 缓存时间配置（单位：秒）,首次请求后,对常用请求内容进行缓存,避免浪费网络资源
         self.cache_times = {
             # 天*时*分*秒
-            "home_video": 1 * 24 * 60 * 60,  # 首页推荐视频，1天,首页推荐一般少变动,每天刷新可以看看有没有新的推荐
-            "douban_category": 1 * 24 * 60 * 60,  # 分类内容，1天,豆瓣分类内容一般少变动,只有新出影视才会有变动
-            "ffzy_category": 1 * 1 * 10 * 60,  # 分类内容，10分钟,非凡资源经常变动,适合追剧看看有没有最新集
+            # 首页推荐视频，1天,首页推荐一般少变动,每天刷新可以看看有没有新的推荐
+            "home_video": 1 * 24 * 60 * 60,
+            # 分类内容，1天,豆瓣分类内容一般少变动,只有新出影视才会有变动
+            "douban_category": 1 * 24 * 60 * 60,
+            # 分类内容，10分钟,非凡资源经常变动,适合追剧看看有没有最新集
+            "ffzy_category": 1 * 1 * 10 * 60,
         }
 
     def fetch(
@@ -115,7 +119,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
         categories = [
             {"type_id": "4", "type_name": "最新动漫"},  # 非凡动漫分类
             {"type_id": "2", "type_name": "最新剧集"},  # 非凡电视剧分类
-            {"type_id": "电视剧", "type_name": "热门剧集"},  # 豆瓣电视剧分类
+            {"type_id": "电视", "type_name": "热门剧集"},  # 豆瓣电视剧分类
             {"type_id": "1", "type_name": "最新电影"},  # 非凡电影分类
             {"type_id": "电影", "type_name": "热门电影"},  # 豆瓣电影分类
             {"type_id": "3", "type_name": "最新综艺"},  # 非凡综艺分类
@@ -154,7 +158,7 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
                     ],
                 },
             ],
-            "电视剧": [  # 豆瓣电视剧分类的筛选条件
+            "电视": [  # 豆瓣电视剧分类的筛选条件
                 {
                     "key": "排序",
                     "name": "排序",
@@ -378,7 +382,6 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
             current_year = datetime.now().year
             # 生成缓存键名
             cache_key = f"douban_home_video"
-            # 尝试从缓存获取数据
             cached_data = self.getCache(cache_key)
             # 检查缓存是否有效：存在、包含list字段、list不为空、list中第一个元素有vod_id字段
             if (
@@ -387,7 +390,6 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
                 and len(cached_data["list"]) > 0
                 and "vod_id" in cached_data["list"][0]
             ):
-                self.log(f"首页推荐使用缓存数据:{cache_key}")
                 return cached_data
             # 构建请求参数
             params = {
@@ -399,29 +401,23 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
                 "tags": "",  # 根据分类筛选
                 "year_range": f"{current_year-1},{current_year}",  # 年份范围：去年到今年
             }
-            self.log(f"请求豆瓣首页推荐视频数据:params={params}")
             rsp = self.fetch(
                 url=self.douban_api,
                 params=params,
                 headers=self.getRandomHeader(self.douban_header.copy()),
             ).json()
-            self.log(f"豆瓣首页推荐视频数据:{rsp}")
             video_list = []
             for item in rsp["data"]:
                 video_info = self._build_video_info(item, "豆瓣")
                 video_list.append(video_info)
-            # 设置带过期时间的缓存数据，7天后过期
+            # 设置带过期时间的缓存数据
             cache_with_expiry = {
                 "list": video_list,
                 "expiresAt": int(time.time()) + self.cache_times["home_video"],
             }
-            # 存储到缓存
             self.setCache(cache_key, cache_with_expiry)
-            # 返回视频列表
             return {"list": video_list}
-        except Exception as e:  # 捕获异常
-            self.log(f"获取首页视频内容时出错：: {e}")
-            # 出现错误时返回空列表
+        except Exception as e:
             return {"list": []}
 
     def _build_video_info(self, item, source):
@@ -472,25 +468,21 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
                 params["sort"] = extend["排序"]  # 按指定排序方式排序
             if "地区" in extend:
                 params["countries"] = extend["地区"]  # 按地区筛选
-        self.log(f"请求豆瓣分类内容数据:params={params}")
         rsp = self.fetch(
             url=self.douban_api,
             params=params,
             headers=self.getRandomHeader(self.douban_header.copy()),
         ).json()
-        self.log(f"豆瓣分类内容数据:{rsp}")
         video_list = []
         for item in rsp["data"]:
             video_info = self._build_video_info(item, "豆瓣")
             video_list.append(video_info)
-        # 设置带过期时间的缓存数据，7天后过期
+        # 设置带过期时间的缓存数据
         cache_with_expiry = {
             "list": video_list,
             "expiresAt": int(time.time()) + self.cache_times["douban_category"],
         }
-        # 存储到缓存
         self.setCache(cache_key, cache_with_expiry)
-        # 返回视频列表
         return {"list": video_list}
 
     def ffzy_cate_content(self, tid, pg, filter, extend, cache_key):
@@ -505,29 +497,25 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
         if extend and isinstance(extend, dict):
             if "类型" in extend:
                 params["tid"] = extend["类型"]  # 按类型筛选
-        self.log(f"请求非凡资源分类内容数据:params={params}")
         # 发送请求获取数据
         rsp = self.fetch(
             url=self.ffzy_api,
             params=params,
-            headers=self.getRandomHeader(self.ffzy_header.copy()), # 使用正确的请求头
+            headers=self.getRandomHeader(self.ffzy_header.copy()),  # 使用正确的请求头
         ).json()
-        self.log(f"非凡资源分类内容数据:{rsp}")
         video_list = []
-        if 'list' in rsp and rsp['list']:  # 检查响应中是否有list字段
+        if "list" in rsp and rsp["list"]:  # 检查响应中是否有list字段
             for item in rsp["list"]:
                 if "伦理片" in item.get("type_name", ""):
                     continue
                 video_info = self._build_video_info(item, "非凡")
                 video_list.append(video_info)
-        # 设置带过期时间的缓存数据，10分钟后过期
+        # 设置带过期时间的缓存数据
         cache_with_expiry = {
             "list": video_list,
             "expiresAt": int(time.time()) + self.cache_times["ffzy_category"],
         }
-        # 存储到缓存
         self.setCache(cache_key, cache_with_expiry)
-        # 返回视频列表
         return {"list": video_list}
 
     def categoryContent(self, tid, pg, filter, extend):
@@ -544,36 +532,25 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
                 if "地区" in extend:
                     cache_params += f"_country_{extend['地区']}"  # 添加地区参数到缓存键
             cache_key = f"category_{cache_params}"
-            # 尝试从缓存获取数据
-            cached_data = self.getCache(cache_key)
             # 检查缓存是否有效
+            cached_data = self.getCache(cache_key)
             if (
                 cached_data
                 and "list" in cached_data
                 and len(cached_data["list"]) > 0
                 and "vod_id" in cached_data["list"][0]
             ):
-                # 返回缓存的数据
                 return cached_data
             # 根据分类ID决定使用哪个API获取数据：豆瓣API或非凡API
-            if (
-                tid == "电视剧"
-                or tid == "电影"
-                or tid == "综艺"
-            ):
-                self.log(f"使用豆瓣API获取分类内容:{tid}")
-                return self.douban_cate_content(
-                    tid, pg, filter, extend, cache_key
-                )
+            if tid == "电视" or tid == "电影" or tid == "综艺":
+                return self.douban_cate_content(tid, pg, filter, extend, cache_key)
             else:
-                self.log(f"使用非凡资源API获取分类内容:{tid}")
                 return self.ffzy_cate_content(tid, pg, filter, extend, cache_key)
         except Exception as e:  # 捕获异常
-            self.log(f"获取分类内容时出错：{e}")  # 显示完整的错误信息
-            # 出现错误时返回空列表
             return {"list": []}
 
 
 if __name__ == "__main__":
     spider = Spider()
     spider.init()
+    spider.categoryContent("电视剧", 1, True, {"类型": "动画"})
