@@ -8,6 +8,12 @@
             "api": "./脚本/豆瓣.py"
         },
         {
+            "key": "3Q影视",
+            "name": "3Q影视",
+            "type": 3,
+            "api": "./脚本/3Q影视.py"
+        },
+        {
             "key": "山有木兮",
             "name": "山有木兮",
             "type": 3,
@@ -72,6 +78,12 @@
             "type": 3,
             "api": "https://github.com/jak0099/dr/raw/refs/heads/master/py/%E7%BB%BC/%E7%95%8C%E5%BD%B1%E8%A7%86.py"
         }
+    ],
+    "parses": [
+        {"name":"Demo","type":3,"url":"Demo"},
+        {"name":"Web","type":3,"url":"Web"},
+        {"name": "并发","type": 0,"url": "https://down.nigx.cn/xjx.zzong6599.workers.dev/?url="},
+        {"name": "轮询","type": 0,"url": "https://down.nigx.cn/jx.zzong6599.workers.dev/?url=","ext": {"flag": [".*."],"header": {"User-Agent": "okhttp/4.9.1"}}}
     ],
     "lives": [
         {

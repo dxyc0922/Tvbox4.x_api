@@ -1,10 +1,8 @@
 """
-脚本说明：脚本仅用于学习，如若侵犯你的权益请联系删除
 请勿用于商业用途，请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任
 """
 
 import sys
-import time
 import random
 import re
 
@@ -19,72 +17,33 @@ class Spider(Spider):  # 继承基类Spider，实现具体的脚本逻辑
         self.api = "https://film.symx.club"
         # 用户代理字符串，模拟浏览器访问
         self.user_agent = [
-            # Chrome - Windows
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            # Chrome - macOS
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            # Chrome - Linux
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            # Firefox - Windows
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/120.0",
-            # Firefox - macOS
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/121.0",
-            # Firefox - Linux
-            "Mozilla/5.0 (X11; Linux i686; rv:109.0) Gecko/20100101 Firefox/121.0",
-            "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/121.0",
             # Safari - iOS
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
             "Mozilla/5.0 (iPad; CPU OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
-            # Safari - macOS
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
-            # Edge - Windows
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
             # Samsung Browser - Android
             "Mozilla/5.0 (Linux; Android 10; SAMSUNG SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.5790.166 Mobile Safari/537.36",
             # Chrome - Android
             "Mozilla/5.0 (Linux; Android 10; Pixel 4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
             "Mozilla/5.0 (Linux; Android 13; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
-            # Opera - Windows
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/105.0.0.0",
         ]
         # 请求头信息，模拟正常浏览器访问网站
         self.header = {
-            "Accept": "application/json",  # 接收的数据格式
-            "referer": f"{self.api}/index",  # 请求的来源
-            "x-platform": "web",  # 网站要求提供平台来源
+            "Accept": "application/json, text/plain, */*",
+            "accept-language": "zh-CN,zh;q=0.9",
+            "cache-control": "no-cache",
+            "pragma": "no-cache",
+            "priority": "u=1, i",
+            "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
+            "x-platform": "web",
         }
-        # 添加标志以追踪是否为首次请求,非首次请求时，添加随机延迟,防止对网站的访问频率过快
-        self.first_request = True
 
     def getName(self):  # 获取脚本名称的方法
         return self.name
-
-    def fetch(
-        self,
-        url,
-        params=None,
-        cookies=None,
-        headers=None,
-        timeout=5,
-        verify=True,
-        stream=False,
-        allow_redirects=True,
-    ):
-        # 如果不是第一次请求，则添加随机延迟 0.5-2 秒
-        if not self.first_request:
-            delay = random.uniform(0.5, 2.0)
-            time.sleep(delay)
-        else:
-            # 第一次请求后将标志设为False
-            self.first_request = False
-        # 调用父类的 fetch 方法
-        return super().fetch(
-            url, params, cookies, headers, timeout, verify, stream, allow_redirects
-        )
 
     def getRandomHeader(self):
         """获取带有随机user-agent的请求头"""
