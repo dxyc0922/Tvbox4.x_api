@@ -18,18 +18,13 @@ class Spider(Spider):
         """
         self.name = "3Q影视"
         self.host = "https://qqqys.com"
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
-            "accept-language": "zh-CN,zh;q=0.9",
-            "cache-control": "no-cache",
-            "pragma": "no-cache",
-            "priority": "u=1, i",
-            "sec-ch-ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-origin",
+            "User-Agent": self.user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
         }
 
     def getName(self):
@@ -67,12 +62,14 @@ class Spider(Spider):
         """
         url = self.host + "/api.php/index/home"
         rsp = self.fetch(url, headers=self.headers)
+
         if rsp.status_code != 200:
             self.log(f"分类列表请求失败")
             return {"class": []}
         try:
             res_json = rsp.json()
             classes = []
+
             for i in res_json["data"]["categories"]:
                 name = i["type_name"]
                 # 跳过一些不需要的分类
@@ -99,14 +96,16 @@ class Spider(Spider):
         """
         url = self.host + "/api.php/index/home"
         rsp = self.fetch(url, headers=self.headers)
+
         if rsp.status_code != 200:
             self.log(f"首页视频列表请求失败")
             return {"list": []}
         try:
             res_json = rsp.json()
             videos = []
-            for category in res_json["data"]["categories"]:
-                videos.extend(self.json2vods(category.get("videos", [])))
+
+            for video in res_json["data"]["categories"]["videos"]:
+                videos.extend(self.json2vods(video))
 
             return {"list": videos}
         except Exception as e:
@@ -137,6 +136,7 @@ class Spider(Spider):
         url = f"{self.host}/api.php/filter/vod"
         params = {"type_name": tid, "sort": "hits", "page": pg, "limit": 24}
         rsp = self.fetch(url, params=params, headers=self.headers)
+
         if rsp.status_code != 200:
             self.log(f"分类视频列表请求失败")
             return {"list": []}
@@ -174,7 +174,7 @@ class Spider(Spider):
         }
         """
         vid = ids[0]
-        # 处理视频ID格式
+
         if "/vd/" in vid:
             vid = (
                 vid.split("/")[-1]
@@ -185,8 +185,8 @@ class Spider(Spider):
 
         url = f"{self.host}/api.php/vod/get_detail"
         params = {"vod_id": vid}
-
         rsp = self.fetch(url, params=params, headers=self.headers)
+
         if rsp.status_code != 200:
             self.log(f"视频详情请求失败")
             return {"list": []}
@@ -220,7 +220,6 @@ class Spider(Spider):
                         if show_code.lower() != player.get("show", "").lower():
                             name = f"{player.get('show', show_code)} ({show_code})"
                         break
-
                 if is_show == 1:
                     urls = []
                     items = urls_str.split("#")
@@ -244,9 +243,10 @@ class Spider(Spider):
                 "vod_actor": data.get("vod_actor", ""),
                 "vod_director": data.get("vod_director", ""),
                 "vod_content": data.get("vod_content", ""),
+                "vod_score": str(data.get("vod_score", "暂无评分")),
+                "type_name": data.get("vod_class", ""),
                 "vod_play_from": "$$$".join(shows),
                 "vod_play_url": "$$$".join(play_urls),
-                "type_name": data.get("vod_class", ""),
             }
 
             return {"list": [video]}
@@ -276,6 +276,7 @@ class Spider(Spider):
         url = f"{self.host}/api.php/search/index"
         params = {"wd": key, "page": pg, "limit": 15}
         rsp = self.fetch(url, params=params, headers=self.headers)
+
         if rsp.status_code != 200:
             self.log(f"搜索结果请求失败")
             return {"list": []}
@@ -342,7 +343,7 @@ class Spider(Spider):
                 "parse": jx,
                 "jx": jx,
                 "url": final_url,
-                "header": {"User-Agent": self.headers["User-Agent"]},
+                "header": {"User-Agent": self.user_agent},
             }
         else:
             # 直接使用传入的ID作为播放地址
@@ -350,15 +351,13 @@ class Spider(Spider):
                 "parse": jx,
                 "jx": jx,
                 "url": id,
-                "header": {"User-Agent": self.headers["User-Agent"]},
+                "header": {"User-Agent": self.user_agent},
             }
-    
+
     def parse_js_challenge(self, js_code):
         """
         解析JavaScript挑战码并返回token
         """
-        import re
-
         # 提取数组中的值
         array_match = re.search(r"_0x1=\[(.*?)\]", js_code)
         if array_match:
@@ -378,15 +377,14 @@ class Spider(Spider):
                 _0_h = hex(abs(_0_f))
                 _0xi = f"{_0xa}:{_0_h[2:]}:{_0_b[:8]}"  # 移除hex输出的'0x'前缀
                 return _0xi
-
         return None
 
-    def json2vods(self, arr):
+    def json2vods(self, video):
         """
         将API返回的视频列表转为标准vod格式
         """
         videos = []
-        for i in arr:
+        for i in video:
             type_name = i.get("type_name", "")
             if i.get("vod_class"):
                 type_name = type_name + "," + i["vod_class"]
@@ -397,8 +395,6 @@ class Spider(Spider):
                     "vod_name": i.get("vod_name", ""),
                     "vod_pic": i.get("vod_pic", ""),
                     "vod_remarks": i.get("vod_remarks", ""),
-                    "type_name": type_name,
-                    "vod_year": i.get("vod_year", ""),
                 }
             )
         return videos
