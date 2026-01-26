@@ -12,6 +12,10 @@ sys.path.append("..")
 
 class Spider(Spider):
     def init(self, extend=""):
+        """
+        初始化配置文件传过来的参数
+        :param extend: 来源于配置文件中的ext
+        """
         self.name = "3Q影视"
         self.host = "https://qqqys.com"
         self.headers = {
@@ -34,6 +38,32 @@ class Spider(Spider):
     def homeContent(self, filter):
         """
         获取分类列表
+        :param filter: 表示是否需要返回filters,True表示需要,False表示不需要,默认为True
+        :return: 示例
+        {
+            "class": [
+                {
+                    "type_id": "1", "type_name": "电影"
+                }
+            ],
+            filters: {
+                "1": [
+                    {
+                        "key": "type",
+                        "name": "类型",
+                        "value": [
+                            {"n": "动作", "v": "2"}
+                        ]
+                    }
+                ]
+            },
+            api如果有完整的list数组可以直接使用,而不需要再调用homeVideoContent方法获取首页推荐
+            "list": [
+                {
+                    "vod_id": "电影id(不显示)", "vod_name": "电影名称(显示)", "vod_pic": "封面图片(显示)", "vod_remarks": "备注(显示)"
+                }
+            ]
+        }
         """
         url = self.host + "/api.php/index/home"
         rsp = self.fetch(url, headers=self.headers)
@@ -57,7 +87,15 @@ class Spider(Spider):
 
     def homeVideoContent(self):
         """
-        获取首页视频列表
+        获取首页推荐内容,如果homeContent方法返回了list数组,则该方法可以不用实现
+        :return: 示例
+        {
+            "list": [
+                {
+                    "vod_id": "电影id(不显示)", "vod_name": "电影名称(显示)", "vod_pic": "封面图片(显示)", "vod_remarks": "备注(显示)"
+                }
+            ]
+        }
         """
         url = self.host + "/api.php/index/home"
         rsp = self.fetch(url, headers=self.headers)
@@ -77,7 +115,24 @@ class Spider(Spider):
 
     def categoryContent(self, tid, pg, filter, extend):
         """
-        获取分类视频列表
+        获取分类列表内容
+        :param tid: 类型id,来源于homeContent的class数组中的type_id
+        :param pg: 页数,来源于app翻页操作
+        :param filter: 是否开启筛选,来源于app筛选操作
+        :param extend: 扩展参数,来源于app筛选操作,选中的筛选项会传过来{"type":"2"}
+        :return: 示例
+        {
+            "list": [
+                {
+                    "vod_id": "电影id(不显示)", "vod_name": "电影名称(显示)", "vod_pic": "封面图片(显示)", "vod_remarks": "备注(显示)"
+                }
+            ],
+            如果api有提供可以写入,不写入也没影响
+            "page": 当前页数,
+            "limit": 每页显示数量,
+            "pagecount": 总页数=总数/每页数量
+            "total": 总数
+        }
         """
         url = f"{self.host}/api.php/filter/vod"
         params = {"type_name": tid, "sort": "hits", "page": pg, "limit": 24}
@@ -93,27 +148,30 @@ class Spider(Spider):
             self.log(f"分类视频列表解析失败")
             return {"list": []}
 
-    def searchContent(self, key, quick, pg="1"):
-        """
-        获取搜索结果
-        """
-        url = f"{self.host}/api.php/search/index"
-        params = {"wd": key, "page": pg, "limit": 15}
-        rsp = self.fetch(url, params=params, headers=self.headers)
-        if rsp.status_code != 200:
-            self.log(f"搜索结果请求失败")
-            return {"list": []}
-        try:
-            res_json = rsp.json()
-            videos = self.json2vods(res_json["data"])
-            return {"list": videos}
-        except Exception as e:
-            self.log(f"搜索结果解析失败")
-            return {"list": []}
-
     def detailContent(self, ids):
         """
         获取视频详情
+        :param ids: 视频id组,来源于app点击视频进入详情页,会带上vod_id参数,使用ids[0]获取
+        :return: 示例
+        {
+            "list": [
+                {
+                    "vod_id": "视频id(不显示)", # 示例:1
+                    "vod_name": "视频名称(显示)", # 示例:申肖克的救赎
+                    "vod_pic": "视频封面(显示)", # 示例:https://example.com/cover.jpg
+                    "vod_remarks": "备注(显示)", # 示例:更新至第10集
+                    "vod_year": "年份(显示)", # 示例:2023
+                    "vod_area": "地区(显示)", # 示例:中国大陆
+                    "vod_actor": "主演(显示)", # 示例:张三,李四,王五
+                    "vod_director": "导演(显示)", # 示例:赵六
+                    "vod_content": "视频简介(显示)", # 示例:这是一个精彩的视频...
+                    "vod_score": "评分(显示)", # 示例:9.5
+                    "type_name": "分类名称(显示)", # 示例:电影
+                    "vod_play_from": "播放来源(显示)", # 示例:线路1$$$线路2
+                    "vod_play_url": "播放地址(显示)" # 示例:第1集$http://example.com/video1.mp4#第2集$http://example.com/video2.mp4$$$第1集$http://backup.com/video1.mp4"
+                }
+            ]
+        }
         """
         vid = ids[0]
         # 处理视频ID格式
@@ -196,37 +254,51 @@ class Spider(Spider):
             self.log(f"视频详情解析失败")
             return {"list": []}
 
-    def parse_js_challenge(self, js_code):
+    def searchContent(self, key, quick, pg="1"):
         """
-        解析JavaScript挑战码并返回token
+        获取搜索内容
+        :param key: 搜索关键字
+        :param quick: 是否是快捷搜索,True表示是,False表示否,默认为True
+        :param pg: 页数,来源于app翻页操作,默认1
+        :return: 示例
+        {
+            "list": [
+                {
+                    "vod_id": "电影id(不显示)", "vod_name": "电影名称(显示)", "vod_pic": "封面图片(显示)", "vod_remarks": "备注(显示)"
+                }
+            ],
+            如果api有提供可以写入,不写入也没影响
+            "page": 当前页数,
+            "limit": 每页显示数量,
+            "pagecount": 总页数=总数/每页数量
+            "total": 总数
         """
-        import re
-
-        # 提取数组中的值
-        array_match = re.search(r"_0x1=\[(.*?)\]", js_code)
-        if array_match:
-            values = [
-                val.strip().strip("'\"") for val in array_match.group(1).split(",")
-            ]
-            if len(values) >= 4:
-                _0xa, _0_b, _0_c, _0_d = values[0], values[1], values[2], values[3]
-
-                # 模拟JavaScript中的计算过程
-                _0_e = f"{_0xa}:{_0_b}:{_0_c}:{_0_d}"
-                _0_f = 0
-                for char in _0_e:
-                    _0_f = ((_0_f << 5) - _0_f) + ord(char)
-                    _0_f = _0_f & 0xFFFFFFFF
-
-                _0_h = hex(abs(_0_f))
-                _0xi = f"{_0xa}:{_0_h[2:]}:{_0_b[:8]}"  # 移除hex输出的'0x'前缀
-                return _0xi
-
-        return None
+        url = f"{self.host}/api.php/search/index"
+        params = {"wd": key, "page": pg, "limit": 15}
+        rsp = self.fetch(url, params=params, headers=self.headers)
+        if rsp.status_code != 200:
+            self.log(f"搜索结果请求失败")
+            return {"list": []}
+        try:
+            res_json = rsp.json()
+            videos = self.json2vods(res_json["data"])
+            return {"list": videos}
+        except Exception as e:
+            self.log(f"搜索结果解析失败")
+            return {"list": []}
 
     def playerContent(self, flag, id, vipFlags):
         """
-        播放地址解析
+        :param flag: 视频标识,来源于detailContent的vod_play_from
+        :param id: 视频id来源于detailContent的vod_play_url
+        :param vipFlags: 默认是空的,应该是猫影视vip会员的标识
+        :return: {
+            "parse": 表示是否调用配置中的parses解析,0表示不需要,1表示需要
+            "playUrl": 表示是否需要在url前面添加播放器地址,示例:http://example.com/player.html?url=
+            "url": 表示视频播放地址
+            "jx": 表示播放器是否显示解析列表,0表示不需要,1表示需要
+            "header": 表示是否需要添加请求头,触发防盗链时添加
+        }
         """
         parts = id.split("@")
         if len(parts) >= 3:
@@ -267,19 +339,47 @@ class Spider(Spider):
                     jx = 1
 
             return {
-                "parse": jx, # 是否使用解析器
-                "jx": 0, # 使用第几个解析器
-                "url": final_url, # 播放地址
+                "parse": jx,
+                "jx": jx,
+                "url": final_url,
                 "header": {"User-Agent": self.headers["User-Agent"]},
             }
         else:
             # 直接使用传入的ID作为播放地址
             return {
                 "parse": jx,
-                "jx": 0,
+                "jx": jx,
                 "url": id,
                 "header": {"User-Agent": self.headers["User-Agent"]},
             }
+    
+    def parse_js_challenge(self, js_code):
+        """
+        解析JavaScript挑战码并返回token
+        """
+        import re
+
+        # 提取数组中的值
+        array_match = re.search(r"_0x1=\[(.*?)\]", js_code)
+        if array_match:
+            values = [
+                val.strip().strip("'\"") for val in array_match.group(1).split(",")
+            ]
+            if len(values) >= 4:
+                _0xa, _0_b, _0_c, _0_d = values[0], values[1], values[2], values[3]
+
+                # 模拟JavaScript中的计算过程
+                _0_e = f"{_0xa}:{_0_b}:{_0_c}:{_0_d}"
+                _0_f = 0
+                for char in _0_e:
+                    _0_f = ((_0_f << 5) - _0_f) + ord(char)
+                    _0_f = _0_f & 0xFFFFFFFF
+
+                _0_h = hex(abs(_0_f))
+                _0xi = f"{_0xa}:{_0_h[2:]}:{_0_b[:8]}"  # 移除hex输出的'0x'前缀
+                return _0xi
+
+        return None
 
     def json2vods(self, arr):
         """
