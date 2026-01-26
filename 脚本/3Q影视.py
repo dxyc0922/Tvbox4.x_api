@@ -196,13 +196,41 @@ class Spider(Spider):
             self.log(f"视频详情解析失败")
             return {"list": []}
 
+    def parse_js_challenge(self, js_code):
+        """
+        解析JavaScript挑战码并返回token
+        """
+        import re
+
+        # 提取数组中的值
+        array_match = re.search(r"_0x1=\[(.*?)\]", js_code)
+        if array_match:
+            values = [
+                val.strip().strip("'\"") for val in array_match.group(1).split(",")
+            ]
+            if len(values) >= 4:
+                _0xa, _0_b, _0_c, _0_d = values[0], values[1], values[2], values[3]
+
+                # 模拟JavaScript中的计算过程
+                _0_e = f"{_0xa}:{_0_b}:{_0_c}:{_0_d}"
+                _0_f = 0
+                for char in _0_e:
+                    _0_f = ((_0_f << 5) - _0_f) + ord(char)
+                    _0_f = _0_f & 0xFFFFFFFF
+
+                _0_h = hex(abs(_0_f))
+                _0xi = f"{_0xa}:{_0_h[2:]}:{_0_b[:8]}"  # 移除hex输出的'0x'前缀
+                return _0xi
+
+        return None
+
     def playerContent(self, flag, id, vipFlags):
         """
         播放地址解析
         """
         parts = id.split("@")
         if len(parts) >= 3:
-            play_from = parts[0]
+            play_from = parts[0].split("$")[1]
             need_parse = parts[1]
             raw_url = parts[2]
 
@@ -216,12 +244,13 @@ class Spider(Spider):
                         api_url = f"{self.host}/api.php/decode/url/?url={raw_url}&vodFrom={play_from}{auth_token}"
                         rsp = self.fetch(api_url, headers=self.headers, timeout=30)
                         res_json = rsp.json()
-
                         if res_json.get("code") == 2 and res_json.get("challenge"):
-                            token = eval(res_json["challenge"])
-                            auth_token = f"&token={token}"
-                            continue
-
+                            # 解析JavaScript挑战码
+                            challenge_data = res_json["challenge"]
+                            token = self.parse_js_challenge(challenge_data)
+                            if token:
+                                auth_token = f"&token={token}"
+                                continue
                         play_url = res_json.get("data", "")
                         if play_url and play_url.startswith("http"):
                             final_url = play_url
@@ -238,16 +267,16 @@ class Spider(Spider):
                     jx = 1
 
             return {
-                "parse": jx,
-                "playUrl": "",
+                "jx": jx,
+                "parse": 0,
                 "url": final_url,
                 "header": {"User-Agent": self.headers["User-Agent"]},
             }
         else:
             # 直接使用传入的ID作为播放地址
             return {
+                "jx": jx,
                 "parse": 0,
-                "playUrl": "",
                 "url": id,
                 "header": {"User-Agent": self.headers["User-Agent"]},
             }
@@ -292,4 +321,12 @@ if __name__ == "__main__":
     time.sleep(1)
     print("\n-------------------获取视频列表测试------------------------------")
     rsp = spider.detailContent([rsp["list"][0]["vod_id"]])
+    print(rsp)
+    print("\n-------------------解析视频地址测试------------------------------")
+    id = rsp["list"][0]["vod_play_url"].split("$$$")
+    for i in id:
+        if i.startswith("正片$YYNB"):
+            id = i
+            break
+    rsp = spider.playerContent("", id, [])
     print(rsp)
