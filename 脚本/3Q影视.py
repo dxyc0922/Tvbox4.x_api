@@ -267,16 +267,16 @@ class Spider(Spider):
                     jx = 1
 
             return {
-                "jx": jx,
-                "parse": 0,
-                "url": final_url,
+                "parse": jx, # 是否使用解析器
+                "jx": 0, # 使用第几个解析器
+                "url": final_url, # 播放地址
                 "header": {"User-Agent": self.headers["User-Agent"]},
             }
         else:
             # 直接使用传入的ID作为播放地址
             return {
-                "jx": jx,
-                "parse": 0,
+                "parse": jx,
+                "jx": 0,
                 "url": id,
                 "header": {"User-Agent": self.headers["User-Agent"]},
             }
