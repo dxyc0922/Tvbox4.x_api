@@ -230,7 +230,7 @@ class Spider(Spider):
         """
         parts = id.split("@")
         if len(parts) >= 3:
-            play_from = parts[0].split("$")[1]
+            play_from = parts[0]
             need_parse = parts[1]
             raw_url = parts[2]
 
@@ -326,7 +326,7 @@ if __name__ == "__main__":
     id = rsp["list"][0]["vod_play_url"].split("$$$")
     for i in id:
         if i.startswith("正片$YYNB"):
-            id = i
+            id = i[3:]
             break
     rsp = spider.playerContent("", id, [])
     print(rsp)
