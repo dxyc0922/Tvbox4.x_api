@@ -418,6 +418,7 @@ if __name__ == "__main__":
     print("\n-------------------获取视频列表测试------------------------------")
     rsp = spider.detailContent([rsp["list"][0]["vod_id"]])
     print(rsp)
+    time.sleep(1)
     print("\n-------------------解析视频地址测试------------------------------")
     id = rsp["list"][0]["vod_play_url"].split("$$$")
     for i in id:

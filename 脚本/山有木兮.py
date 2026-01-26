@@ -26,11 +26,7 @@ class Spider(Spider):
             "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive",
             "X-Platform": "web",
-            "Referer": "https://film.symx.club/index",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin",
-            "DNT": "1",
+            "Referer": "https://film.symx.club/index"
         }
 
     def getName(self):
@@ -208,6 +204,7 @@ if __name__ == "__main__":
     print("\n-------------------获取视频列表测试------------------------------")
     rsp = spider.detailContent([rsp["list"][0]["vod_id"]])
     print(rsp)
+    time.sleep(1)
     print("\n-------------------解析视频地址测试------------------------------")
     id = rsp["list"][0]["vod_play_url"].split("$$$")
     rsp = spider.playerContent("", id, [])
