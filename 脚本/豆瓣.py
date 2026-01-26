@@ -2,7 +2,7 @@
 请勿用于商业用途，请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任
 """
 
-import datetime
+from datetime import datetime
 import sys
 import time
 from base.spider import Spider
@@ -536,6 +536,7 @@ if __name__ == "__main__":
     print("\n-------------------获取非凡分类内容测试------------------------------")
     rsp = spider.categoryContent("4", 1, True, "")
     print(rsp)
+    time.sleep(1)
     print("\n-------------------获取豆瓣分类内容测试------------------------------")
     rsp = spider.categoryContent("2", 1, True, "")
     print(rsp)
