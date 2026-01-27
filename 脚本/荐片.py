@@ -156,8 +156,6 @@ class Spider(Spider):
         path = "/api/crumb/shortList" if tid == "67" else "/api/crumb/list"
 
         url = f"{self.host}{path}"
-        # 完整请求地址
-        url = self.build_url(url, params)
         rsp = self.fetch(url, params=params, headers=self.headers)
 
         if rsp.status_code != 200:
