@@ -149,16 +149,21 @@ class Spider(Spider):
             "total": 总数
         }
         """
-        # 构建请求参数
-        params = {
-            **{"fcate_pid": tid, "page": pg, "sort": "", "category_id": ""},
-            **extend,
-        }
         # 根据tid判断使用哪个API路径
         path = "/api/crumb/shortList" if tid == "67" else "/api/crumb/list"
 
-        url = f"{self.host}{path}"
-        rsp = self.fetch(url, params=params, headers=self.headers)
+        # 构造查询字符串，就算参数值为空也要存在才能正常返回
+        base_params = f"fcate_pid={tid}&page={pg}&sort=&category_id=&area=&year=&type="
+        
+        # 添加扩展参数
+        extend_params = "&".join([f"{k}={v}" for k, v in extend.items()])
+        if extend_params:
+            query_string = f"{base_params}&{extend_params}"
+        else:
+            query_string = base_params
+            
+        url = f"{self.host}{path}?{query_string}"
+        rsp = self.fetch(url, headers=self.headers)
 
         if rsp.status_code != 200:
             self.log(f"分类视频列表请求失败")
@@ -379,25 +384,21 @@ if __name__ == "__main__":
     print(rsp)
     time.sleep(1)
     print("\n-------------------获取分类内容测试------------------------------")
-    rsp = {"class": [{"type_name": "电影", "type_id": 1}]}
-    if rsp.get("class"):
-        rsp_cat = spider.categoryContent(rsp["class"][0]["type_id"], 1, True, {})
-        print(rsp_cat)
-        time.sleep(1)
-        if rsp_cat.get("list"):
-            print("\n-------------------获取视频详情测试------------------------------")
-            rsp_det = spider.detailContent([rsp_cat["list"][0]["vod_id"]])
-            print(rsp_det)
-            time.sleep(1)
-            print("\n-------------------解析视频地址测试------------------------------")
-            if rsp_det.get("list") and rsp_det["list"][0].get("vod_play_url"):
-                play_url = (
-                    rsp_det["list"][0]["vod_play_url"].split("$$$")[0].split("#")[0]
-                )
-                if "$" in play_url:
-                    play_url = play_url.split("$")[1]
-                rsp_player = spider.playerContent("", play_url, [])
-                print(rsp_player)
+    rsp_cat = spider.categoryContent("1", 1, True, {})
+    print(rsp_cat)
+    time.sleep(1)
+    print("\n-------------------获取视频详情测试------------------------------")
+    rsp_det = spider.detailContent([rsp_cat["list"][0]["vod_id"]])
+    print(rsp_det)
+    time.sleep(1)
+    print("\n-------------------解析视频地址测试------------------------------")
+    play_url = (
+        rsp_det["list"][0]["vod_play_url"].split("$$$")[0].split("#")[0]
+    )
+    if "$" in play_url:
+        play_url = play_url.split("$")[1]
+    rsp_player = spider.playerContent("", play_url, [])
+    print(rsp_player)
     time.sleep(1)
     print("\n-------------------获取搜索内容测试------------------------------")
     rsp_search = spider.searchContent("推荐", False, 1)
