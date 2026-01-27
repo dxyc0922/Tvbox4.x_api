@@ -1,8 +1,6 @@
 """
 请勿用于商业用途，请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任
 """
-import concurrent.futures
-import json
 import sys
 import time
 from base.spider import Spider
@@ -37,105 +35,12 @@ class Spider(Spider):
         host = data["data"]["imgDomain"]
         return host if host.startswith("http") else f"https://{host}"
 
-    def homeContent(self, filter):
+    def searchContent(self, key, quick, pg="1"):
         """
-        获取分类列表
-        :param filter: 表示是否需要返回filters,True表示需要,False表示不需要,默认为True
-        :return: 示例
-        {
-            "class": [
-                {
-                    "type_id": "1", "type_name": "电影"
-                }
-            ],
-            filters: {
-                "1": [
-                    {
-                        "key": "type",
-                        "name": "类型",
-                        "value": [
-                            {"n": "动作", "v": "2"}
-                        ]
-                    }
-                ]
-            },
-            "list": [
-                {
-                    "vod_id": "电影id(不显示)", "vod_name": "电影名称(显示)", "vod_pic": "封面图片(显示)", "vod_remarks": "备注(显示)"
-                }
-            ]
-        }
-        """
-        result = {}
-
-        # 获取分类数据
-        cdata = self.fetch(
-            f"{self.host}/api/term/home_fenlei", headers=self.headers
-        ).json()
-        # 获取首页推荐视频
-        hdata = self.fetch(
-            f"{self.host}/api/dyTag/hand_data",
-            params={"category_id": cdata["data"][0]["id"]},
-            headers=self.headers,
-        ).json()
-
-        classes = []
-        filters = {}
-
-        # 构建分类列表
-        for k in cdata["data"]:
-            if "abbr" in k:  # 只添加有缩写的分类
-                classes.append({"type_name": k["name"], "type_id": k["id"]})
-
-        # 并发获取各分类的筛选条件
-        if filter:
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=len(classes)
-            ) as executor:
-                future_to_aid = {
-                    executor.submit(self.getfts, aid["type_id"]): aid["type_id"]
-                    for aid in classes
-                }
-                for future in concurrent.futures.as_completed(future_to_aid):
-                    aid = future_to_aid[future]
-                    try:
-                        aid_id, fts = future.result()
-                        filters[aid_id] = fts
-                    except Exception as e:
-                        self.log(f"Error processing filter for aid {aid}: {e}")
-
-        result["class"] = classes
-        if filter:
-            result["filters"] = filters
-
-        # 构建首页推荐视频列表
-        result["list"] = [
-            item for i in hdata["data"].values() for item in self.build_cl(i)
-        ]
-        return result
-
-    def homeVideoContent(self):
-        """
-        获取首页推荐内容,如果homeContent方法返回了list数组,则该方法可以不用实现
-        :return: 示例
-        {
-            "list": [
-                {
-                    "vod_id": "电影id(不显示)", "vod_name": "电影名称(显示)", "vod_pic": "封面图片(显示)", "vod_remarks": "备注(显示)"
-                }
-            ]
-        }
-        """
-        # 已在homeContent中实现，此方法可不实现
-        pass
-
-    def categoryContent(self, tid, pg, filter, extend):
-        """
-        获取分类列表内容
-        :param tid: 类型id,来源于homeContent的class数组中的type_id
-        :param pg: 页数,来源于app翻页操作
-        :param filter: 是否开启筛选,来源于app筛选操作
-        :param extend: 扩展参数,来源于app筛选操作,选中的筛选项会传过来{"type":"2"}
+        获取搜索内容
+        :param key: 搜索关键字
+        :param quick: 是否是快捷搜索,True表示是,False表示否,默认为True
+        :param pg: 页数,来源于app翻页操作,默认1
         :return: 示例
         {
             "list": [
@@ -149,40 +54,27 @@ class Spider(Spider):
             "total": 总数
         }
         """
-        # 根据tid判断使用哪个API路径
-        path = "/api/crumb/shortList" if tid == "67" else "/api/crumb/list"
-
-        # 构造查询字符串，就算参数值为空也要存在才能正常返回
-        base_params = f"fcate_pid={tid}&page={pg}&sort=&category_id=&area=&year=&type="
-        
-        # 添加扩展参数
-        extend_params = "&".join([f"{k}={v}" for k, v in extend.items()])
-        if extend_params:
-            query_string = f"{base_params}&{extend_params}"
-        else:
-            query_string = base_params
-            
-        url = f"{self.host}{path}?{query_string}"
-        rsp = self.fetch(url, headers=self.headers)
+        url = f"{self.host}/api/v2/search/videoV2"
+        params = {"key": key, "page": pg, "pageSize": 20}
+        rsp = self.fetch(url, params=params, headers=self.headers)
 
         if rsp.status_code != 200:
-            self.log(f"分类视频列表请求失败")
+            self.log(f"搜索结果请求失败")
             return {"list": []}
 
         try:
             res_json = rsp.json()
             result = {}
-            # 构建视频列表
-            result["list"] = self.build_cl(res_json["data"], tid)
+            result["list"] = self.build_cl(res_json["data"])
             result["page"] = pg
             result["pagecount"] = 9999
-            result["limit"] = 90
+            result["limit"] = 20
             result["total"] = 999999
             return result
         except Exception as e:
-            self.log(f"分类视频列表解析失败: {e}")
+            self.log(f"搜索结果解析失败: {e}")
             return {"list": []}
-
+    
     def detailContent(self, ids):
         """
         获取视频详情
@@ -208,17 +100,9 @@ class Spider(Spider):
             ]
         }
         """
-        ids_split = ids[0].split("@")
-        vid = ids_split[0]
-        tid = ids_split[-1] if len(ids_split) > 1 else ""
-
-        # 根据视频类型选择不同的API路径和参数键名
-        path, ikey = (
-            ("/api/detail", "vid") if tid == "67" else ("/api/video/detailv2", "id")
-        )
-
-        url = f"{self.host}{path}"
-        params = {ikey: vid}
+        vid = ids[0]
+        url = f"{self.host}/api/video/detailv2"
+        params = {"id": vid}
         rsp = self.fetch(url, params=params, headers=self.headers)
 
         if rsp.status_code != 200:
@@ -229,15 +113,12 @@ class Spider(Spider):
             res_json = rsp.json()
             v = res_json["data"]
 
-            # 根据视频类型构建播放源和播放地址
-            if tid == "67":  # 短剧
-                pdata = v.get("playlist", [])
-                names = [pdata[0].get("source_config_name")] if pdata else [""]
-                play_urls = ["#".join([f"{i.get('title')}${i['url']}" for i in pdata])]
-            else:  # 普通视频
-                names, play_urls = [], []
-                for source in v.get("source_list_source", []):
-                    names.append(source.get("name", ""))
+            # 只处理极速蓝光线路
+            names, play_urls = [], []
+            for source in v.get("source_list_source", []):
+                source_name = source.get("name", "")
+                if "极速蓝光" in source_name:  # 只处理包含"极速蓝光"的线路
+                    names.append(source_name)
                     urls = "#".join(
                         [
                             f"{j.get('source_name') or j.get('weight')}${j['url']}"
@@ -271,45 +152,6 @@ class Spider(Spider):
             self.log(f"视频详情解析失败: {e}")
             return {"list": []}
 
-    def searchContent(self, key, quick, pg="1"):
-        """
-        获取搜索内容
-        :param key: 搜索关键字
-        :param quick: 是否是快捷搜索,True表示是,False表示否,默认为True
-        :param pg: 页数,来源于app翻页操作,默认1
-        :return: 示例
-        {
-            "list": [
-                {
-                    "vod_id": "电影id(不显示)", "vod_name": "电影名称(显示)", "vod_pic": "封面图片(显示)", "vod_remarks": "备注(显示)"
-                }
-            ],
-            "page": 当前页数,
-            "limit": 每页显示数量,
-            "pagecount": 总页数=总数/每页数量
-            "total": 总数
-        """
-        url = f"{self.host}/api/v2/search/videoV2"
-        params = {"key": key, "page": pg, "pageSize": 20}
-        rsp = self.fetch(url, params=params, headers=self.headers)
-
-        if rsp.status_code != 200:
-            self.log(f"搜索结果请求失败")
-            return {"list": []}
-
-        try:
-            res_json = rsp.json()
-            result = {}
-            result["list"] = self.build_cl(res_json["data"])
-            result["page"] = pg
-            result["pagecount"] = 9999
-            result["limit"] = 20
-            result["total"] = 999999
-            return result
-        except Exception as e:
-            self.log(f"搜索结果解析失败: {e}")
-            return {"list": []}
-
     def playerContent(self, flag, id, vipFlags):
         """
         :param flag: 视频标识,来源于detailContent的vod_play_from
@@ -330,27 +172,6 @@ class Spider(Spider):
             "header": {"User-Agent": self.user_agent},
         }
 
-    def getfts(self, id):
-        """
-        获取筛选条件
-        :param id: 分类ID
-        :return: 筛选条件
-        """
-        data = self.fetch(
-            f"{self.host}/api/crumb/filterOptions",
-            params={"fcate_pid": id},
-            headers=self.headers,
-        ).json()
-        fts = [
-            {
-                "key": i["key"],
-                "name": i["key"],
-                "value": [{"n": j["name"], "v": j["id"]} for j in i["data"]],
-            }
-            for i in data["data"]
-        ]
-        return id, fts
-
     def build_cl(self, data, tid=""):
         """
         将API返回的视频列表转为标准vod格式
@@ -360,13 +181,22 @@ class Spider(Spider):
         """
         videos = []
         for i in data:
-            # 判断是否为短剧
-            text = json.dumps(i.get("res_categories", []))
-            video_tid = "67" if json.dumps("短剧") in text and "67" in text else tid
-
+            # 过滤短剧内容：检查type字段是否为2（短剧）或res_categories中是否包含短剧分类
+            is_short_play = i.get('type') == 2
+            res_categories = i.get('res_categories', [])
+            has_short_play_category = any(cat.get('id') == 67 and cat.get('name') == '短剧' for cat in res_categories)
+            
+            # 过滤情色类型视频
+            video_types = i.get('types', [])
+            has_erotic_category = '情色' in video_types
+            
+            # 如果是短剧或包含情色类型则跳过
+            if is_short_play or has_short_play_category or has_erotic_category:
+                continue
+            
             videos.append(
                 {
-                    "vod_id": f"{i.get('id')}@{video_tid}",
+                    "vod_id": f"{i.get('id')}",
                     "vod_name": i.get("title", ""),
                     "vod_pic": f"{self.ihost}{i.get('path') or i.get('cover_image') or i.get('thumbnail', '')}",
                     "vod_remarks": i.get("mask", ""),
@@ -379,27 +209,19 @@ class Spider(Spider):
 if __name__ == "__main__":
     spider = Spider()
     spider.init()
-    print("---------------------获取分类列表测试------------------------------")
-    rsp = spider.homeContent(True)
+    print("\n-------------------获取搜索内容测试------------------------------")
+    rsp = spider.searchContent("斗破苍穹", False, 1)
     print(rsp)
     time.sleep(1)
-    print("\n-------------------获取分类内容测试------------------------------")
-    rsp_cat = spider.categoryContent("1", 1, True, {})
-    print(rsp_cat)
-    time.sleep(1)
     print("\n-------------------获取视频详情测试------------------------------")
-    rsp_det = spider.detailContent([rsp_cat["list"][0]["vod_id"]])
-    print(rsp_det)
+    rsp = spider.detailContent([rsp["list"][0]["vod_id"]])
+    print(rsp)
     time.sleep(1)
     print("\n-------------------解析视频地址测试------------------------------")
     play_url = (
-        rsp_det["list"][0]["vod_play_url"].split("$$$")[0].split("#")[0]
+        rsp["list"][0]["vod_play_url"].split("$$$")[0].split("#")[0]
     )
     if "$" in play_url:
         play_url = play_url.split("$")[1]
-    rsp_player = spider.playerContent("", play_url, [])
-    print(rsp_player)
-    time.sleep(1)
-    print("\n-------------------获取搜索内容测试------------------------------")
-    rsp_search = spider.searchContent("推荐", False, 1)
-    print(rsp_search)
+    rsp = spider.playerContent("", play_url, [])
+    print(rsp)

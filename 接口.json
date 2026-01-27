@@ -3,13 +3,13 @@
     "sites": [
         {
             "key": "豆瓣",
-            "name": "首页",
+            "name": "豆瓣",
             "type": 3,
             "api": "./脚本/豆瓣.py"
         },
         {
-            "key": "荐片2",
-            "name": "荐片2",
+            "key": "荐片",
+            "name": "荐片",
             "type": 3,
             "api": "./脚本/荐片.py"
         },
@@ -18,17 +18,6 @@
             "name": "3Q影视",
             "type": 3,
             "api": "./脚本/3Q影视.py"
-        },
-        {
-            "key": "荐片",
-            "name": "荐片",
-            "type": 3,
-            "api": "https://raw.githubusercontent.com/wzxxcz/tvbox/refs/heads/main/js/cat_%E8%8D%90%E7%89%87app.js",
-            "ext": {
-                "host": "https://api.ztcgi.com",
-                "catesSet": "电影&电视剧&综艺&动漫&纪录片",
-                "tabsSet": "极速蓝光"
-            }
         },
         {
             "key": "小苹果",

@@ -79,7 +79,7 @@ class Spider(Spider):
 
             return {"class": classes}
         except Exception as e:
-            self.log(f"分类列表解析失败")
+            self.log(f"分类列表解析失败:{e}")
             return {"class": []}
 
     def homeVideoContent(self):
@@ -109,7 +109,7 @@ class Spider(Spider):
 
             return {"list": videos}
         except Exception as e:
-            self.log(f"首页视频列表解析失败")
+            self.log(f"首页视频列表解析失败:{e}")
             return {"list": []}
 
     def categoryContent(self, tid, pg, filter, extend):
@@ -145,7 +145,7 @@ class Spider(Spider):
             videos = self.json2vods(res_json["data"])
             return {"list": videos}
         except Exception as e:
-            self.log(f"分类视频列表解析失败")
+            self.log(f"分类视频列表解析失败:{e}")
             return {"list": []}
 
     def detailContent(self, ids):
@@ -251,7 +251,7 @@ class Spider(Spider):
 
             return {"list": [video]}
         except Exception as e:
-            self.log(f"视频详情解析失败")
+            self.log(f"视频详情解析失败:{e}")
             return {"list": []}
 
     def searchContent(self, key, quick, pg="1"):
@@ -285,7 +285,7 @@ class Spider(Spider):
             videos = self.json2vods(res_json["data"])
             return {"list": videos}
         except Exception as e:
-            self.log(f"搜索结果解析失败")
+            self.log(f"搜索结果解析失败:{e}")
             return {"list": []}
 
     def playerContent(self, flag, id, vipFlags):
@@ -403,27 +403,27 @@ class Spider(Spider):
 if __name__ == "__main__":
     spider = Spider()
     spider.init()
-    print("---------------------获取分类列表测试------------------------------")
-    rsp = spider.homeContent(True)
-    print(rsp)
-    time.sleep(1)
-    print("\n-------------------获取分类内容测试------------------------------")
-    rsp = spider.categoryContent(rsp["class"][0]["type_id"], 1, True, "")
-    print(rsp)
-    time.sleep(1)
+    # print("---------------------获取分类列表测试------------------------------")
+    # rsp = spider.homeContent(True)
+    # print(rsp)
+    # time.sleep(1)
+    # print("\n-------------------获取分类内容测试------------------------------")
+    # rsp = spider.categoryContent(rsp["class"][0]["type_id"], 1, True, "")
+    # print(rsp)
+    # time.sleep(1)
     print("\n-------------------获取搜索内容测试------------------------------")
-    rsp2 = spider.searchContent(rsp["list"][0]["vod_name"], False, 1)
+    rsp2 = spider.searchContent("斗破苍穹", False, 1)
     print(rsp2)
     time.sleep(1)
-    print("\n-------------------获取视频列表测试------------------------------")
-    rsp = spider.detailContent([rsp["list"][0]["vod_id"]])
-    print(rsp)
-    time.sleep(1)
-    print("\n-------------------解析视频地址测试------------------------------")
-    id = rsp["list"][0]["vod_play_url"].split("$$$")
-    for i in id:
-        if i.startswith("正片$YYNB"):
-            id = i[3:]
-            break
-    rsp = spider.playerContent("", id, [])
-    print(rsp)
+    # print("\n-------------------获取视频列表测试------------------------------")
+    # rsp = spider.detailContent([rsp["list"][0]["vod_id"]])
+    # print(rsp)
+    # time.sleep(1)
+    # print("\n-------------------解析视频地址测试------------------------------")
+    # id = rsp["list"][0]["vod_play_url"].split("$$$")
+    # for i in id:
+    #     if i.startswith("正片$YYNB"):
+    #         id = i[3:]
+    #         break
+    # rsp = spider.playerContent("", id, [])
+    # print(rsp)

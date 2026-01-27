@@ -378,7 +378,7 @@ class Spider(Spider):
 
                 return {"list": videos}
             except Exception as e:
-                self.log(f"首页视频列表解析失败")
+                self.log(f"首页视频列表解析失败:{e}")
                 return {"list": []}
 
     def categoryContent(self, tid, pg, filter, extend):
@@ -459,7 +459,7 @@ class Spider(Spider):
                     self.setCache(cache_key, cache_with_expiry)
                     return {"list": videos}
                 except Exception as e:
-                    self.log(f"分类视频列表解析失败")
+                    self.log(f"分类视频列表解析失败:{e}")
                     return {"list": []}
             else:
                 params = {
@@ -490,7 +490,7 @@ class Spider(Spider):
 
                     return {"list": videos}
                 except Exception as e:
-                    self.log(f"分类视频列表解析失败")
+                    self.log(f"分类视频列表解析失败:{e}")
                     return {"list": []}
 
     def json2vods(self, flag, video):
