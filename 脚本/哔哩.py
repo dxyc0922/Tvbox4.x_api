@@ -151,7 +151,7 @@ class Spider(Spider):  # 元类 默认的元类 type
         elif type(cookie) == str and cookie.startswith("file://"):
             import os
             # 先测试是否有写入权限
-            test_file = "/tvbox/test.txt"
+            test_file = "tvbox/test.txt"
             try:
                 # 尝试写入测试文件
                 with open(test_file, 'w', encoding='utf-8') as f:
@@ -165,6 +165,7 @@ class Spider(Spider):  # 元类 默认的元类 type
             if os.path.exists(filepath):
                 with open(filepath, 'r', encoding='utf-8') as f:
                     cookie = f.read().strip()
+                self.log("读取cookie成功")
             else:
                 self.log(f"Cookie file not found: {filepath}")
                 cookie = "{}"
