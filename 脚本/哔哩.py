@@ -137,6 +137,15 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = "{}"
         elif type(cookie) == str and cookie.startswith("http"):
             cookie = self.fetch(cookie, timeout=10).text.strip()
+        elif type(cookie) == str and cookie.startswith("file://"):
+            import os
+            filepath = cookie[7:]  # 移除 "file://" 前缀
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    cookie = f.read().strip()
+            else:
+                print(f"Cookie file not found: {filepath}")
+                cookie = "{}"
         try:
             if type(cookie) == dict:
                 cookie = json.dumps(cookie, ensure_ascii=False)
@@ -186,6 +195,15 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = "{}"
         elif type(cookie) == str and cookie.startswith("http"):
             cookie = self.fetch(cookie, timeout=10).text.strip()
+        elif type(cookie) == str and cookie.startswith("file://"):
+            import os
+            filepath = cookie[7:]  # 移除 "file://" 前缀
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    cookie = f.read().strip()
+            else:
+                print(f"Cookie file not found: {filepath}")
+                cookie = "{}"
         try:
             if type(cookie) == dict:
                 cookie = json.dumps(cookie, ensure_ascii=False)
@@ -506,6 +524,15 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = "{}"
         elif type(cookie) == str and cookie.startswith("http"):
             cookie = self.fetch(cookie, timeout=10).text.strip()
+        elif type(cookie) == str and cookie.startswith("file://"):
+            import os
+            filepath = cookie[7:]  # 移除 "file://" 前缀
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    cookie = f.read().strip()
+            else:
+                print(f"Cookie file not found: {filepath}")
+                cookie = "{}"
         try:
             if type(cookie) == dict:
                 cookie = json.dumps(cookie, ensure_ascii=False)
@@ -583,6 +610,15 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = "{}"
         elif type(cookie) == str and cookie.startswith("http"):
             cookie = self.fetch(cookie, timeout=10).text.strip()
+        elif type(cookie) == str and cookie.startswith("file://"):
+            import os
+            filepath = cookie[7:]  # 移除 "file://" 前缀
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    cookie = f.read().strip()
+            else:
+                print(f"Cookie file not found: {filepath}")
+                cookie = "{}"
         try:
             if type(cookie) == dict:
                 cookie = json.dumps(cookie, ensure_ascii=False)

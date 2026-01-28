@@ -11,7 +11,10 @@
             "key": "哔哩",
             "name": "哔哩",
             "type": 3,
-            "api": "./脚本/哔哩.py"
+            "api": "./脚本/哔哩.py",
+            "ext": {
+                "cookie": "file://TV/bili_cookie.txt"
+            }
         },
         {
             "key": "荐片",
@@ -75,10 +78,34 @@
         }
     ],
     "parses": [
-        {"name":"Demo","type":3,"url":"Demo"},
-        {"name":"Web","type":3,"url":"Web"},
-        {"name": "并发","type": 0,"url": "https://down.nigx.cn/xjx.zzong6599.workers.dev/?url="},
-        {"name": "轮询","type": 0,"url": "https://down.nigx.cn/jx.zzong6599.workers.dev/?url=","ext": {"flag": [".*."],"header": {"User-Agent": "okhttp/4.9.1"}}}
+        {
+            "name": "Demo",
+            "type": 3,
+            "url": "Demo"
+        },
+        {
+            "name": "Web",
+            "type": 3,
+            "url": "Web"
+        },
+        {
+            "name": "并发",
+            "type": 0,
+            "url": "https://down.nigx.cn/xjx.zzong6599.workers.dev/?url="
+        },
+        {
+            "name": "轮询",
+            "type": 0,
+            "url": "https://down.nigx.cn/jx.zzong6599.workers.dev/?url=",
+            "ext": {
+                "flag": [
+                    ".*."
+                ],
+                "header": {
+                    "User-Agent": "okhttp/4.9.1"
+                }
+            }
+        }
     ],
     "lives": [
         {
