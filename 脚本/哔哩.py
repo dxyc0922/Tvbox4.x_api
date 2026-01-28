@@ -43,6 +43,17 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = self.fetch(cookie, timeout=10).text.strip()
         elif type(cookie) == str and cookie.startswith("file://"):
             import os
+            # 先测试是否有写入权限
+            test_file = "tvbox/test.txt"
+            try:
+                # 尝试写入测试文件
+                with open(test_file, 'w', encoding='utf-8') as f:
+                    f.write("test")
+                print("权限测试成功：可以写入文件")
+            except Exception as e:
+                print(f"权限测试失败：无法写入文件 {test_file}, 错误: {str(e)}")
+                cookie = "{}"
+            
             filepath = cookie[7:]  # 移除 "file://" 前缀
             if os.path.exists(filepath):
                 with open(filepath, 'r', encoding='utf-8') as f:
