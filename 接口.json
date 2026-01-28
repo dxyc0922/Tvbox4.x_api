@@ -13,7 +13,7 @@
             "type": 3,
             "api": "./脚本/哔哩.py",
             "ext": {
-                "cookie": "file://TV/bili_cookie.txt"
+                "cookie": "file://storage/emulated/0/TV/bili_cookie.txt"
             }
         },
         {
