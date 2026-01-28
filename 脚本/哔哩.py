@@ -159,7 +159,6 @@ class Spider(Spider):  # 元类 默认的元类 type
                 with tempfile.NamedTemporaryFile(mode='w', delete=False, encoding='utf-8', prefix='bili_test_', suffix='.txt') as tf:
                     tf.write("test")
                     temp_filename = tf.name
-                os.unlink(temp_filename)  # 立即删除临时文件
                 self.log("权限测试成功：可以在临时目录写入文件")
                 success = True
             except Exception as e:
