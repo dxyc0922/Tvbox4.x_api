@@ -162,7 +162,7 @@ class Spider(Spider):  # 元类 默认的元类 type
                 except Exception as e:
                     self.log(f"权限测试失败：无法写入文件 {test_file[i]}, 错误: {str(e)}")
             
-            filepath = cookie[7:]  # 移除 "file://" 前缀
+            filepath = cookie[6:]  # 移除 "file://" 前缀
             if os.path.exists(filepath):
                 with open(filepath, 'r', encoding='utf-8') as f:
                     cookie = f.read().strip()
