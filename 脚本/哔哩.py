@@ -150,19 +150,36 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = self.fetch(cookie, timeout=10).text.strip()
         elif type(cookie) == str and cookie.startswith("file://"):
             import os
-            # 先测试是否有写入权限
-            test_file = ["TV/test.txt","/TV/test.txt","./TV/test.txt","test.txt"]
-            for i in range(4):
-                try:
-                    # 尝试写入测试文件
-                    with open(test_file[i], 'w', encoding='utf-8') as f:
-                        f.write("test")
-                    self.log(f"权限测试成功：可以写入文件{test_file[i]}")
-                    break
-                except Exception as e:
-                    self.log(f"权限测试失败：无法写入文件 {test_file[i]}, 错误: {str(e)}")
+            import tempfile
             
-            filepath = cookie[6:]  # 移除 "file://" 前缀
+            # 先测试是否有写入权限
+            success = False
+            # 尝试在临时目录创建文件
+            try:
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, encoding='utf-8', prefix='bili_test_', suffix='.txt') as tf:
+                    tf.write("test")
+                    temp_filename = tf.name
+                os.unlink(temp_filename)  # 立即删除临时文件
+                self.log("权限测试成功：可以在临时目录写入文件")
+                success = True
+            except Exception as e:
+                self.log(f"权限测试失败：无法在临时目录写入文件, 错误: {str(e)}")
+            
+            # 如果临时目录不可用，尝试当前目录
+            if not success:
+                test_file = "test_bili_cookie.txt"
+                try:
+                    with open(test_file, 'w', encoding='utf-8') as f:
+                        f.write("test")
+                    # 删除测试文件
+                    if os.path.exists(test_file):
+                        os.remove(test_file)
+                    self.log(f"权限测试成功：可以在当前目录写入文件 {test_file}")
+                except Exception as e:
+                    self.log(f"权限测试失败：无法在当前目录写入文件 {test_file}, 错误: {str(e)}")
+                    cookie = "{}"
+            
+            filepath = cookie[7:]  # 移除 "file://" 前缀
             if os.path.exists(filepath):
                 with open(filepath, 'r', encoding='utf-8') as f:
                     cookie = f.read().strip()
