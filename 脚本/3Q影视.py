@@ -101,7 +101,7 @@ class Spider(Spider):
             self.log(f"首页视频列表请求失败")
             return {"list": []}
         try:
-            res_json = rsp.json()
+            res_json = rsp.json() 
             videos = []
 
             for video in res_json["data"]["categories"]["videos"]:
@@ -146,6 +146,40 @@ class Spider(Spider):
             return {"list": videos}
         except Exception as e:
             self.log(f"分类视频列表解析失败:{e}")
+            return {"list": []}
+
+    def searchContent(self, key, quick, pg="1"):
+        """
+        获取搜索内容
+        :param key: 搜索关键字
+        :param quick: 是否是快捷搜索,True表示是,False表示否,默认为True
+        :param pg: 页数,来源于app翻页操作,默认1
+        :return: 示例
+        {
+            "list": [
+                {
+                    "vod_id": "电影id(不显示)", "vod_name": "电影名称(显示)", "vod_pic": "封面图片(显示)", "vod_remarks": "备注(显示)"
+                }
+            ],
+            如果api有提供可以写入,不写入也没影响
+            "page": 当前页数,
+            "limit": 每页显示数量,
+            "pagecount": 总页数=总数/每页数量
+            "total": 总数
+        """
+        url = f"{self.host}/api.php/search/index"
+        params = {"wd": key, "page": pg, "limit": 15}
+        rsp = self.fetch(url, params=params, headers=self.headers)
+
+        if rsp.status_code != 200:
+            self.log(f"搜索结果请求失败")
+            return {"list": []}
+        try:
+            res_json = rsp.json()
+            videos = self.json2vods(res_json["data"])
+            return {"list": videos}
+        except Exception as e:
+            self.log(f"搜索结果解析失败:{e}")
             return {"list": []}
 
     def detailContent(self, ids):
@@ -195,6 +229,7 @@ class Spider(Spider):
             data = res_json["data"][0]
             vodplayer = res_json.get("vodplayer", [])
 
+            videos = []
             shows = []
             play_urls = []
 
@@ -233,59 +268,27 @@ class Spider(Spider):
                         play_urls.append("#".join(urls))
                         shows.append(name)
 
-            video = {
-                "vod_id": str(data.get("vod_id", "")),
-                "vod_name": data.get("vod_name", ""),
-                "vod_pic": data.get("vod_pic", ""),
-                "vod_remarks": data.get("vod_remarks", ""),
-                "vod_year": data.get("vod_year", ""),
-                "vod_area": data.get("vod_area", ""),
-                "vod_actor": data.get("vod_actor", ""),
-                "vod_director": data.get("vod_director", ""),
-                "vod_content": data.get("vod_content", ""),
-                "vod_score": str(data.get("vod_score", "暂无评分")),
-                "type_name": data.get("vod_class", ""),
-                "vod_play_from": "$$$".join(shows),
-                "vod_play_url": "$$$".join(play_urls),
-            }
-
-            return {"list": [video]}
-        except Exception as e:
-            self.log(f"视频详情解析失败:{e}")
-            return {"list": []}
-
-    def searchContent(self, key, quick, pg="1"):
-        """
-        获取搜索内容
-        :param key: 搜索关键字
-        :param quick: 是否是快捷搜索,True表示是,False表示否,默认为True
-        :param pg: 页数,来源于app翻页操作,默认1
-        :return: 示例
-        {
-            "list": [
+            videos.append(
                 {
-                    "vod_id": "电影id(不显示)", "vod_name": "电影名称(显示)", "vod_pic": "封面图片(显示)", "vod_remarks": "备注(显示)"
+                    "vod_id": str(data.get("vod_id", "")),
+                    "vod_name": data.get("vod_name", ""),
+                    "vod_pic": data.get("vod_pic", ""),
+                    "vod_remarks": data.get("vod_remarks", ""),
+                    "vod_year": data.get("vod_year", ""),
+                    "vod_area": data.get("vod_area", ""),
+                    "vod_actor": data.get("vod_actor", ""),
+                    "vod_director": data.get("vod_director", ""),
+                    "vod_content": data.get("vod_content", ""),
+                    "vod_score": str(data.get("vod_score", "暂无评分")),
+                    "type_name": data.get("vod_class", ""),
+                    "vod_play_from": "$$$".join(shows),
+                    "vod_play_url": "$$$".join(play_urls),
                 }
-            ],
-            如果api有提供可以写入,不写入也没影响
-            "page": 当前页数,
-            "limit": 每页显示数量,
-            "pagecount": 总页数=总数/每页数量
-            "total": 总数
-        """
-        url = f"{self.host}/api.php/search/index"
-        params = {"wd": key, "page": pg, "limit": 15}
-        rsp = self.fetch(url, params=params, headers=self.headers)
+            )
 
-        if rsp.status_code != 200:
-            self.log(f"搜索结果请求失败")
-            return {"list": []}
-        try:
-            res_json = rsp.json()
-            videos = self.json2vods(res_json["data"])
             return {"list": videos}
         except Exception as e:
-            self.log(f"搜索结果解析失败:{e}")
+            self.log(f"视频详情解析失败:{e}")
             return {"list": []}
 
     def playerContent(self, flag, id, vipFlags):
@@ -412,11 +415,11 @@ if __name__ == "__main__":
     # print(rsp)
     # time.sleep(1)
     print("\n-------------------获取搜索内容测试------------------------------")
-    rsp2 = spider.searchContent("斗破苍穹", False, 1)
+    rsp2 = spider.searchContent("剑来", False, 1)
     print(rsp2)
     time.sleep(1)
     # print("\n-------------------获取视频列表测试------------------------------")
-    # rsp = spider.detailContent([rsp["list"][0]["vod_id"]])
+    # rsp = spider.detailContent(["53205"])
     # print(rsp)
     # time.sleep(1)
     # print("\n-------------------解析视频地址测试------------------------------")

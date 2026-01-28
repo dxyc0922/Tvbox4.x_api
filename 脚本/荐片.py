@@ -1,6 +1,7 @@
 """
 请勿用于商业用途，请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任
 """
+
 import sys
 import time
 from base.spider import Spider
@@ -74,7 +75,7 @@ class Spider(Spider):
         except Exception as e:
             self.log(f"搜索结果解析失败: {e}")
             return {"list": []}
-    
+
     def detailContent(self, ids):
         """
         获取视频详情
@@ -114,7 +115,7 @@ class Spider(Spider):
             v = res_json["data"]
 
             # 只处理极速蓝光线路
-            names, play_urls = [], []
+            videos, names, play_urls = [], [], []
             for source in v.get("source_list_source", []):
                 source_name = source.get("name", "")
                 if "极速蓝光" in source_name:  # 只处理包含"极速蓝光"的线路
@@ -129,25 +130,31 @@ class Spider(Spider):
                         play_urls.append(urls)
 
             # 构建视频详情
-            video = {
-                "vod_id": str(v.get("id", "")),
-                "vod_name": v.get("title", ""),
-                "vod_pic": f"{self.ihost}{v.get('path') or v.get('cover_image') or v.get('thumbnail', '')}",
-                "vod_remarks": v.get("update_cycle", ""),
-                "vod_year": v.get("year", ""),
-                "vod_area": v.get("area", ""),
-                "vod_actor": "/".join([i.get("name", "") for i in v.get("actors", [])]),
-                "vod_director": "/".join(
-                    [i.get("name", "") for i in v.get("director", [])]
-                ),
-                "vod_content": v.get("description", ""),
-                "vod_score": str(v.get("score", "")),
-                "type_name": "/".join([i.get("name", "") for i in v.get("types", [])]),
-                "vod_play_from": "$$$".join(names),
-                "vod_play_url": "$$$".join(play_urls),
-            }
+            videos.append(
+                {
+                    "vod_id": str(v.get("id", "")),
+                    "vod_name": v.get("title", ""),
+                    "vod_pic": f"{self.ihost}{v.get('path') or v.get('cover_image') or v.get('thumbnail', '')}",
+                    "vod_remarks": v.get("mask", ""),
+                    "vod_year": v.get("year", ""),
+                    "vod_area": v.get("area", ""),
+                    "vod_actor": "/".join(
+                        [i.get("name", "") for i in v.get("actors", [])]
+                    ),
+                    "vod_director": "/".join(
+                        [i.get("name", "") for i in v.get("director", [])]
+                    ),
+                    "vod_content": v.get("description", ""),
+                    "vod_score": str(v.get("score", "")),
+                    "type_name": "/".join(
+                        [i.get("name", "") for i in v.get("types", [])]
+                    ),
+                    "vod_play_from": "$$$".join(names),
+                    "vod_play_url": "$$$".join(play_urls),
+                }
+            )
 
-            return {"list": [video]}
+            return {"list": videos}
         except Exception as e:
             self.log(f"视频详情解析失败: {e}")
             return {"list": []}
@@ -182,18 +189,21 @@ class Spider(Spider):
         videos = []
         for i in data:
             # 过滤短剧内容：检查type字段是否为2（短剧）或res_categories中是否包含短剧分类
-            is_short_play = i.get('type') == 2
-            res_categories = i.get('res_categories', [])
-            has_short_play_category = any(cat.get('id') == 67 and cat.get('name') == '短剧' for cat in res_categories)
-            
+            is_short_play = i.get("type") == 2
+            res_categories = i.get("res_categories", [])
+            has_short_play_category = any(
+                cat.get("id") == 67 and cat.get("name") == "短剧"
+                for cat in res_categories
+            )
+
             # 过滤情色类型视频
-            video_types = i.get('types', [])
-            has_erotic_category = '情色' in video_types
-            
+            video_types = i.get("types", [])
+            has_erotic_category = "情色" in video_types
+
             # 如果是短剧或包含情色类型则跳过
             if is_short_play or has_short_play_category or has_erotic_category:
                 continue
-            
+
             videos.append(
                 {
                     "vod_id": f"{i.get('id')}",
@@ -210,18 +220,16 @@ if __name__ == "__main__":
     spider = Spider()
     spider.init()
     print("\n-------------------获取搜索内容测试------------------------------")
-    rsp = spider.searchContent("斗破苍穹", False, 1)
+    rsp = spider.searchContent("剑来", False, 1)
     print(rsp)
     time.sleep(1)
-    print("\n-------------------获取视频详情测试------------------------------")
-    rsp = spider.detailContent([rsp["list"][0]["vod_id"]])
-    print(rsp)
-    time.sleep(1)
-    print("\n-------------------解析视频地址测试------------------------------")
-    play_url = (
-        rsp["list"][0]["vod_play_url"].split("$$$")[0].split("#")[0]
-    )
-    if "$" in play_url:
-        play_url = play_url.split("$")[1]
-    rsp = spider.playerContent("", play_url, [])
-    print(rsp)
+    # print("\n-------------------获取视频详情测试------------------------------")
+    # rsp = spider.detailContent(["564684"])
+    # # print(rsp)
+    # time.sleep(1)
+    # print("\n-------------------解析视频地址测试------------------------------")
+    # play_url = rsp["list"][0]["vod_play_url"].split("$$$")[0].split("#")[0]
+    # if "$" in play_url:
+    #     play_url = play_url.split("$")[1]
+    # rsp = spider.playerContent("", play_url, [])
+    # print(rsp)
