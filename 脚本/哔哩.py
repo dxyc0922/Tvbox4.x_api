@@ -19,6 +19,7 @@ class Spider(Spider):  # 元类 默认的元类 type
         """
         "ext": {"cookie": "file://storage/emulated/0/TV/bili_cookie.txt"}
         文件要完整路径才能正确读取cookie,可以通过浏览器F12获取cookie
+        有cookie后画质提高到1080p
         """
         try:
             self.extendDict = json.loads(extend)
@@ -82,49 +83,10 @@ class Spider(Spider):  # 元类 默认的元类 type
                 result["class"].append({"type_name": cate, "type_id": cate})
         if not "class" in result or result["class"] == []:
             result["class"] = [
-                {"type_name": "傻屌仙逆", "type_id": "沙雕仙逆"},
-                {"type_name": "沙雕动画", "type_id": "沙雕动画"},
-                {"type_name": "纪录片", "type_id": "纪录片超清"},
+                {"type_name": "睡眠", "type_id": "窗白噪音"},
                 {"type_name": "演唱会", "type_id": "演唱会超清"},
                 {"type_name": "流行音乐", "type_id": "音乐超清"},
-                {"type_name": "美食", "type_id": "美食超清"},
-                {"type_name": "食谱", "type_id": "食谱"},
-                {"type_name": "体育", "type_id": "体育超清"},
-                {"type_name": "球星", "type_id": "球星"},
-                {"type_name": "教育", "type_id": "中小学教育"},
-                {"type_name": "幼儿教育", "type_id": "幼儿教育"},
-                {"type_name": "旅游", "type_id": "旅游"},
                 {"type_name": "风景", "type_id": "风景4K"},
-                {"type_name": "说案", "type_id": "说案"},
-                {"type_name": "知名UP主", "type_id": "知名UP主"},
-                {"type_name": "探索发现", "type_id": "探索发现超清"},
-                {"type_name": "鬼畜", "type_id": "鬼畜"},
-                {"type_name": "搞笑", "type_id": "搞笑超清"},
-                {"type_name": "儿童", "type_id": "儿童超清"},
-                {"type_name": "动物世界", "type_id": "动物世界超清"},
-                {"type_name": "相声小品", "type_id": "相声小品超清"},
-                {"type_name": "戏曲", "type_id": "戏曲"},
-                {"type_name": "解说", "type_id": "解说"},
-                {"type_name": "演讲", "type_id": "演讲"},
-                {"type_name": "小姐姐", "type_id": "小姐姐超清"},
-                {"type_name": "荒野求生", "type_id": "荒野求生超清"},
-                {"type_name": "健身", "type_id": "健身"},
-                {"type_name": "帕梅拉", "type_id": "帕梅拉"},
-                {"type_name": "太极拳", "type_id": "太极拳"},
-                {"type_name": "广场舞", "type_id": "广场舞"},
-                {"type_name": "舞蹈", "type_id": "舞蹈"},
-                {"type_name": "音乐", "type_id": "音乐"},
-                {"type_name": "歌曲", "type_id": "歌曲"},
-                {"type_name": "MV", "type_id": "MV4K"},
-                {"type_name": "舞曲", "type_id": "舞曲超清"},
-                {"type_name": "4K", "type_id": "4K"},
-                {"type_name": "电影", "type_id": "电影"},
-                {"type_name": "电视剧", "type_id": "电视剧"},
-                {"type_name": "白噪音", "type_id": "白噪音超清"},
-                {"type_name": "考公考证", "type_id": "考公考证"},
-                {"type_name": "平面设计教学", "type_id": "平面设计教学"},
-                {"type_name": "软件教程", "type_id": "软件教程"},
-                {"type_name": "Windows", "type_id": "Windows"},
             ]
         return result
 

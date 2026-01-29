@@ -447,8 +447,7 @@ class Spider(Spider):
                     res_json = rsp.json()
                     videos = []
 
-                    for video in res_json["data"]:
-                        videos.extend(self.json2vods("douban", video))
+                    videos.extend(self.json2vods("douban", res_json["data"]))
 
                     cache_with_expiry = {
                         "list": videos,
@@ -533,10 +532,10 @@ class Spider(Spider):
 if __name__ == "__main__":
     spider = Spider()
     spider.init()
-    print("\n-------------------获取非凡分类内容测试------------------------------")
-    rsp = spider.categoryContent("4", 1, True, "")
-    print(rsp)
-    time.sleep(1)
+    # print("\n-------------------获取非凡分类内容测试------------------------------")
+    # rsp = spider.categoryContent("4", 1, True, "")
+    # print(rsp)
+    # time.sleep(1)
     print("\n-------------------获取豆瓣分类内容测试------------------------------")
-    rsp = spider.categoryContent("2", 1, True, "")
+    rsp = spider.categoryContent("电视", 1, True, "")
     print(rsp)
