@@ -30,8 +30,8 @@ class Spider(Spider):
         # 缓存时间配置（单位：秒）,对常用请求内容进行缓存,避免浪费网络资源
         self.cache_times = {
             # 天*时*分*秒
-            # 首页推荐视频，7天,首页推荐一般少变动,有新片一般会变动
-            "home_video": 7 * 24 * 60 * 60,
+            # 首页推荐视频，1天,首页推荐一般少变动,有新片一般会变动
+            "home_video": 1 * 24 * 60 * 60,
             # 分类内容，7天,豆瓣分类内容一般少变动,有新片一般会变动
             "douban_category": 7 * 24 * 60 * 60,
             # 分类内容，10分钟,非凡资源经常变动,适合追剧看看有没有最新集
@@ -504,7 +504,7 @@ class Spider(Spider):
                 cover = i.get("cover", "")
 
                 if cover:
-                    cover = f"{cover}@User-Agent={self.user_agent}"
+                    cover = f"{cover}@Referer=https://api.douban.com/@User-Agent={self.user_agent}"
 
                 videos.append(
                     {
