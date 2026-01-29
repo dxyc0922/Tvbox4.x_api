@@ -101,7 +101,7 @@ class Spider(Spider):
             self.log(f"首页视频列表请求失败")
             return {"list": []}
         try:
-            res_json = rsp.json() 
+            res_json = rsp.json()
             videos = []
 
             for video in res_json["data"]["categories"]["videos"]:
@@ -143,7 +143,13 @@ class Spider(Spider):
         try:
             res_json = rsp.json()
             videos = self.json2vods(res_json["data"])
-            return {"list": videos}
+            return {
+                "list": videos,
+                "page": pg,
+                "limit": 20,
+                "pagecount": 9999,
+                "total": 999999,
+            }
         except Exception as e:
             self.log(f"分类视频列表解析失败:{e}")
             return {"list": []}
@@ -177,7 +183,13 @@ class Spider(Spider):
         try:
             res_json = rsp.json()
             videos = self.json2vods(res_json["data"])
-            return {"list": videos}
+            return {
+                "list": videos,
+                "page": pg,
+                "limit": 20,
+                "pagecount": 9999,
+                "total": 999999,
+            }
         except Exception as e:
             self.log(f"搜索结果解析失败:{e}")
             return {"list": []}

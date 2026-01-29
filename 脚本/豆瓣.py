@@ -456,7 +456,13 @@ class Spider(Spider):
                     }
 
                     self.setCache(cache_key, cache_with_expiry)
-                    return {"list": videos}
+                    return {
+                        "list": videos,
+                        "page": pg,
+                        "limit": 20,
+                        "pagecount": 9999,
+                        "total": 999999,
+                    }
                 except Exception as e:
                     self.log(f"分类视频列表解析失败:{e}")
                     return {"list": []}
@@ -487,7 +493,13 @@ class Spider(Spider):
                     }
                     self.setCache(cache_key, cache_with_expiry)
 
-                    return {"list": videos}
+                    return {
+                        "list": videos,
+                        "page": pg,
+                        "limit": 20,
+                        "pagecount": 9999,
+                        "total": 999999,
+                    }
                 except Exception as e:
                     self.log(f"分类视频列表解析失败:{e}")
                     return {"list": []}
@@ -511,7 +523,7 @@ class Spider(Spider):
                         "vod_id": str(i.get("id", "")),
                         "vod_name": i.get("title", ""),
                         "vod_pic": cover,
-                        "vod_remarks": f"{rate}分" if rate else "暂无评分"
+                        "vod_remarks": f"{rate}分" if rate else "暂无评分",
                     }
                 )
         elif flag == "ffzy":
