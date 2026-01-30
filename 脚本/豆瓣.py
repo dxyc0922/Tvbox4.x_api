@@ -366,8 +366,7 @@ class Spider(Spider):
                 res_json = rsp.json()
                 videos = []
 
-                for video in res_json["data"]:
-                    videos.extend(self.json2vods("douban", video))
+                videos.extend(self.json2vods("douban", res_json["data"]))
 
                 cache_with_expiry = {
                     "list": videos,
