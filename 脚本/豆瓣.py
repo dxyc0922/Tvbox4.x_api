@@ -27,13 +27,14 @@ class Spider(Spider):
             "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive",
         }
+        self.current_year = datetime.now().year
         # 缓存时间配置（单位：秒）,对常用请求内容进行缓存,避免浪费网络资源
         self.cache_times = {
             # 天*时*分*秒
-            # 首页推荐视频，1天,首页推荐一般少变动,有新片一般会变动
-            "home_video": 1 * 24 * 60 * 60,
-            # 分类内容，7天,豆瓣分类内容一般少变动,有新片一般会变动
-            "douban_category": 7 * 24 * 60 * 60,
+            # 首页推荐视频，适配豆瓣1小时统计热度
+            "home_video": 1 * 1 * 60 * 60,
+            # 分类内容，适配豆瓣1小时统计热度
+            "douban_category": 1 * 1 * 60 * 60,
             # 分类内容，10分钟,非凡资源经常变动,适合追剧看看有没有最新集
             "ffzy_category": 1 * 1 * 10 * 60,
         }
@@ -72,16 +73,16 @@ class Spider(Spider):
         }
         """
         categories = [
-            {"type_id": "4", "type_name": "最新动漫"},  # 非凡动漫分类
-            {"type_id": "2", "type_name": "最新剧集"},  # 非凡电视剧分类
+            {"type_id": "29", "type_name": "最新动漫"},  # 非凡动漫分类
+            {"type_id": "13", "type_name": "最新剧集"},  # 非凡电视剧分类
             {"type_id": "电视", "type_name": "热门剧集"},  # 豆瓣电视剧分类
-            {"type_id": "1", "type_name": "最新电影"},  # 非凡电影分类
+            # {"type_id": "1", "type_name": "最新电影"},  # 非凡电影分类
             {"type_id": "电影", "type_name": "热门电影"},  # 豆瓣电影分类
-            {"type_id": "3", "type_name": "最新综艺"},  # 非凡综艺分类
+            # {"type_id": "3", "type_name": "最新综艺"},  # 非凡综艺分类
             {"type_id": "综艺", "type_name": "热门综艺"},  # 豆瓣综艺分类
         ]
         filters = {
-            "4": [  # 非凡动漫分类的筛选条件
+            "29": [  # 非凡动漫分类的筛选条件
                 {
                     "key": "类型",
                     "name": "类型",
@@ -94,7 +95,7 @@ class Spider(Spider):
                     ],
                 }
             ],
-            "2": [  # 非凡电视剧分类的筛选条件
+            "13": [  # 非凡电视剧分类的筛选条件
                 {
                     "key": "类型",
                     "name": "类型",
@@ -179,22 +180,22 @@ class Spider(Spider):
                     ],
                 },
             ],
-            "1": [  # 非凡电影分类的筛选条件
-                {
-                    "key": "类型",
-                    "name": "类型",
-                    "value": [
-                        {"v": "6", "n": "动作片"},
-                        {"v": "7", "n": "喜剧片"},
-                        {"v": "8", "n": "爱情片"},
-                        {"v": "9", "n": "科幻片"},
-                        {"v": "10", "n": "恐怖片"},
-                        {"v": "11", "n": "剧情片"},
-                        {"v": "12", "n": "战争片"},
-                        {"v": "20", "n": "记录片"},
-                    ],
-                },
-            ],
+            # "1": [  # 非凡电影分类的筛选条件
+            #     {
+            #         "key": "类型",
+            #         "name": "类型",
+            #         "value": [
+            #             {"v": "6", "n": "动作片"},
+            #             {"v": "7", "n": "喜剧片"},
+            #             {"v": "8", "n": "爱情片"},
+            #             {"v": "9", "n": "科幻片"},
+            #             {"v": "10", "n": "恐怖片"},
+            #             {"v": "11", "n": "剧情片"},
+            #             {"v": "12", "n": "战争片"},
+            #             {"v": "20", "n": "记录片"},
+            #         ],
+            #     },
+            # ],
             "电影": [  # 豆瓣电影分类的筛选条件
                 {
                     "key": "排序",  # 排序方式
@@ -262,18 +263,18 @@ class Spider(Spider):
                     ],
                 },
             ],
-            "3": [  # 非凡综艺分类的筛选条件
-                {
-                    "key": "类型",
-                    "name": "类型",
-                    "value": [
-                        {"v": "25", "n": "大陆综艺"},
-                        {"v": "26", "n": "港台综艺"},
-                        {"v": "27", "n": "日韩综艺"},
-                        {"v": "28", "n": "欧美综艺"},
-                    ],
-                },
-            ],
+            # "3": [  # 非凡综艺分类的筛选条件
+            #     {
+            #         "key": "类型",
+            #         "name": "类型",
+            #         "value": [
+            #             {"v": "25", "n": "大陆综艺"},
+            #             {"v": "26", "n": "港台综艺"},
+            #             {"v": "27", "n": "日韩综艺"},
+            #             {"v": "28", "n": "欧美综艺"},
+            #         ],
+            #     },
+            # ],
             "综艺": [  # 豆瓣综艺分类的筛选条件
                 {
                     "key": "排序",
@@ -340,7 +341,6 @@ class Spider(Spider):
             ]
         }
         """
-        current_year = datetime.now().year
         cache_key = f"douban_home_video"
         cached_data = self.getCache(cache_key)
 
@@ -354,7 +354,8 @@ class Spider(Spider):
                 "start": "0",  # 视频起始位置
                 "limit": "100",  # 每页数量
                 "tags": "",  # 根据分类筛选
-                "year_range": f"{current_year-1},{current_year}",  # 年份范围：去年到今年
+                "countries": "中国大陆",
+                "year_range": f"{self.current_year-1},{self.current_year}",  # 年份范围：去年到今年
             }
 
             rsp = self.fetch(self.douban_host, params=params, headers=self.headers)
@@ -428,6 +429,8 @@ class Spider(Spider):
                     "start": str(start),  # 视频起始索引
                     "limit": str(limit),  # 每页数量
                     "tags": tid,  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
+                    "countries": "中国大陆",
+                    "year_range": f"{self.current_year-1},{self.current_year}",  # 年份范围：去年到今年
                 }
 
                 if extend and isinstance(extend, dict):
