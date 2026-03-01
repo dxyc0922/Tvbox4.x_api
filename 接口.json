@@ -1,25 +1,23 @@
 {
-    "spider": "https://github.com/qist/tvbox/raw/refs/heads/master/jar/spider.jar;md5;dcaffe7b9e7325ec86fb826abc6d38fe",
+    "spider": "https://cnb.cool/aooooowuuuuu/FreeSpider/-/git/raw/main/bfdb--cvdvds.png",
     "wallpaper": "https://深色壁纸.xxooo.cf/",
     "sites": [
         {
-            "key": "配置中心",
-            "name": "配置｜中心",
-            "type": 3,
-            "api": "csp_Config",
-            "searchable": 0,
-            "changeable": 0,
-            "indexs": 0,
-            "style": {
-                "type": "rect",
-                "ratio": 1.597
-            }
-        },
+			"name": "配置|中心",
+			"key": "MyConfig",
+			"type": 3,
+			"api": "csp_MyConfigAmns",
+			"searchable": 0,
+			"filterable": 0,
+			"quickSearch": 0
+		},
         {
             "key": "豆瓣",
             "name": "豆瓣",
             "type": 3,
-            "api": "./脚本/豆瓣.py"
+            "api": "./脚本/豆瓣.py",
+            "searchable": 0,
+			"quickSearch": 0
         },
         {
             "key": "哔哩",
