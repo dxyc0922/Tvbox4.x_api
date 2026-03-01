@@ -4,7 +4,6 @@
 
 from datetime import datetime
 import sys
-import time
 from base.spider import Spider
 
 sys.path.append("..")
@@ -453,15 +452,6 @@ class Spider(Spider):
                 self.log(f"分类视频列表解析失败:{e}")
                 return {"list": []}
 
-    def searchContent(self, key, quick, pg="1"):
-        pass
-
-    def detailContent(self, ids):
-        pass
-
-    def playerContent(self, flag, id, vipFlags):
-        pass
-
     def json2vods(self, flag, video):
         """
         将API返回的视频列表转为标准vod格式
@@ -478,7 +468,7 @@ class Spider(Spider):
 
                 videos.append(
                     {
-                        "vod_id": str(i.get("id", "")),
+                        "vod_id": f"msearch:{str(i.get("id", ""))}",
                         "vod_name": i.get("title", ""),
                         "vod_pic": cover,
                         "vod_remarks": f"{rate}分" if rate else "暂无评分",
@@ -490,7 +480,7 @@ class Spider(Spider):
                     continue
                 videos.append(
                     {
-                        "vod_id": str(i.get("vod_id", "")),
+                        "vod_id": f"msearch:{str(i.get("vod_id", ""))}",
                         "vod_name": i.get("vod_name", ""),
                         "vod_pic": i.get("vod_pic", ""),
                         "vod_remarks": i.get("vod_remarks", ""),
