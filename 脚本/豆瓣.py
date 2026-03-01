@@ -468,7 +468,6 @@ class Spider(Spider):
 
                 videos.append(
                     {
-                        "vod_id": f"msearch:{str(i.get("id", ""))}",
                         "vod_name": i.get("title", ""),
                         "vod_pic": cover,
                         "vod_remarks": f"{rate}分" if rate else "暂无评分",
@@ -480,7 +479,6 @@ class Spider(Spider):
                     continue
                 videos.append(
                     {
-                        "vod_id": f"msearch:{str(i.get("vod_id", ""))}",
                         "vod_name": i.get("vod_name", ""),
                         "vod_pic": i.get("vod_pic", ""),
                         "vod_remarks": i.get("vod_remarks", ""),
