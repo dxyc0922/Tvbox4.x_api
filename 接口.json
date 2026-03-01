@@ -1,16 +1,6 @@
 {
-    "spider": "https://cnb.cool/aooooowuuuuu/FreeSpider/-/git/raw/main/bfdb--cvdvds.png",
     "wallpaper": "https://深色壁纸.xxooo.cf/",
     "sites": [
-        {
-			"name": "配置|中心",
-			"key": "MyConfig",
-			"type": 3,
-			"api": "csp_MyConfigAmns",
-			"searchable": 0,
-			"filterable": 0,
-			"quickSearch": 0
-		},
         {
             "key": "豆瓣",
             "name": "豆瓣",
