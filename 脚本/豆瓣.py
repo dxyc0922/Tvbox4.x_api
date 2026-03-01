@@ -28,16 +28,6 @@ class Spider(Spider):
             "Connection": "keep-alive",
         }
         self.current_year = datetime.now().year
-        # 缓存时间配置（单位：秒）,对常用请求内容进行缓存,避免浪费网络资源
-        self.cache_times = {
-            # 天*时*分*秒
-            # 首页推荐视频，适配豆瓣1小时统计热度
-            "home_video": 1 * 1 * 60 * 60,
-            # 分类内容，适配豆瓣1小时统计热度
-            "douban_category": 1 * 1 * 60 * 60,
-            # 分类内容，10分钟,非凡资源经常变动,适合追剧看看有没有最新集
-            "ffzy_category": 1 * 1 * 10 * 60,
-        }
 
     def getName(self):
         return self.name
@@ -341,45 +331,32 @@ class Spider(Spider):
             ]
         }
         """
-        cache_key = f"douban_home_video"
-        cached_data = self.getCache(cache_key)
+        params = {
+            "sort": "U",  # 排序:近期热度
+            "range": "0,10",  # 评分区间:0-10分
+            "playable": "0",  # 是否可播放:0-不开启，1-开启
+            "start": "0",  # 视频起始位置
+            "limit": "100",  # 每页数量
+            "tags": "",  # 根据分类筛选
+            "countries": "中国大陆",
+            "year_range": f"{self.current_year-1},{self.current_year}",  # 年份范围：去年到今年
+        }
 
-        if cached_data:
-            return cached_data
-        else:
-            params = {
-                "sort": "U",  # 排序:近期热度
-                "range": "0,10",  # 评分区间:0-10分
-                "playable": "0",  # 是否可播放:0-不开启，1-开启
-                "start": "0",  # 视频起始位置
-                "limit": "100",  # 每页数量
-                "tags": "",  # 根据分类筛选
-                "countries": "中国大陆",
-                "year_range": f"{self.current_year-1},{self.current_year}",  # 年份范围：去年到今年
-            }
+        rsp = self.fetch(self.douban_host, params=params, headers=self.headers)
 
-            rsp = self.fetch(self.douban_host, params=params, headers=self.headers)
+        if rsp.status_code != 200:
+            self.log(f"首页视频列表请求失败")
+            return {"list": []}
+        try:
+            res_json = rsp.json()
+            videos = []
 
-            if rsp.status_code != 200:
-                self.log(f"首页视频列表请求失败")
-                return {"list": []}
-            try:
-                res_json = rsp.json()
-                videos = []
+            videos.extend(self.json2vods("douban", res_json["data"]))
 
-                videos.extend(self.json2vods("douban", res_json["data"]))
-
-                cache_with_expiry = {
-                    "list": videos,
-                    "expiresAt": int(time.time()) + self.cache_times["home_video"],
-                }
-
-                self.setCache(cache_key, cache_with_expiry)
-
-                return {"list": videos}
-            except Exception as e:
-                self.log(f"首页视频列表解析失败:{e}")
-                return {"list": []}
+            return {"list": videos}
+        except Exception as e:
+            self.log(f"首页视频列表解析失败:{e}")
+            return {"list": []}
 
     def categoryContent(self, tid, pg, filter, extend):
         """
@@ -402,109 +379,88 @@ class Spider(Spider):
             "total": 总数
         }
         """
-        cache_params = f"cat_{tid}_page_{pg}"
+        if tid == "电视" or tid == "电影" or tid == "综艺":
+            limit = 100
+            start = (int(pg) - 1) * limit
 
-        if extend and isinstance(extend, dict):
-            if "类型" in extend:
-                cache_params += f"_genre_{extend['类型']}"  # 添加类型参数到缓存键
-            if "排序" in extend:
-                cache_params += f"_sort_{extend['排序']}"  # 添加排序参数到缓存键
-            if "地区" in extend:
-                cache_params += f"_country_{extend['地区']}"  # 添加地区参数到缓存键
+            params = {
+                "sort": "U",  # 排序:近期热度
+                "range": "0,10",  # 评分区间:0-10分
+                "playable": "0",  # 是否只显示可播放的:0-否,1-是
+                "start": str(start),  # 视频起始索引
+                "limit": str(limit),  # 每页数量
+                "tags": tid,  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
+                "countries": "中国大陆",
+                "year_range": f"{self.current_year-1},{self.current_year}",  # 年份范围：去年到今年
+            }
 
-        cache_key = f"category_{cache_params}"
-        cached_data = self.getCache(cache_key)
+            if extend and isinstance(extend, dict):
+                if "类型" in extend:
+                    params["genres"] = extend["类型"]  # 按类型筛选
+                if "排序" in extend:
+                    params["sort"] = extend["排序"]  # 按指定排序方式排序
+                if "地区" in extend:
+                    params["countries"] = extend["地区"]  # 按地区筛选
 
-        if cached_data:
-            return cached_data
-        else:
-            if tid == "电视" or tid == "电影" or tid == "综艺":
-                limit = 100
-                start = (int(pg) - 1) * limit
+            rsp = self.fetch(self.douban_host, params=params, headers=self.headers)
+            if rsp.status_code != 200:
+                self.log(f"分类视频列表请求失败")
+                return {"list": []}
+            try:
+                res_json = rsp.json()
+                videos = []
 
-                params = {
-                    "sort": "U",  # 排序:近期热度
-                    "range": "0,10",  # 评分区间:0-10分
-                    "playable": "0",  # 是否只显示可播放的:0-否,1-是
-                    "start": str(start),  # 视频起始索引
-                    "limit": str(limit),  # 每页数量
-                    "tags": tid,  # 根据分类筛选,还可以拼日期之类的比如:电影,2025
-                    "countries": "中国大陆",
-                    "year_range": f"{self.current_year-1},{self.current_year}",  # 年份范围：去年到今年
-                }
+                videos.extend(self.json2vods("douban", res_json["data"]))
 
-                if extend and isinstance(extend, dict):
-                    if "类型" in extend:
-                        params["genres"] = extend["类型"]  # 按类型筛选
-                    if "排序" in extend:
-                        params["sort"] = extend["排序"]  # 按指定排序方式排序
-                    if "地区" in extend:
-                        params["countries"] = extend["地区"]  # 按地区筛选
-
-                rsp = self.fetch(self.douban_host, params=params, headers=self.headers)
-                if rsp.status_code != 200:
-                    self.log(f"分类视频列表请求失败")
-                    return {"list": []}
-                try:
-                    res_json = rsp.json()
-                    videos = []
-
-                    videos.extend(self.json2vods("douban", res_json["data"]))
-
-                    cache_with_expiry = {
-                        "list": videos,
-                        "expiresAt": int(time.time())
-                        + self.cache_times["douban_category"],
-                    }
-
-                    self.setCache(cache_key, cache_with_expiry)
-                    return {
-                        "list": videos,
-                        "page": pg,
-                        "limit": 20,
-                        "pagecount": 9999,
-                        "total": 999999,
-                    }
-                except Exception as e:
-                    self.log(f"分类视频列表解析失败:{e}")
-                    return {"list": []}
-            else:
-                params = {
-                    "mid": "1",
-                    "tid": tid,
+                return {
+                    "list": videos,
                     "page": pg,
-                    "limit": "30",  # 每页数量,最大支持30
+                    "limit": 20,
+                    "pagecount": 9999,
+                    "total": 999999,
                 }
-                if extend and isinstance(extend, dict):
-                    if "类型" in extend:
-                        params["tid"] = extend["类型"]  # 按类型筛选
+            except Exception as e:
+                self.log(f"分类视频列表解析失败:{e}")
+                return {"list": []}
+        else:
+            params = {
+                "mid": "1",
+                "tid": tid,
+                "page": pg,
+                "limit": "30",  # 每页数量,最大支持30
+            }
+            if extend and isinstance(extend, dict):
+                if "类型" in extend:
+                    params["tid"] = extend["类型"]  # 按类型筛选
 
-                rsp = self.fetch(self.ffzy_host, params=params, headers=self.headers)
-                if rsp.status_code != 200:
-                    self.log(f"分类视频列表请求失败")
-                    return {"list": []}
-                try:
-                    res_json = rsp.json()
-                    videos = []
-                    videos.extend(self.json2vods("ffzy", res_json["list"]))
+            rsp = self.fetch(self.ffzy_host, params=params, headers=self.headers)
+            if rsp.status_code != 200:
+                self.log(f"分类视频列表请求失败")
+                return {"list": []}
+            try:
+                res_json = rsp.json()
+                videos = []
+                videos.extend(self.json2vods("ffzy", res_json["list"]))
 
-                    cache_with_expiry = {
-                        "list": videos,
-                        "expiresAt": int(time.time())
-                        + self.cache_times["ffzy_category"],
-                    }
-                    self.setCache(cache_key, cache_with_expiry)
+                return {
+                    "list": videos,
+                    "page": pg,
+                    "limit": 20,
+                    "pagecount": 9999,
+                    "total": 999999,
+                }
+            except Exception as e:
+                self.log(f"分类视频列表解析失败:{e}")
+                return {"list": []}
 
-                    return {
-                        "list": videos,
-                        "page": pg,
-                        "limit": 20,
-                        "pagecount": 9999,
-                        "total": 999999,
-                    }
-                except Exception as e:
-                    self.log(f"分类视频列表解析失败:{e}")
-                    return {"list": []}
+    def searchContent(self, key, quick, pg="1"):
+        pass
+
+    def detailContent(self, ids):
+        pass
+
+    def playerContent(self, flag, id, vipFlags):
+        pass
 
     def json2vods(self, flag, video):
         """
