@@ -1,14 +1,25 @@
 {
+    "spider": "https://github.com/ediart/tvbox/raw/refs/heads/main/TVBoxOSC/tvbox/spider.jar",
     "wallpaper": "https://深色壁纸.xxooo.cf/",
     "sites": [
+        {
+            "key": "配置中心",
+            "name": "配置｜中心",
+            "type": 3,
+            "api": "csp_Config",
+            "searchable": 0,
+            "changeable": 0,
+            "indexs": 0,
+            "style": {
+                "type": "rect",
+                "ratio": 1.597
+            }
+        },
         {
             "key": "豆瓣",
             "name": "豆瓣",
             "type": 3,
-            "api": "./脚本/豆瓣.py",
-            "searchable": 1,
-            "quickSearch": 1,
-            "filterable": 1
+            "api": "./脚本/豆瓣.py"
         },
         {
             "key": "哔哩",
@@ -18,18 +29,6 @@
             "ext": {
                 "cookie": "file://storage/emulated/0/TV/bili_cookie.txt"
             }
-        },
-        {
-            "key": "荐片",
-            "name": "荐片",
-            "type": 3,
-            "api": "./脚本/荐片.py"
-        },
-        {
-            "key": "3Q影视",
-            "name": "3Q影视",
-            "type": 3,
-            "api": "./脚本/3Q影视.py"
         },
         {
             "key": "金牌",
@@ -45,33 +44,16 @@
             "ext": "http://v.rbotv.cn"
         },
         {
-            "key": "看客联盟",
-            "name": "看客联盟",
+            "key": "荐片",
+            "name": "荐片",
             "type": 3,
-            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/py/%E6%A8%A1%E6%9D%BF/skapp.py",
-            "ext": {
-                "host": "https://kankelm.cn:2024/appdomain.txt",
-                "key": "ygcnbcvybqqckwqy",
-                "iv": "1583560747143708"
-            }
+            "api": "./脚本/荐片.py"
         },
         {
-            "key": "4K影视",
-            "name": "4K影视",
+            "key": "3Q影视",
+            "name": "3Q影视",
             "type": 3,
-            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/py/%E7%BB%BC/4K%E5%BD%B1%E8%A7%86.py"
-        },
-        {
-            "key": "看客TV",
-            "name": "看客TV",
-            "type": 3,
-            "api": "https://github.com/jak0099/dr/raw/refs/heads/master/py/%E7%BB%BC/%E7%9C%8B%E5%AE%A2TV.py"
-        },
-        {
-            "key": "界影视",
-            "name": "界影视",
-            "type": 3,
-            "api": "https://github.com/jak0099/dr/raw/refs/heads/master/py/%E7%BB%BC/%E7%95%8C%E5%BD%B1%E8%A7%86.py"
+            "api": "./脚本/3Q影视.py"
         }
     ],
     "parses": [

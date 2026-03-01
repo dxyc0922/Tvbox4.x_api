@@ -60,7 +60,7 @@ class Spider(Spider):
             ]
         }
         """
-        url = self.host + "/api.php/index/home"
+        url = self.host + "/api.php/web/index/home"
         rsp = self.fetch(url, headers=self.headers)
 
         if rsp.status_code != 200:
@@ -94,7 +94,7 @@ class Spider(Spider):
             ]
         }
         """
-        url = self.host + "/api.php/index/home"
+        url = self.host + "/api.php/web/index/home"
         rsp = self.fetch(url, headers=self.headers)
 
         if rsp.status_code != 200:
@@ -133,7 +133,7 @@ class Spider(Spider):
             "total": 总数
         }
         """
-        url = f"{self.host}/api.php/filter/vod"
+        url = f"{self.host}/api.php/web/filter/vod"
         params = {"type_name": tid, "sort": "hits", "page": pg, "limit": 24}
         rsp = self.fetch(url, params=params, headers=self.headers)
 
@@ -173,7 +173,7 @@ class Spider(Spider):
             "pagecount": 总页数=总数/每页数量
             "total": 总数
         """
-        url = f"{self.host}/api.php/search/index"
+        url = f"{self.host}/api.php/web/search/index"
         params = {"wd": key, "page": pg, "limit": 15}
         rsp = self.fetch(url, params=params, headers=self.headers)
 
@@ -229,7 +229,7 @@ class Spider(Spider):
                 .replace(".html", "")
             )
 
-        url = f"{self.host}/api.php/vod/get_detail"
+        url = f"{self.host}/api.php/web/vod/get_detail"
         params = {"vod_id": vid}
         rsp = self.fetch(url, params=params, headers=self.headers)
 
@@ -329,7 +329,7 @@ class Spider(Spider):
                 auth_token = ""
                 for i in range(2):
                     try:
-                        api_url = f"{self.host}/api.php/decode/url/?url={raw_url}&vodFrom={play_from}{auth_token}"
+                        api_url = f"{self.host}/api.php/web/decode/url/?url={raw_url}&vodFrom={play_from}{auth_token}"
                         rsp = self.fetch(api_url, headers=self.headers, timeout=30)
                         res_json = rsp.json()
                         if res_json.get("code") == 2 and res_json.get("challenge"):

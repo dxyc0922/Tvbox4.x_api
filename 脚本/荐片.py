@@ -3,7 +3,6 @@
 """
 
 import sys
-import time
 from base.spider import Spider
 
 sys.path.append("..")
@@ -55,8 +54,6 @@ class Spider(Spider):
             "total": 总数
         }
         """
-        # 使用正则,如果key含第*季关键句,则在第字前面加空格,比如"一人之下第6季"改成"一人之下 第6季"
-        key = self.regStr(r"^(.+?)第(\d+)季$", key)
         url = f"{self.host}/api/v2/search/videoV2"
         params = {"key": key, "page": pg, "pageSize": 20}
         rsp = self.fetch(url, params=params, headers=self.headers)
@@ -67,6 +64,7 @@ class Spider(Spider):
 
         try:
             res_json = rsp.json()
+            self.log(f"搜索结果: {res_json}")
             result = {}
             result["list"] = self.build_cl(res_json["data"])
             result["page"] = pg
@@ -224,7 +222,6 @@ if __name__ == "__main__":
     print("\n-------------------获取搜索内容测试------------------------------")
     rsp = spider.searchContent("剑来", False, 1)
     print(rsp)
-    time.sleep(1)
     # print("\n-------------------获取视频详情测试------------------------------")
     # rsp = spider.detailContent(["564684"])
     # # print(rsp)
