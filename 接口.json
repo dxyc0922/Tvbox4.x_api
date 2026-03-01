@@ -5,7 +5,10 @@
             "key": "豆瓣",
             "name": "豆瓣",
             "type": 3,
-            "api": "./脚本/豆瓣.py"
+            "api": "./脚本/豆瓣.py",
+            "searchable": 1,
+            "quickSearch": 1,
+            "filterable": 1
         },
         {
             "key": "哔哩",
@@ -27,12 +30,6 @@
             "name": "3Q影视",
             "type": 3,
             "api": "./脚本/3Q影视.py"
-        },
-        {
-            "key": "小苹果",
-            "name": "小苹果",
-            "type": 3,
-            "api": "https://raw.githubusercontent.com/tvbw/java/fa0bcde69d729c3b6629935cdc5fb9878adaad28/notes/py/Apple.py"
         },
         {
             "key": "金牌",
