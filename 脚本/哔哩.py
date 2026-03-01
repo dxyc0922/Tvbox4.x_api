@@ -4,11 +4,10 @@ import json
 import time
 from datetime import datetime
 from urllib.parse import quote, unquote
-
 import requests
+from base.spider import Spider
 
 sys.path.append("..")
-from base.spider import Spider
 
 
 class Spider(Spider):  # 元类 默认的元类 type
@@ -48,9 +47,10 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = self.fetch(cookie, timeout=10).text.strip()
         elif type(cookie) == str and cookie.startswith("file://"):
             import os
+
             filepath = cookie[6:]  # 移除 "file://" 前缀
             if os.path.exists(filepath):
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     cookie = f.read().strip()
             else:
                 self.log(f"Cookie file not found: {filepath}")
@@ -105,10 +105,10 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = self.fetch(cookie, timeout=10).text.strip()
         elif type(cookie) == str and cookie.startswith("file://"):
             import os
-            
+
             filepath = cookie[6:]  # 移除 "file://" 前缀
             if os.path.exists(filepath):
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     cookie = f.read().strip()
             else:
                 self.log(f"Cookie file not found: {filepath}")
@@ -164,12 +164,13 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = self.fetch(cookie, timeout=10).text.strip()
         elif type(cookie) == str and cookie.startswith("file://"):
             import os
+
             filepath = cookie[6:]  # 移除 "file://" 前缀
             if os.path.exists(filepath):
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     cookie = f.read().strip()
             else:
-                print(f"Cookie file not found: {filepath}")
+                self.log(f"Cookie file not found: {filepath}")
                 cookie = "{}"
         try:
             if type(cookie) == dict:
@@ -215,7 +216,13 @@ class Spider(Spider):  # 元类 默认的元类 type
         elif cid == "收藏夹":
             userid = self.getUserid(cookie)
             if userid is None:
-                return {}, 1
+                return {
+                    "list": [],
+                    "page": 0,
+                    "pagecount": 0,
+                    "limit": 0,
+                    "total": 0
+                }
             url = f"http://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid={userid}&jsonp=jsonp"
             r = self.fetch(url, cookies=cookie, headers=self.header, timeout=5)
             data = json.loads(self.cleanText(r.text))
@@ -493,12 +500,13 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = self.fetch(cookie, timeout=10).text.strip()
         elif type(cookie) == str and cookie.startswith("file://"):
             import os
+
             filepath = cookie[6:]  # 移除 "file://" 前缀
             if os.path.exists(filepath):
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     cookie = f.read().strip()
             else:
-                print(f"Cookie file not found: {filepath}")
+                self.log(f"Cookie file not found: {filepath}")
                 cookie = "{}"
         try:
             if type(cookie) == dict:
@@ -545,7 +553,13 @@ class Spider(Spider):  # 元类 默认的元类 type
                     "vod_remarks": remark,
                 }
             )
-        result = {"list": videos}
+        result = {
+            "list": videos,
+            "page": pg,
+            "limit": 20,
+            "pagecount": 9999,
+            "total": 999999,
+        }
         return result
 
     def playerContent(self, flag, pid, vipFlags):
@@ -579,12 +593,13 @@ class Spider(Spider):  # 元类 默认的元类 type
             cookie = self.fetch(cookie, timeout=10).text.strip()
         elif type(cookie) == str and cookie.startswith("file://"):
             import os
+
             filepath = cookie[6:]  # 移除 "file://" 前缀
             if os.path.exists(filepath):
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     cookie = f.read().strip()
             else:
-                print(f"Cookie file not found: {filepath}")
+                self.log(f"Cookie file not found: {filepath}")
                 cookie = "{}"
         try:
             if type(cookie) == dict:
