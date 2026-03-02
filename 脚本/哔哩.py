@@ -328,6 +328,7 @@ class Spider(Spider):
             "limit": 每页显示数量,
             "pagecount": 总页数=总数/每页数量
             "total": 总数
+        }
         """
         if quick:
             return {"list": []}
@@ -420,7 +421,15 @@ class Spider(Spider):
                 aid = idList[0]
                 cid = idList[1]
                 
-            url = "https://api.bilibili.com/x/player/playurl?avid={}&cid={}&qn=80&fnval=4048&fnver=0&fourk=1".format(aid, cid)
+            # 定义质量等级，从高到低排序
+            quality_levels = [
+                {"qn": 120, "name": "4K超清"},  # 4K
+                {"qn": 116, "name": "1080P60"}, # 1080P60帧
+                {"qn": 80, "name": "1080P"},    # 1080P
+                {"qn": 64, "name": "720P"},     # 720P
+                {"qn": 32, "name": "480P"},     # 480P
+                {"qn": 16, "name": "360P"},     # 360P
+            ]
             
             # 获取Cookie
             cookie = self._get_cookie_from_config()
@@ -430,14 +439,35 @@ class Spider(Spider):
             
             thread = str(self.extendDict.get("thread", "0"))
             
-            result.update({
-                "parse": 0,
-                "playUrl": "",
-                "url": f"http://127.0.0.1:9978/proxy?do=py&type=mpd&cookies={cookies}&url={quote(url)}&aid={aid}&cid={cid}&thread={thread}",
-                "header": self.header,
-                "danmaku": "https://api.bilibili.com/x/v1/dm/list.so?oid={}".format(cid),
-                "format": "application/dash+xml"
-            })
+            # 尝试不同质量等级，直到找到可用的
+            for quality in quality_levels:
+                url = "https://api.bilibili.com/x/player/playurl?avid={}&cid={}&qn={}&fnval=4048&fnver=0&fourk=1".format(aid, cid, quality["qn"])
+                
+                try:
+                    r = self.fetch(url, cookies=cookiesDict, headers=self.header, timeout=5)
+                    data = json.loads(self.cleanText(r.text))
+                    
+                    # 检查是否有有效的视频流
+                    if data["code"] == 0 and ("dash" in data["data"] or "durl" in data["data"]):
+                        self.log(f"成功获取视频流，质量: {quality['name']}")
+                        result.update({
+                            "parse": 0,
+                            "playUrl": "",
+                            "url": f"http://127.0.0.1:9978/proxy?do=py&type=mpd&cookies={cookies}&url={quote(url)}&aid={aid}&cid={cid}&thread={thread}",
+                            "header": self.header,
+                            "danmaku": "https://api.bilibili.com/x/v1/dm/list.so?oid={}".format(cid),
+                            "format": "application/dash+xml"
+                        })
+                        return result
+                        
+                except Exception as e:
+                    self.log(f"尝试质量 {quality['name']} 失败: {e}")
+                    continue
+            
+            # 如果所有质量都失败，返回空结果
+            self.log("所有视频质量尝试失败")
+            return {}
+            
         except Exception as e:
             self.log(f"播放内容处理失败: {e}")
             result = {}
