@@ -432,7 +432,7 @@ class Spider(Spider):
                 aid, cid
             )
 
-            r = self.fetch(url, cookies=self.cookie, headers=self.header)//self.cookie
+            r = self.fetch(url, cookies=self.cookie, headers=self.header)
             data = json.loads(self.cleanText(r.text))
 
             result.update(
