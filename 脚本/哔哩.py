@@ -657,66 +657,37 @@ class Spider(Spider):
             return [206, "application/octet-stream", r.content]
 
     def proxyMedia(self, params, forceRefresh=False):
-        """
-        优化的媒体代理方法，支持流式传输减少内存占用
-        """
+        _, dashinfos, _ = self.getDash(params)
+        if "videoid" in params:
+            videoid = int(params["videoid"])
+            dashinfo = dashinfos["video"][videoid]
+        elif "audioid" in params:
+            audioid = int(params["audioid"])
+            dashinfo = dashinfos["audio"][audioid]
+        else:
+            return [404, "text/plain", ""]
+        url = ""
+        urlList = (
+            [dashinfo["baseUrl"]] + dashinfo["backupUrl"]
+            if "backupUrl" in dashinfo and dashinfo["backupUrl"]
+            else [dashinfo["baseUrl"]]
+        )
+        for url in urlList:
+            if "mcdn.bilivideo.cn" not in url:
+                break
+        if url == "":
+            return [404, "text/plain", ""]
+        header = self.header.copy()
+        if "range" in params:
+            header["Range"] = params["range"]
+        
+        # 添加连接和读取超时设置，避免长时间等待
         try:
-            _, dashinfos, _ = self.getDash(params)
-            if "videoid" in params:
-                videoid = int(params["videoid"])
-                dashinfo = dashinfos["video"][videoid]
-            elif "audioid" in params:
-                audioid = int(params["audioid"])
-                dashinfo = dashinfos["audio"][audioid]
-            else:
-                return [404, "text/plain", ""]
-                
-            # 选择最优的URL
-            url = ""
-            urlList = (
-                [dashinfo["baseUrl"]] + dashinfo["backupUrl"]
-                if "backupUrl" in dashinfo and dashinfo["backupUrl"]
-                else [dashinfo["baseUrl"]]
-            )
-            for url in urlList:
-                if "mcdn.bilivideo.cn" not in url:
-                    break
-            if url == "":
-                return [404, "text/plain", ""]
-                
-            # 构建请求头
-            header = self.header.copy()
-            if "range" in params:
-                header["Range"] = params["range"]
-            
-            # 使用流式请求，避免全量加载到内存
-            try:
-                # 增加超时时间，给流式传输更多时间
-                r = self.fetch(url, headers=header, stream=True, timeout=(5, 30))
-                
-                # 根据Range头决定响应状态码
-                status_code = 206 if "range" in params else 200
-                
-                # 使用生成器函数实现真正的流式传输
-                def stream_generator():
-                    try:
-                        for chunk in r.iter_content(chunk_size=8192):  # 8KB chunks
-                            if chunk:
-                                yield chunk
-                    except Exception as e:
-                        self.log(f"流式传输中断: {e}")
-                    finally:
-                        r.close()
-                
-                return [status_code, "application/octet-stream", stream_generator()]
-                
-            except Exception as e:
-                self.log(f"媒体代理请求失败: {e}, URL: {url[:100]}...")
-                return [500, "text/plain", f"请求失败: {str(e)}"]
-                
+            r = self.fetch(url, headers=header, stream=True, timeout=(5, 10))  # 连接超时5秒，读取超时10秒
+            return [206, "application/octet-stream", r.content]
         except Exception as e:
-            self.log(f"媒体代理处理异常: {e}")
-            return [500, "text/plain", f"处理异常: {str(e)}"]
+            self.log(f"媒体代理请求失败: {e}, URL: {url[:100]}...")
+            return [500, "text/plain", f"请求失败: {str(e)}"]
     
     def getDash(self, params, forceRefresh=False):
         aid = params["aid"]
@@ -896,44 +867,30 @@ class Spider(Spider):
         
         return filtered_tracks
 
-    def _filter_video_tracks_by_resolution(self, video_tracks, max_tracks=2):
+    def _filter_video_tracks_by_resolution(self, video_tracks, max_tracks=3):
         """
-        按分辨率过滤视频轨道，保留最合适的几个
+        按分辨率过滤视频轨道，保留分辨率最高的几个
         :param video_tracks: 原始视频轨道列表
-        :param max_tracks: 最大保留轨道数，默认2个
+        :param max_tracks: 最大保留轨道数，默认3个
         :return: 过滤后的视频轨道列表
         """
         if len(video_tracks) <= max_tracks:
+            # 按分辨率降序排列后返回
             return sorted(video_tracks, key=lambda x: x['height'] * x['width'], reverse=True)
             
-        # 优先保留常见分辨率，避免过多轨道造成卡顿
-        priority_resolutions = [
-            (1080, 1920),  # 1080p
-            (720, 1280),   # 720p
-            (480, 854),    # 480p
-        ]
+        # 按分辨率排序（面积），保留最高的几个
+        sorted_tracks = sorted(video_tracks, key=lambda x: x['height'] * x['width'], reverse=True)
         
-        selected_tracks = []
+        # 保留分辨率最高的max_tracks个轨道
+        selected_tracks = sorted_tracks[:max_tracks]
         
-        # 先按优先分辨率选择
-        for height, width in priority_resolutions:
-            candidates = [track for track in video_tracks 
-                        if abs(track['height'] - height) <= 50 and abs(track['width'] - width) <= 50]
-            if candidates:
-                # 选择带宽最高的候选轨道
-                best_track = max(candidates, key=lambda x: x['bandwidth'])
-                selected_tracks.append(best_track)
-                if len(selected_tracks) >= max_tracks:
-                    break
+        # 按高度重新排序（保持清晰度顺序）
+        selected_tracks.sort(key=lambda x: x['height'], reverse=True)
         
-        # 如果还需要更多轨道，补充其他分辨率
-        if len(selected_tracks) < max_tracks:
-            remaining_tracks = [track for track in video_tracks 
-                            if track not in selected_tracks]
-            remaining_tracks.sort(key=lambda x: x['bandwidth'], reverse=True)
-            selected_tracks.extend(remaining_tracks[:max_tracks - len(selected_tracks)])
-        
-        self.log(f"视频轨道优化: 原始{len(video_tracks)}个 -> 保留{len(selected_tracks)}个")
+        self.log(f"视频轨道过滤: 原始{len(video_tracks)}个轨道 -> 保留{len(selected_tracks)}个轨道")
+        for track in selected_tracks:
+            self.log(f"保留视频轨道: ID={track['id']}, 分辨率={track['width']}x{track['height']}, 带宽={track['bandwidth']}")
+            
         return selected_tracks
 
     def _filter_audio_tracks(self, audio_tracks):
