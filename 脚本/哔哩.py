@@ -421,11 +421,11 @@ class Spider(Spider):
                 aid = idList[0]
                 cid = idList[1]
                 
-            # 定义质量等级，从高到低排序
+            # 定义质量等级，从高到低排序，优先选择1080P
             quality_levels = [
+                {"qn": 80, "name": "1080P"},    # 1080P (优先选择)
                 {"qn": 120, "name": "4K超清"},  # 4K
                 {"qn": 116, "name": "1080P60"}, # 1080P60帧
-                {"qn": 80, "name": "1080P"},    # 1080P
                 {"qn": 64, "name": "720P"},     # 720P
                 {"qn": 32, "name": "480P"},     # 480P
                 {"qn": 16, "name": "360P"},     # 360P
