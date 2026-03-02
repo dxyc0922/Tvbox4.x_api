@@ -5,9 +5,7 @@
             "key": "豆瓣",
             "name": "豆瓣",
             "type": 3,
-            "api": "./脚本/豆瓣.py",
-            "searchable": 0,
-			"quickSearch": 0
+            "api": "./脚本/豆瓣.py"
         },
         {
             "key": "哔哩",
