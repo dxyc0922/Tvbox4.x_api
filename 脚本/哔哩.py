@@ -682,6 +682,36 @@ class Spider(Spider):
             header["Range"] = params["range"]
         r = self.fetch(url, headers=header, stream=True)
         return [206, "application/octet-stream", r.content]
+    
+    def _filter_video_tracks(self, video_tracks, max_tracks=1):
+        """
+        过滤视频轨道，保留指定数量的最佳轨道
+        :param video_tracks: 原始视频轨道列表
+        :param max_tracks: 最大保留轨道数，默认3个
+        :return: 过滤后的视频轨道列表
+        """
+        if len(video_tracks) <= max_tracks:
+            return video_tracks
+            
+        # 按带宽排序，优先保留高带宽的轨道
+        sorted_tracks = sorted(video_tracks, key=lambda x: x['bandwidth'], reverse=True)
+        
+        # 可以根据需要调整过滤策略：
+        # 1. 保留最高清晰度的几个轨道
+        # 2. 保留不同分辨率的代表性轨道
+        # 3. 保留特定编码格式的轨道
+        
+        # 策略：保留带宽最高的max_tracks个轨道
+        selected_tracks = sorted_tracks[:max_tracks]
+        
+        # 按id重新排序（保持原有顺序）
+        selected_tracks.sort(key=lambda x: x['id'])
+        
+        self.log(f"视频轨道过滤: 原始{len(video_tracks)}个轨道 -> 保留{len(selected_tracks)}个轨道")
+        for track in selected_tracks:
+            self.log(f"保留轨道: ID={track['id']}, 分辨率={track['width']}x{track['height']}, 带宽={track['bandwidth']}")
+            
+        return selected_tracks
 
     def getDash(self, params, forceRefresh=False):
         aid = params["aid"]
@@ -736,7 +766,11 @@ class Spider(Spider):
         videoid = 0
         deadlineList = []
         
-        for video in dashinfos["video"]:
+        # 获取视频轨道过滤配置
+        max_video_tracks = int(self.extendDict.get("max_video_tracks", "3"))  # 默认保留3个视频轨道
+        selected_videos = self._filter_video_tracks(dashinfos["video"], max_video_tracks)
+        
+        for video in selected_videos:
             try:
                 deadline = int(re.search(r"deadline=(\d+)", video["baseUrl"]).group(1))
             except:
@@ -799,17 +833,21 @@ class Spider(Spider):
 	  </Period>
 	</MPD>"""
         
+        # 更新缓存中的dashinfos为过滤后的版本
+        filtered_dashinfos = dashinfos.copy()
+        filtered_dashinfos["video"] = selected_videos
+        
         expiresAt = min(deadlineList) - 60
         self.setCache(
             key,
             {
                 "type": "mpd",
                 "content": mpd.replace("&", "&amp;"),
-                "dashinfos": dashinfos,
+                "dashinfos": filtered_dashinfos,
                 "expiresAt": expiresAt,
             },
         )
-        return mpd.replace("&", "&amp;"), dashinfos, "mpd"
+        return mpd.replace("&", "&amp;"), filtered_dashinfos, "mpd"
 
     def getCookie(self, cookie):
         if "{" in cookie and "}" in cookie:
