@@ -103,10 +103,6 @@ class Spider(Spider):
         # 设置默认分类
         if not result["class"]:
             result["class"] = [
-                {"type_name": "首页推荐", "type_id": "首页推荐"},
-                {"type_name": "动态", "type_id": "动态"},
-                {"type_name": "收藏夹", "type_id": "收藏夹"},
-                {"type_name": "历史记录", "type_id": "历史记录"},
                 {"type_name": "演唱会", "type_id": "演唱会超清"},
                 {"type_name": "流行音乐", "type_id": "音乐超清"},
                 {"type_name": "风景", "type_id": "风景4K"},
@@ -189,20 +185,7 @@ class Spider(Spider):
         cookie_dict, imgKey, subKey = self.getCookie(normalized_cookie)
         
         try:
-            if tid == "首页推荐":
-                return self.homeVideoContent()
-            elif tid == "动态":
-                videos, pagecount = self._get_dynamic_videos(page, cookie_dict)
-            elif tid == "收藏夹":
-                videos, pagecount = self._get_favorite_folders(cookie_dict)
-            elif tid.startswith("fav&&&"):
-                videos, pagecount = self._get_favorite_videos(tid[6:], page, cookie_dict)
-            elif tid.startswith("UP主&&&"):
-                videos, pagecount = self._get_up_videos(tid[6:], page, cookie_dict, imgKey, subKey)
-            elif tid == "历史记录":
-                videos, pagecount = self._get_history_videos(page, cookie_dict)
-            else:
-                videos, pagecount = self._get_search_videos(tid, page, extend, cookie_dict)
+            videos, pagecount = self._get_search_videos(tid, page, extend, cookie_dict)
         except Exception as e:
             self.log(f"分类内容获取失败: {e}")
             videos = []
@@ -546,165 +529,6 @@ class Spider(Spider):
         
         headers = kwargs.pop('headers', self.header.copy())
         return self.fetch(url, cookies=cookies, headers=headers, **kwargs)
-
-    def _get_dynamic_videos(self, page, cookie_dict):
-        """获取动态视频"""
-        if page > 1:
-            offset = self.getCache("offset") or ""
-            url = f"https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all?timezone_offset=-480&type=all&offset={offset}&page={page}"
-        else:
-            url = f"https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all?timezone_offset=-480&type=all&page={page}"
-            
-        r = self.fetch(url, cookies=cookie_dict, headers=self.header, timeout=5)
-        data = json.loads(self.cleanText(r.text))
-        self.setCache("offset", data["data"]["offset"])
-        
-        videos = []
-        vodList = data["data"]["items"]
-        pagecount = page + 1 if data["data"]["has_more"] else page
-        
-        for vod in vodList:
-            if vod["type"] != "DYNAMIC_TYPE_AV":
-                continue
-            vid = str(vod["modules"]["module_dynamic"]["major"]["archive"]["aid"]).strip()
-            remark = vod["modules"]["module_dynamic"]["major"]["archive"]["duration_text"].strip()
-            title = self.removeHtmlTags(vod["modules"]["module_dynamic"]["major"]["archive"]["title"]).strip()
-            img = vod["modules"]["module_dynamic"]["major"]["archive"]["cover"]
-            
-            videos.append({
-                "vod_id": vid,
-                "vod_name": title,
-                "vod_pic": img,
-                "vod_remarks": remark,
-            })
-        return videos, pagecount
-
-    def _get_favorite_folders(self, cookie_dict):
-        """获取收藏夹列表"""
-        userid = self.getUserid(cookie_dict)
-        if userid is None:
-            return [], 0
-            
-        url = f"http://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid={userid}&jsonp=jsonp"
-        r = self.fetch(url, cookies=cookie_dict, headers=self.header, timeout=5)
-        data = json.loads(self.cleanText(r.text))
-        
-        videos = []
-        vodList = data["data"]["list"]
-        
-        for vod in vodList:
-            videos.append({
-                "vod_id": f"fav&&&{vod['id']}",
-                "vod_name": vod["title"].strip(),
-                "vod_pic": "https://api-lmteam.koyeb.app/files/shoucang.png",
-                "vod_tag": "folder",
-                "vod_remarks": vod["media_count"],
-            })
-        return videos, 1
-
-    def _get_favorite_videos(self, fav_id, page, cookie_dict):
-        """获取收藏夹视频"""
-        url = f"http://api.bilibili.com/x/v3/fav/resource/list?media_id={fav_id}&pn={page}&ps=20&platform=web&type=0"
-        r = self.fetch(url, cookies=cookie_dict, headers=self.header, timeout=5)
-        data = json.loads(self.cleanText(r.text))
-        
-        videos = []
-        pagecount = page + 1 if data["data"]["has_more"] else page
-        vodList = data["data"]["medias"]
-        
-        for vod in vodList:
-            vid = str(vod["id"]).strip()
-            title = self.removeHtmlTags(vod["title"]).replace("&quot;", '"')
-            img = vod["cover"].strip()
-            remark = time.strftime("%H:%M:%S", time.gmtime(vod["duration"]))
-            
-            if remark.startswith("00:"):
-                remark = remark[3:]
-                
-            videos.append({
-                "vod_id": vid,
-                "vod_name": title,
-                "vod_pic": img,
-                "vod_remarks": remark,
-            })
-        return videos, pagecount
-
-    def _get_up_videos(self, mid, page, cookie_dict, imgKey, subKey):
-        """获取UP主视频"""
-        params = {"mid": mid, "ps": 30, "pn": page}
-        params = self.encWbi(params, imgKey, subKey)
-        url = "https://api.bilibili.com/x/space/wbi/arc/search?"
-        for key in params:
-            url += f"&{key}={quote(params[key])}"
-            
-        r = self.fetch(url, cookies=cookie_dict, headers=self.header, timeout=5)
-        data = json.loads(self.cleanText(r.text))
-        
-        pagecount = page + 1 if page < data["data"]["page"]["count"] else page
-        videos = [{"vod_id": f"UP主&&&{mid}", "vod_name": "播放列表"}] if page == 1 else []
-        
-        vodList = data["data"]["list"]["vlist"]
-        for vod in vodList:
-            vid = str(vod["aid"]).strip()
-            title = self.removeHtmlTags(vod["title"]).replace("&quot;", '"')
-            img = vod["pic"].strip()
-            
-            # 处理时长格式
-            remarkinfos = vod["length"].split(":")
-            minutes = int(remarkinfos[0])
-            if minutes >= 60:
-                hours = str(minutes // 60)
-                minutes = str(minutes % 60)
-                if len(hours) == 1:
-                    hours = "0" + hours
-                if len(minutes) == 1:
-                    minutes = "0" + minutes
-                remark = hours + ":" + minutes + ":" + remarkinfos[1]
-            else:
-                remark = vod["length"]
-                
-            videos.append({
-                "vod_id": vid,
-                "vod_name": title,
-                "vod_pic": img,
-                "vod_remarks": remark,
-            })
-        return videos, pagecount
-
-    def _get_history_videos(self, page, cookie_dict):
-        """获取历史记录"""
-        url = f"http://api.bilibili.com/x/v2/history?pn={page}"
-        r = self.fetch(url, cookies=cookie_dict, headers=self.header, timeout=5)
-        data = json.loads(self.cleanText(r.text))
-        
-        pagecount = page + 1 if len(data["data"]) == 300 else page
-        videos = []
-        
-        vodList = data["data"]
-        for vod in vodList:
-            if vod["duration"] <= 0:
-                continue
-                
-            vid = str(vod["aid"]).strip()
-            img = vod["pic"].strip()
-            title = self.removeHtmlTags(vod["title"]).replace("&quot;", '"')
-            
-            if vod["progress"] != -1:
-                process = time.strftime("%H:%M:%S", time.gmtime(vod["progress"]))
-                totalTime = time.strftime("%H:%M:%S", time.gmtime(vod["duration"]))
-                if process.startswith("00:"):
-                    process = process[3:]
-                if totalTime.startswith("00:"):
-                    totalTime = totalTime[3:]
-                remark = process + "|" + totalTime
-                
-                videos.append({
-                    "vod_id": vid,
-                    "vod_name": title,
-                    "vod_pic": img,
-                    "vod_remarks": remark,
-                })
-        return videos, pagecount
 
     def _get_search_videos(self, keyword, page, ext, cookie_dict):
         """获取搜索视频"""
