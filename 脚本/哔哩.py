@@ -752,7 +752,7 @@ class Spider(Spider):
         filtered_videos = self._filter_av1_videos(dashinfos["video"])
         
         # 再按分辨率过滤，保留最高的几个
-        max_video_tracks = int(self.extendDict.get("max_video_tracks", "3"))
+        max_video_tracks = int(self.extendDict.get("max_video_tracks", "2"))
         selected_videos = self._filter_video_tracks_by_resolution(filtered_videos, max_video_tracks)
         
         # 为每个视频轨道添加更详细的日志
