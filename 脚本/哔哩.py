@@ -412,89 +412,116 @@ class Spider(Spider):
             normalized_cookie = self._normalize_cookie(cookie)
             cookiesDict, _, _ = self.getCookie(normalized_cookie)
             
-            # 直接获取视频真实地址，不使用本地代理
-            video_url = self._get_direct_video_url(aid, cid, cookiesDict)
+            # 获取播放信息
+            play_info = self._get_play_info(aid, cid, cookiesDict)
             
-            if video_url:
+            if play_info and play_info["url"]:
                 result.update({
-                    "parse": 0,
-                    "playUrl": "",
-                    "url": video_url,
-                    "header": {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                        "Referer": "https://www.bilibili.com"
-                    },
-                    "danmaku": "https://api.bilibili.com/x/v1/dm/list.so?oid={}".format(cid)
+                    "parse": 0,  # 不需要解析
+                    "playUrl": "",  # 不需要额外的播放器地址
+                    "url": play_info["url"],
+                    "header": play_info.get("header", {}),
+                    "danmaku": f"https://api.bilibili.com/x/v1/dm/list.so?oid={cid}",
+                    "format": play_info.get("format", "")
                 })
+                self.log(f"播放地址获取成功: {play_info['url'][:100]}...")
                 return result
-            
-            return {}
+            else:
+                self.log("未能获取有效的播放地址")
+                return {}
             
         except Exception as e:
             self.log(f"播放内容处理失败: {e}")
-            result = {}
-            
-        return result
+            import traceback
+            self.log(f"错误详情: {traceback.format_exc()}")
+            return {}
     
-    def _get_direct_video_url(self, aid, cid, cookies_dict):
+    def _get_play_info(self, aid, cid, cookies_dict):
         """
-        直接获取B站视频的真实播放地址，不使用本地代理
+        获取播放信息
         :param aid: 视频aid
-        :param cid: 视频cid
+        :param cid: 视频cid  
         :param cookies_dict: Cookie字典
-        :return: 视频直链URL
+        :return: 包含url和header的字典
         """
         try:
             # 请求获取视频播放信息
             url = f"https://api.bilibili.com/x/player/playurl?avid={aid}&cid={cid}&qn=120&fnval=4048&fnver=0&fourk=1"
-            r = self.fetch(url, cookies=cookies_dict, headers=self.header, timeout=10)
+            headers = self.header.copy()
+            headers["Referer"] = f"https://www.bilibili.com/video/av{aid}"
+            
+            self.log(f"请求播放信息: {url}")
+            r = self.fetch(url, cookies=cookies_dict, headers=headers, timeout=10)
             data = json.loads(self.cleanText(r.text))
             
-            if data["code"] == 0:
+            self.log(f"API响应状态: code={data.get('code', 'N/A')}, message={data.get('message', 'N/A')}")
+            
+            if data["code"] == 0 and "data" in data:
                 # 优先使用dash格式
                 if "dash" in data["data"]:
                     dash_data = data["data"]["dash"]
-                    # 选择最高清晰度的视频轨道
+                    self.log(f"DASH数据可用，视频轨道数: {len(dash_data.get('video', []))}, 音频轨道数: {len(dash_data.get('audio', []))}")
+                    
                     if dash_data["video"]:
-                        best_video = max(dash_data["video"], key=lambda x: x["bandwidth"])
-                        # 选择最好的音频轨道
-                        if dash_data["audio"]:
-                            best_audio = max(dash_data["audio"], key=lambda x: x["bandwidth"])
-                            # 返回组合的MPD URL（如果播放器支持）
-                            return self._create_mpd_url(best_video, best_audio, aid, cid, cookies_dict)
+                        # 选择合适的视频轨道（避免AV1）
+                        suitable_videos = [v for v in dash_data["video"] 
+                                         if 'av01' not in v.get('codecs', '').lower() 
+                                         and 'av1' not in v.get('codecs', '').lower()]
+                        
+                        if suitable_videos:
+                            best_video = max(suitable_videos, key=lambda x: x["bandwidth"])
+                            self.log(f"选择视频轨道: {best_video['width']}x{best_video['height']}, codec: {best_video['codecs']}")
+                            
+                            # 选择音频轨道
+                            if dash_data["audio"]:
+                                best_audio = max(dash_data["audio"], key=lambda x: x["bandwidth"])
+                                self.log(f"选择音频轨道: bandwidth={best_audio['bandwidth']}, codec={best_audio['codecs']}")
+                                
+                                # 对于DASH格式，返回MPD内容
+                                mpd_content = self._generate_simple_mpd(best_video, best_audio, data["data"].get("timelength", 0))
+                                return {
+                                    "url": mpd_content,
+                                    "header": headers,
+                                    "format": "application/dash+xml"
+                                }
                         else:
-                            return best_video["baseUrl"]
+                            self.log("没有找到非AV1格式的视频轨道")
+                
                 # fallback到durl格式
-                elif "durl" in data["data"] and data["data"]["durl"]:
-                    return data["data"]["durl"][0]["url"]
+                if "durl" in data["data"] and data["data"]["durl"]:
+                    video_url = data["data"]["durl"][0]["url"]
+                    self.log(f"使用DURL格式: {video_url[:100]}...")
+                    return {
+                        "url": video_url,
+                        "header": headers,
+                        "format": "video/mp4"
+                    }
                     
         except Exception as e:
-            self.log(f"获取直链失败: {e}")
+            self.log(f"获取播放信息异常: {e}")
+            import traceback
+            self.log(f"详细错误: {traceback.format_exc()}")
         
         return None
     
-    def _create_mpd_url(self, video_info, audio_info, aid, cid, cookies_dict):
+    def _generate_simple_mpd(self, video_info, audio_info, duration_ms):
         """
-        创建MPD格式的播放URL
-        :param video_info: 视频信息
-        :param audio_info: 音频信息
-        :param aid: 视频aid
-        :param cid: 视频cid
-        :param cookies_dict: Cookie字典
-        :return: MPD URL
+        生成简化的MPD内容
         """
         try:
-            # 构造简单的MPD内容
-            duration = "PT0H10M0S"  # 默认10分钟，实际应该从API获取
-            video_url = video_info["baseUrl"]
-            audio_url = audio_info["baseUrl"]
+            # 转换毫秒到秒
+            duration_sec = duration_ms // 1000 if duration_ms > 0 else 3600
+            hours = duration_sec // 3600
+            minutes = (duration_sec % 3600) // 60
+            seconds = duration_sec % 60
+            duration_str = f"PT{hours}H{minutes}M{seconds}S"
             
             mpd_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="{duration}" minBufferTime="PT2S">
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="{duration_str}" minBufferTime="PT2S">
   <Period>
     <AdaptationSet mimeType="video/mp4" startWithSAP="1" segmentAlignment="true">
       <Representation bandwidth="{video_info['bandwidth']}" codecs="{video_info['codecs']}" height="{video_info['height']}" id="{video_info['id']}" width="{video_info['width']}">
-        <BaseURL>{video_url}</BaseURL>
+        <BaseURL>{video_info['baseUrl']}</BaseURL>
         <SegmentBase indexRange="{video_info['SegmentBase']['indexRange']}">
           <Initialization range="{video_info['SegmentBase']['Initialization']}"/>
         </SegmentBase>
@@ -502,7 +529,7 @@ class Spider(Spider):
     </AdaptationSet>
     <AdaptationSet mimeType="audio/mp4" startWithSAP="1" segmentAlignment="true">
       <Representation audioSamplingRate="44100" bandwidth="{audio_info['bandwidth']}" codecs="{audio_info['codecs']}" id="{audio_info['id']}">
-        <BaseURL>{audio_url}</BaseURL>
+        <BaseURL>{audio_info['baseUrl']}</BaseURL>
         <SegmentBase indexRange="{audio_info['SegmentBase']['indexRange']}">
           <Initialization range="{audio_info['SegmentBase']['Initialization']}"/>
         </SegmentBase>
@@ -511,21 +538,37 @@ class Spider(Spider):
   </Period>
 </MPD>"""
             
-            # 将MPD内容进行base64编码，通过data URI方式传递
+            # 使用data URI方式传递MPD
             import base64
             mpd_b64 = base64.b64encode(mpd_content.encode('utf-8')).decode('utf-8')
             return f"data:application/dash+xml;base64,{mpd_b64}"
             
         except Exception as e:
-            self.log(f"创建MPD失败: {e}")
+            self.log(f"生成MPD失败: {e}")
             # fallback到直接返回视频URL
             return video_info["baseUrl"]
 
     def localProxy(self, param):
         """
-        不使用本地代理，直接返回空
+        如果播放器返回的内容带上本地代理前缀,则自动调用该方法处理
+        :param param: 接收的参数{"url": "http://example.com/live.m3u8"}
+        :return: 示例
+        [
+            200, # 状态码
+            "application/vnd.apple.mpegurl", # 返回的m3u8类型
+            [xxx.m3u], # 处理后的内容,比如去广告后m3u8数据
+            {"User-Agent":"xxx"}, # 响应头
+            False, # 是否为base64编码,默认否
+        ]
         """
-        return None
+        try:
+            if param.get("type") == "mpd":
+                return self.proxyMpd(param)
+            elif param.get("type") == "media":
+                return self.proxyMedia(param)
+        except Exception as e:
+            self.log(f"本地代理处理失败: {e}")
+        return [404, "text/plain", "代理服务不可用"]
 
     def destroy(self):
         """
