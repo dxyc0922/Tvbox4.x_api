@@ -1,5 +1,4 @@
 """
-哔哩哔哩TVBox爬虫
 请勿用于商业用途，请于24小时内删除，搜索结果均来自源站，本人不承担任何责任
 """
 
@@ -37,6 +36,8 @@ class Spider(Spider):
             self.extendDict = json.loads(extend) if extend else {}
         except:
             self.extendDict = {}
+        
+        self.cookie = self.getCookie_info()
 
     def getName(self):
         """
@@ -77,14 +78,7 @@ class Spider(Spider):
         """
         result = {}
         result["filters"] = {}
-
-        # 获取Cookie并初始化
-        cookie = self._get_cookie_from_config()
-        normalized_cookie = self._normalize_cookie(cookie)
-        _, _, _ = self.getCookie(normalized_cookie)
-        bblogin = self.getCache("bblogin")
-
-        result["class"] = [] if bblogin else []
+        result["class"] = []
 
         # 处理分类配置
         if "json" in self.extendDict:
@@ -108,6 +102,12 @@ class Spider(Spider):
                 {"type_name": "风景", "type_id": "风景4K"},
             ]
         return result
+    
+    def getCookie_info(self):
+        cookie = self._get_cookie_from_config()
+        normalized_cookie = self._normalize_cookie(cookie)
+        cookie_dict, _, _ = self.getCookie(normalized_cookie)
+        return cookie_dict
 
     def homeVideoContent(self):
         """
@@ -122,10 +122,11 @@ class Spider(Spider):
         }
         """
         result = {}
-        url = "https://api.bilibili.com/x/web-interface/index/top/feed/rcmd?y_num=1&fresh_type=3&feed_version=SEO_VIDEO&fresh_idx_1h=1&fetch_row=1&fresh_idx=1&brush=0&homepage_ver=1&ps=20"
 
         try:
-            r = self._fetch_with_cookie(url)
+            url = "https://api.bilibili.com/x/web-interface/index/top/feed/rcmd?y_num=1&fresh_type=3&feed_version=SEO_VIDEO&fresh_idx_1h=1&fetch_row=1&fresh_idx=1&brush=0&homepage_ver=1&ps=20"
+
+            r = self.fetch(url, headers=self.header, cookies=self.cookie)
             data = json.loads(self.cleanText(r.text))
             result["list"] = []
             vodList = data["data"]["item"]
@@ -238,7 +239,7 @@ class Spider(Spider):
 
         try:
             url = f"https://api.bilibili.com/x/web-interface/view?aid={aid}"
-            r = self.fetch(url, headers=self.header)
+            r = self.fetch(url, headers=self.header, cookies=self.cookie)
             data = json.loads(self.cleanText(r.text))
 
             # 处理导演信息
@@ -289,7 +290,7 @@ class Spider(Spider):
 
             # 添加相关视频
             url = f"https://api.bilibili.com/x/web-interface/archive/related?aid={aid}"
-            r = self.fetch(url, headers=self.header)
+            r = self.fetch(url, headers=self.header, cookies=self.cookie)
             data = json.loads(self.cleanText(r.text))
             videoList = data["data"]
             playUrl = playUrl.strip("#") + "$$$"
@@ -340,12 +341,8 @@ class Spider(Spider):
             return {"list": []}
 
         try:
-            cookie = self._get_cookie_from_config()
-            normalized_cookie = self._normalize_cookie(cookie)
-            cookie_dict, _, _ = self.getCookie(normalized_cookie)
-
             url = f"https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={key}&page={pg}"
-            r = self.fetch(url, headers=self.header, cookies=cookie_dict)
+            r = self.fetch(url, headers=self.header, cookies=self.cookie)
             jo = json.loads(self.cleanText(r.text))
 
             if "result" not in jo["data"]:
@@ -422,7 +419,7 @@ class Spider(Spider):
                 url = "https://api.bilibili.com/x/web-interface/view?bvid={}".format(
                     id[7:]
                 )
-                r = self.fetch(url, headers=self.header)
+                r = self.fetch(url, headers=self.header, cookies=self.cookie)
                 data = r.json()["data"]
                 aid = data["aid"]
                 cid = data["cid"]
@@ -431,26 +428,18 @@ class Spider(Spider):
                 aid = idList[0]
                 cid = idList[1]
 
-            # 获取Cookie
-            cookie = self._get_cookie_from_config()
-            normalized_cookie = self._normalize_cookie(cookie)
-            cookiesDict, _, _ = self.getCookie(normalized_cookie)
-            cookies = quote(json.dumps(cookiesDict))
-
-            thread = str(self.extendDict.get("thread", "0"))
-
             url = "https://api.bilibili.com/x/player/playurl?avid={}&cid={}&qn=120&fnval=4048&fnver=0&fourk=1".format(
                 aid, cid
             )
 
-            r = self.fetch(url, cookies=cookiesDict, headers=self.header)
+            r = self.fetch(url, cookies=self.cookie, headers=self.header)//self.cookie
             data = json.loads(self.cleanText(r.text))
 
             result.update(
                 {
                     "parse": 0,
                     "playUrl": "",
-                    "url": f"http://127.0.0.1:9978/proxy?do=py&type=mpd&cookies={cookies}&url={quote(url)}&aid={aid}&cid={cid}&thread={thread}",
+                    "url": f"http://127.0.0.1:9978/proxy?do=py&type=mpd&cookies={quote(json.dumps(self.cookie))}&url={quote(url)}&aid={aid}&cid={cid}",
                     "header": self.header,
                     "danmaku": "https://api.bilibili.com/x/v1/dm/list.so?oid={}".format(
                         cid
@@ -531,15 +520,6 @@ class Spider(Spider):
             pass
         return cookie
 
-    def _fetch_with_cookie(self, url, **kwargs):
-        """带Cookie的网络请求封装"""
-        cookie = self._get_cookie_from_config()
-        normalized_cookie = self._normalize_cookie(cookie)
-        cookies, _, _ = self.getCookie(normalized_cookie)
-
-        headers = kwargs.pop("headers", self.header.copy())
-        return self.fetch(url, cookies=cookies, headers=headers, **kwargs)
-
     def _get_search_videos(self, keyword, page, ext, cookie_dict):
         """获取搜索视频"""
         url = "https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={}&page={}"
@@ -600,7 +580,7 @@ class Spider(Spider):
         """获取UP主播放列表"""
         try:
             url = f"https://api.bilibili.com/x/v2/medialist/resource/list?mobi_app=web&type=1&oid=&biz_id={mid}&otype=1&ps=100&direction=false&desc=true&sort_field=1&tid=0&with_current=false"
-            r = self.fetch(url, headers=self.header)
+            r = self.fetch(url, headers=self.header, cookies=self.cookie)
             videoList = r.json()["data"]["media_list"]
 
             vod = {
@@ -628,7 +608,6 @@ class Spider(Spider):
             self.log(f"获取UP主播放列表失败: {e}")
             return {"list": []}
 
-    # 以下方法保持原有实现不变
     def proxyMpd(self, params):
         content, durlinfos, mediaType = self.getDash(params)
         if mediaType == "mpd":
@@ -647,10 +626,8 @@ class Spider(Spider):
             header = self.header.copy()
             if "range" in params:
                 header["Range"] = params["range"]
-            if "127.0.0.1:7777" in url:
-                header["Location"] = url
-                return [302, "video/MP2T", None, header]
             r = self.fetch(url, headers=header, stream=True)
+            r = self.fetch(url, headers=self.header, cookies=self.cookie, stream=True)
             return [206, "application/octet-stream", r.content]
 
     def proxyMedia(self, params, forceRefresh=False):
@@ -677,84 +654,80 @@ class Spider(Spider):
         header = self.header.copy()
         if "range" in params:
             header["Range"] = params["range"]
-        r = self.fetch(url, headers=header, stream=True)
+        r = self.fetch(url, headers=self.header, cookies=self.cookie, stream=True)
         return [206, "application/octet-stream", r.content]
 
     def getDash(self, params, forceRefresh=False):
+        # 从参数中提取视频aid（av号）
         aid = params["aid"]
+        # 从参数中提取视频cid（分P编号）
         cid = params["cid"]
+        # 解码URL参数，获取原始播放地址
         url = unquote(params["url"])
-        thread = params.get("thread", 0)
+        # 复制请求头信息
         header = self.header.copy()
+        # 解析cookie字符串为字典格式
         cookieDict = json.loads(params["cookies"])
-        key = f"bilivdmpdcache_{aid}_{cid}"
-
-        if forceRefresh:
-            self.delCache(key)
-        else:
-            data = self.getCache(key)
-            if data:
-                return data["content"], data["dashinfos"], data["type"]
-
+        # 复制cookie字典
         cookies = cookieDict.copy()
+        # 发送HTTP请求获取视频播放信息
         r = self.fetch(url, cookies=cookies, headers=header)
+        # 解析响应JSON数据并清理文本
         data = json.loads(self.cleanText(r.text))
 
+        # 如果API返回错误码，直接返回空结果
         if data["code"] != 0:
             return "", {}, ""
 
+        # 如果响应数据中不包含DASH格式信息（可能是普通MP4格式）
         if "dash" not in data["data"]:
+            # 获取普通播放地址
             purl = data["data"]["durl"][0]["url"]
-            try:
-                expiresAt = int(re.search(r"deadline=(\d+)", purl).group(1)) - 60
-            except:
-                expiresAt = int(time.time()) + 600
-            if int(thread) > 0:
-                try:
-                    self.fetch("http://127.0.0.1:7777")
-                except:
-                    self.fetch("http://127.0.0.1:9978/go")
-                purl = f"http://127.0.0.1:7777?url={quote(purl)}&thread={thread}"
-            self.setCache(
-                key,
-                {
-                    "content": purl,
-                    "type": "mp4",
-                    "dashinfos": data["data"],
-                    "expiresAt": expiresAt,
-                },
-            )
+            # 返回普通MP4格式的播放信息
             return purl, data["data"], "mp4"
 
+        # 提取DASH格式的视频信息
         dashinfos = data["data"]["dash"]
+        # 获取视频总时长（秒）
         duration = dashinfos["duration"]
+        # 获取最小缓冲时间
         minBufferTime = dashinfos["minBufferTime"]
+        # 初始化视频信息XML字符串
         videoinfo = ""
+        # 视频轨道ID计数器
         videoid = 0
+        # 存储所有资源过期时间的列表
         deadlineList = []
 
-        # 对视频轨道按清晰度降序排序（优先选择高清晰度）
-        video_tracks = dashinfos["video"]
-        # 按高度(height)降序排序，确保1080p在720p之前
-        sorted_video_tracks = sorted(
-            video_tracks, key=lambda x: x["height"], reverse=True
-        )
-
-        for video in sorted_video_tracks:
+        # 遍历处理每个视频轨道
+        for video in dashinfos["video"]:
+            # 提取视频资源的过期时间
             try:
                 deadline = int(re.search(r"deadline=(\d+)", video["baseUrl"]).group(1))
             except:
+                # 如果无法提取，则设置默认10分钟有效期
                 deadline = int(time.time()) + 600
+            # 将过期时间添加到列表中
             deadlineList.append(deadline)
+            # 提取视频编码信息
             codecs = video["codecs"]
+            # 提取带宽信息
             bandwidth = video["bandwidth"]
+            # 提取帧率信息
             frameRate = video["frameRate"]
+            # 提取视频高度
             height = video["height"]
+            # 提取视频宽度
             width = video["width"]
+            # 提取视频轨道ID
             void = video["id"]
+            # 复制参数字典
             vidparams = params.copy()
+            # 添加视频轨道ID参数
             vidparams["videoid"] = videoid
+            # 构造代理服务器URL，用于视频流媒体传输
             baseUrl = f"http://127.0.0.1:9978/proxy?do=py&type=media&cookies={quote(json.dumps(cookies))}&url={quote(url)}&aid={aid}&cid={cid}&videoid={videoid}"
+            # 构建视频轨道的MPD XML描述信息
             videoinfo = (
                 videoinfo
                 + f"""	      <Representation bandwidth="{bandwidth}" codecs="{codecs}" frameRate="{frameRate}" height="{height}" id="{void}" width="{width}">
@@ -764,22 +737,36 @@ class Spider(Spider):
 	        </SegmentBase>
 	      </Representation>\n"""
             )
+            # 视频轨道ID递增
             videoid += 1
 
+        # 初始化音频信息XML字符串
         audioinfo = ""
+        # 音频轨道ID计数器
         audioid = 0
+        # 遍历处理每个音频轨道
         for audio in dashinfos["audio"]:
+            # 提取音频资源的过期时间
             try:
                 deadline = int(re.search(r"deadline=(\d+)", audio["baseUrl"]).group(1))
             except:
+                # 如果无法提取，则设置默认10分钟有效期
                 deadline = int(time.time()) + 600
+            # 将过期时间添加到列表中
             deadlineList.append(deadline)
+            # 提取音频带宽信息
             bandwidth = audio["bandwidth"]
+            # 提取音频编码信息
             codecs = audio["codecs"]
+            # 提取音频轨道ID
             aoid = audio["id"]
+            # 复制参数字典
             aidparams = params.copy()
+            # 添加音频轨道ID参数
             aidparams["audioid"] = audioid
+            # 构造代理服务器URL，用于音频流媒体传输
             baseUrl = f"http://127.0.0.1:9978/proxy?do=py&type=media&cookies={quote(json.dumps(cookies))}&url={quote(url)}&aid={aid}&cid={cid}&audioid={audioid}"
+            # 构建音频轨道的MPD XML描述信息
             audioinfo = (
                 audioinfo
                 + f"""	      <Representation audioSamplingRate="44100" bandwidth="{bandwidth}" codecs="{codecs}" id="{aoid}">
@@ -789,8 +776,10 @@ class Spider(Spider):
 	        </SegmentBase>
 	      </Representation>\n"""
             )
+            # 音频轨道ID递增
             audioid += 1
 
+        # 构造完整的MPD（Media Presentation Description）XML文档
         mpd = f"""<?xml version="1.0" encoding="UTF-8"?>
 	<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="PT{duration}S" minBufferTime="PT{minBufferTime}S">
 	  <Period>
@@ -803,16 +792,7 @@ class Spider(Spider):
 	  </Period>
 	</MPD>"""
 
-        expiresAt = min(deadlineList) - 60
-        self.setCache(
-            key,
-            {
-                "type": "mpd",
-                "content": mpd.replace("&", "&amp;"),
-                "dashinfos": dashinfos,
-                "expiresAt": expiresAt,
-            },
-        )
+        # 返回处理后的DASH播放信息
         return mpd.replace("&", "&amp;"), dashinfos, "mpd"
 
     def getCookie(self, cookie):
@@ -822,12 +802,6 @@ class Spider(Spider):
             cookies = dict(
                 [co.strip().split("=", 1) for co in cookie.strip(";").split(";")]
             )
-        bblogin = self.getCache("bblogin")
-        if bblogin:
-            imgKey = bblogin["imgKey"]
-            subKey = bblogin["subKey"]
-            return cookies, imgKey, subKey
-
         header = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.54 Safari/537.36"
         }
@@ -841,17 +815,8 @@ class Spider(Spider):
         if code == 0:
             imgKey = data["data"]["wbi_img"]["img_url"].rsplit("/", 1)[1].split(".")[0]
             subKey = data["data"]["wbi_img"]["sub_url"].rsplit("/", 1)[1].split(".")[0]
-            self.setCache(
-                "bblogin",
-                {
-                    "imgKey": imgKey,
-                    "subKey": subKey,
-                    "expiresAt": int(time.time()) + 1200,
-                },
-            )
             return cookies, imgKey, subKey
-        r = self.fetch("https://www.bilibili.com/", headers=header)
-        cookies = r.cookies.get_dict()
+        cookies = ""
         imgKey = ""
         subKey = ""
         return cookies, imgKey, subKey
