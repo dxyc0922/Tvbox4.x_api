@@ -30,12 +30,6 @@
             "ext": "http://v.rbotv.cn"
         },
         {
-            "key": "荐片",
-            "name": "荐片",
-            "type": 3,
-            "api": "./脚本/荐片.py"
-        },
-        {
             "key": "3Q影视",
             "name": "3Q影视",
             "type": 3,
