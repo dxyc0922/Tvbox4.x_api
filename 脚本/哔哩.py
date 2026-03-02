@@ -37,8 +37,6 @@ class Spider(Spider):
         except:
             self.extendDict = {}
         
-        self.cookie = self.getCookie_info()
-
     def getName(self):
         """
         获取插件名称
@@ -126,7 +124,7 @@ class Spider(Spider):
         try:
             url = "https://api.bilibili.com/x/web-interface/index/top/feed/rcmd?y_num=1&fresh_type=3&feed_version=SEO_VIDEO&fresh_idx_1h=1&fetch_row=1&fresh_idx=1&brush=0&homepage_ver=1&ps=20"
 
-            r = self.fetch(url, headers=self.header, cookies=self.cookie)
+            r = self.fetch(url, headers=self.header, cookies=self.getCookie_info())
             data = json.loads(self.cleanText(r.text))
             result["list"] = []
             vodList = data["data"]["item"]
@@ -239,7 +237,7 @@ class Spider(Spider):
 
         try:
             url = f"https://api.bilibili.com/x/web-interface/view?aid={aid}"
-            r = self.fetch(url, headers=self.header, cookies=self.cookie)
+            r = self.fetch(url, headers=self.header, cookies=self.getCookie_info())
             data = json.loads(self.cleanText(r.text))
 
             # 处理导演信息
@@ -290,7 +288,7 @@ class Spider(Spider):
 
             # 添加相关视频
             url = f"https://api.bilibili.com/x/web-interface/archive/related?aid={aid}"
-            r = self.fetch(url, headers=self.header, cookies=self.cookie)
+            r = self.fetch(url, headers=self.header, cookies=self.getCookie_info())
             data = json.loads(self.cleanText(r.text))
             videoList = data["data"]
             playUrl = playUrl.strip("#") + "$$$"
@@ -342,7 +340,7 @@ class Spider(Spider):
 
         try:
             url = f"https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={key}&page={pg}"
-            r = self.fetch(url, headers=self.header, cookies=self.cookie)
+            r = self.fetch(url, headers=self.header, cookies=self.getCookie_info())
             jo = json.loads(self.cleanText(r.text))
 
             if "result" not in jo["data"]:
@@ -419,7 +417,7 @@ class Spider(Spider):
                 url = "https://api.bilibili.com/x/web-interface/view?bvid={}".format(
                     id[7:]
                 )
-                r = self.fetch(url, headers=self.header, cookies=self.cookie)
+                r = self.fetch(url, headers=self.header, cookies=self.getCookie_info())
                 data = r.json()["data"]
                 aid = data["aid"]
                 cid = data["cid"]
@@ -432,14 +430,14 @@ class Spider(Spider):
                 aid, cid
             )
 
-            r = self.fetch(url, cookies=self.cookie, headers=self.header)
+            r = self.fetch(url, cookies=self.getCookie_info(), headers=self.header)
             data = json.loads(self.cleanText(r.text))
 
             result.update(
                 {
                     "parse": 0,
                     "playUrl": "",
-                    "url": f"http://127.0.0.1:9978/proxy?do=py&type=mpd&cookies={quote(json.dumps(self.cookie))}&url={quote(url)}&aid={aid}&cid={cid}",
+                    "url": f"http://127.0.0.1:9978/proxy?do=py&type=mpd&cookies={quote(json.dumps(self.getCookie_info()))}&url={quote(url)}&aid={aid}&cid={cid}",
                     "header": self.header,
                     "danmaku": "https://api.bilibili.com/x/v1/dm/list.so?oid={}".format(
                         cid
@@ -580,7 +578,7 @@ class Spider(Spider):
         """获取UP主播放列表"""
         try:
             url = f"https://api.bilibili.com/x/v2/medialist/resource/list?mobi_app=web&type=1&oid=&biz_id={mid}&otype=1&ps=100&direction=false&desc=true&sort_field=1&tid=0&with_current=false"
-            r = self.fetch(url, headers=self.header, cookies=self.cookie)
+            r = self.fetch(url, headers=self.header, cookies=self.getCookie_info())
             videoList = r.json()["data"]["media_list"]
 
             vod = {
@@ -627,7 +625,7 @@ class Spider(Spider):
             if "range" in params:
                 header["Range"] = params["range"]
             r = self.fetch(url, headers=header, stream=True)
-            r = self.fetch(url, headers=self.header, cookies=self.cookie, stream=True)
+            r = self.fetch(url, headers=self.header, cookies=self.getCookie_info(), stream=True)
             return [206, "application/octet-stream", r.content]
 
     def proxyMedia(self, params, forceRefresh=False):
@@ -654,7 +652,7 @@ class Spider(Spider):
         header = self.header.copy()
         if "range" in params:
             header["Range"] = params["range"]
-        r = self.fetch(url, headers=self.header, cookies=self.cookie, stream=True)
+        r = self.fetch(url, headers=self.header, cookies=self.getCookie_info(), stream=True)
         return [206, "application/octet-stream", r.content]
 
     def getDash(self, params, forceRefresh=False):
