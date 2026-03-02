@@ -419,19 +419,14 @@ class Spider(Spider):
                 idList = id.split("_")
                 aid = idList[0]
                 cid = idList[1]
-
-            url = "https://api.bilibili.com/x/player/playurl?avid={}&cid={}&qn=120&fnval=4048&fnver=0&fourk=1".format(
-                aid, cid
-            )
-
-            r = self.fetch(url, cookies=self.cookie, headers=self.header, timeout=10)
-            data = json.loads(self.cleanText(r.text))
+            
+            thread = str(self.extendDict.get("thread", "0"))
 
             result.update(
                 {
                     "parse": 0,
                     "playUrl": "",
-                    "url": f"http://127.0.0.1:9978/proxy?do=py&type=mpd&cookies={quote(self.cookie)}&url={quote(url)}&aid={aid}&cid={cid}",
+                    "url": f"http://127.0.0.1:9978/proxy?do=py&type=mpd&cookies={quote(self.cookie)}&url={quote(url)}&aid={aid}&cid={cid}&thread={thread}",
                     "header": self.header,
                     "danmaku": "https://api.bilibili.com/x/v1/dm/list.so?oid={}".format(
                         cid
@@ -587,7 +582,7 @@ class Spider(Spider):
             if "range" in params:
                 header["Range"] = params["range"]
             r = self.fetch(
-                url, headers=self.header, cookies=self.cookie, stream=True
+                url, headers=self.header, stream=True
             )
             return [206, "application/octet-stream", r.content]
 
@@ -616,7 +611,7 @@ class Spider(Spider):
         if "range" in params:
             header["Range"] = params["range"]
         r = self.fetch(
-            url, headers=self.header, cookies=self.cookie, stream=True
+            url, headers=self.header, stream=True
         )
         return [206, "application/octet-stream", r.content]
 
