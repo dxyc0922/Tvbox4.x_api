@@ -14,7 +14,8 @@
             "api": "./脚本/哔哩.py",
             "ext": {
                 "cookie": "file://storage/emulated/0/TV/bili_cookie.txt"
-            }
+            },
+            "playerType": 1
         },
         {
             "key": "金牌",
@@ -71,7 +72,6 @@
             "name": "广东IPTV",
             "type": 0,
             "url": "./广东IPTV组播.txt",
-            "playerType": 1,
             "epg": "http://epg.51zmt.top:8000/api/diyp/?ch={name}&date={date}"
         }
     ]
