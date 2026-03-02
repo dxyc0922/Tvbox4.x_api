@@ -1,4 +1,5 @@
 """
+哔哩哔哩TVBox爬虫
 请勿用于商业用途，请于24小时内删除，搜索结果均来自源站，本人不承担任何责任
 """
 
@@ -37,42 +38,12 @@ class Spider(Spider):
         except:
             self.extendDict = {}
 
-        # 初始化Cookie相关属性
-        self._cookie_data = None
-        self._cookie_parsed = None
-        self._img_key = None
-        self._sub_key = None
-
     def getName(self):
         """
         获取插件名称
         :return: 插件名称
         """
         return self.name
-
-    def _load_and_parse_cookie(self):
-        """
-        加载并解析Cookie数据，只执行一次
-        :return: (cookies_dict, imgKey, subKey)
-        """
-        # 如果已经解析过，直接返回缓存的结果
-        if self._cookie_parsed is not None:
-            return self._cookie_parsed
-
-        # 获取原始Cookie数据
-        if self._cookie_data is None:
-            self._cookie_data = self._get_cookie_from_config()
-        
-        # 解析Cookie
-        normalized_cookie = self._normalize_cookie(self._cookie_data)
-        cookie_dict, img_key, sub_key = self.getCookie(normalized_cookie)
-        
-        # 缓存解析结果
-        self._cookie_parsed = (cookie_dict, img_key, sub_key)
-        self._img_key = img_key
-        self._sub_key = sub_key
-        
-        return self._cookie_parsed
 
     def homeContent(self, filter):
         """
@@ -107,6 +78,10 @@ class Spider(Spider):
         result = {}
         result["filters"] = {}
 
+        # 获取Cookie并初始化
+        cookie = self._get_cookie_from_config()
+        normalized_cookie = self._normalize_cookie(cookie)
+        _, _, _ = self.getCookie(normalized_cookie)
         bblogin = self.getCache("bblogin")
 
         result["class"] = [] if bblogin else []
@@ -150,7 +125,6 @@ class Spider(Spider):
         url = "https://api.bilibili.com/x/web-interface/index/top/feed/rcmd?y_num=1&fresh_type=3&feed_version=SEO_VIDEO&fresh_idx_1h=1&fetch_row=1&fresh_idx=1&brush=0&homepage_ver=1&ps=20"
 
         try:
-            # 使用统一的带Cookie请求方法
             r = self._fetch_with_cookie(url)
             data = json.loads(self.cleanText(r.text))
             result["list"] = []
@@ -207,8 +181,10 @@ class Spider(Spider):
         videos = []
         pagecount = page
 
-        # 使用统一的Cookie加载方法
-        cookie_dict, imgKey, subKey = self._load_and_parse_cookie()
+        # 获取Cookie信息
+        cookie = self._get_cookie_from_config()
+        normalized_cookie = self._normalize_cookie(cookie)
+        cookie_dict, imgKey, subKey = self.getCookie(normalized_cookie)
 
         try:
             videos, pagecount = self._get_search_videos(tid, page, extend, cookie_dict)
@@ -262,8 +238,7 @@ class Spider(Spider):
 
         try:
             url = f"https://api.bilibili.com/x/web-interface/view?aid={aid}"
-            # 使用统一的带Cookie请求方法
-            r = self._fetch_with_cookie(url)
+            r = self.fetch(url, headers=self.header)
             data = json.loads(self.cleanText(r.text))
 
             # 处理导演信息
@@ -314,7 +289,7 @@ class Spider(Spider):
 
             # 添加相关视频
             url = f"https://api.bilibili.com/x/web-interface/archive/related?aid={aid}"
-            r = self._fetch_with_cookie(url)
+            r = self.fetch(url, headers=self.header)
             data = json.loads(self.cleanText(r.text))
             videoList = data["data"]
             playUrl = playUrl.strip("#") + "$$$"
@@ -365,8 +340,9 @@ class Spider(Spider):
             return {"list": []}
 
         try:
-            # 使用统一的Cookie加载方法
-            cookie_dict, _, _ = self._load_and_parse_cookie()
+            cookie = self._get_cookie_from_config()
+            normalized_cookie = self._normalize_cookie(cookie)
+            cookie_dict, _, _ = self.getCookie(normalized_cookie)
 
             url = f"https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={key}&page={pg}"
             r = self.fetch(url, headers=self.header, cookies=cookie_dict)
@@ -455,8 +431,10 @@ class Spider(Spider):
                 aid = idList[0]
                 cid = idList[1]
 
-            # 使用统一的Cookie加载方法
-            cookiesDict, _, _ = self._load_and_parse_cookie()
+            # 获取Cookie
+            cookie = self._get_cookie_from_config()
+            normalized_cookie = self._normalize_cookie(cookie)
+            cookiesDict, _, _ = self.getCookie(normalized_cookie)
             cookies = quote(json.dumps(cookiesDict))
 
             thread = str(self.extendDict.get("thread", "0"))
@@ -517,7 +495,7 @@ class Spider(Spider):
         """
         pass
 
-    # 统一的Cookie管理方法
+    # 私有辅助方法
     def _get_cookie_from_config(self):
         """统一获取Cookie配置的方法"""
         cookie = ""
@@ -555,9 +533,12 @@ class Spider(Spider):
 
     def _fetch_with_cookie(self, url, **kwargs):
         """带Cookie的网络请求封装"""
-        cookie_dict, _, _ = self._load_and_parse_cookie()
+        cookie = self._get_cookie_from_config()
+        normalized_cookie = self._normalize_cookie(cookie)
+        cookies, _, _ = self.getCookie(normalized_cookie)
+
         headers = kwargs.pop("headers", self.header.copy())
-        return self.fetch(url, cookies=cookie_dict, headers=headers, **kwargs)
+        return self.fetch(url, cookies=cookies, headers=headers, **kwargs)
 
     def _get_search_videos(self, keyword, page, ext, cookie_dict):
         """获取搜索视频"""
