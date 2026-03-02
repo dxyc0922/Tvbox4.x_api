@@ -411,24 +411,20 @@ class Spider(Spider):
             cookie = self._get_cookie_from_config()
             normalized_cookie = self._normalize_cookie(cookie)
             cookiesDict, _, _ = self.getCookie(normalized_cookie)
-            cookies = quote(json.dumps(cookiesDict))
             
-            thread = str(self.extendDict.get("thread", "0"))
+            # 直接获取视频真实地址，不使用本地代理
+            video_url = self._get_direct_video_url(aid, cid, cookiesDict)
             
-            url = "https://api.bilibili.com/x/player/playurl?avid={}&cid={}&qn=120&fnval=4048&fnver=0&fourk=1".format(aid, cid)
-            
-            r = self.fetch(url, cookies=cookiesDict, headers=self.header, timeout=5)
-            data = json.loads(self.cleanText(r.text))
-            
-            # 检查是否有有效的视频流
-            if data["code"] == 0 and ("dash" in data["data"] or "durl" in data["data"]):
+            if video_url:
                 result.update({
                     "parse": 0,
                     "playUrl": "",
-                    "url": f"http://127.0.0.1:9978/proxy?do=py&type=mpd&cookies={cookies}&url={quote(url)}&aid={aid}&cid={cid}&thread={thread}",
-                    "header": self.header,
-                    "danmaku": "https://api.bilibili.com/x/v1/dm/list.so?oid={}".format(cid),
-                    "format": "application/dash+xml"
+                    "url": video_url,
+                    "header": {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "Referer": "https://www.bilibili.com"
+                    },
+                    "danmaku": "https://api.bilibili.com/x/v1/dm/list.so?oid={}".format(cid)
                 })
                 return result
             
@@ -439,28 +435,96 @@ class Spider(Spider):
             result = {}
             
         return result
+    
+    def _get_direct_video_url(self, aid, cid, cookies_dict):
+        """
+        直接获取B站视频的真实播放地址，不使用本地代理
+        :param aid: 视频aid
+        :param cid: 视频cid
+        :param cookies_dict: Cookie字典
+        :return: 视频直链URL
+        """
+        try:
+            # 请求获取视频播放信息
+            url = f"https://api.bilibili.com/x/player/playurl?avid={aid}&cid={cid}&qn=120&fnval=4048&fnver=0&fourk=1"
+            r = self.fetch(url, cookies=cookies_dict, headers=self.header, timeout=10)
+            data = json.loads(self.cleanText(r.text))
+            
+            if data["code"] == 0:
+                # 优先使用dash格式
+                if "dash" in data["data"]:
+                    dash_data = data["data"]["dash"]
+                    # 选择最高清晰度的视频轨道
+                    if dash_data["video"]:
+                        best_video = max(dash_data["video"], key=lambda x: x["bandwidth"])
+                        # 选择最好的音频轨道
+                        if dash_data["audio"]:
+                            best_audio = max(dash_data["audio"], key=lambda x: x["bandwidth"])
+                            # 返回组合的MPD URL（如果播放器支持）
+                            return self._create_mpd_url(best_video, best_audio, aid, cid, cookies_dict)
+                        else:
+                            return best_video["baseUrl"]
+                # fallback到durl格式
+                elif "durl" in data["data"] and data["data"]["durl"]:
+                    return data["data"]["durl"][0]["url"]
+                    
+        except Exception as e:
+            self.log(f"获取直链失败: {e}")
+        
+        return None
+    
+    def _create_mpd_url(self, video_info, audio_info, aid, cid, cookies_dict):
+        """
+        创建MPD格式的播放URL
+        :param video_info: 视频信息
+        :param audio_info: 音频信息
+        :param aid: 视频aid
+        :param cid: 视频cid
+        :param cookies_dict: Cookie字典
+        :return: MPD URL
+        """
+        try:
+            # 构造简单的MPD内容
+            duration = "PT0H10M0S"  # 默认10分钟，实际应该从API获取
+            video_url = video_info["baseUrl"]
+            audio_url = audio_info["baseUrl"]
+            
+            mpd_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="{duration}" minBufferTime="PT2S">
+  <Period>
+    <AdaptationSet mimeType="video/mp4" startWithSAP="1" segmentAlignment="true">
+      <Representation bandwidth="{video_info['bandwidth']}" codecs="{video_info['codecs']}" height="{video_info['height']}" id="{video_info['id']}" width="{video_info['width']}">
+        <BaseURL>{video_url}</BaseURL>
+        <SegmentBase indexRange="{video_info['SegmentBase']['indexRange']}">
+          <Initialization range="{video_info['SegmentBase']['Initialization']}"/>
+        </SegmentBase>
+      </Representation>
+    </AdaptationSet>
+    <AdaptationSet mimeType="audio/mp4" startWithSAP="1" segmentAlignment="true">
+      <Representation audioSamplingRate="44100" bandwidth="{audio_info['bandwidth']}" codecs="{audio_info['codecs']}" id="{audio_info['id']}">
+        <BaseURL>{audio_url}</BaseURL>
+        <SegmentBase indexRange="{audio_info['SegmentBase']['indexRange']}">
+          <Initialization range="{audio_info['SegmentBase']['Initialization']}"/>
+        </SegmentBase>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>"""
+            
+            # 将MPD内容进行base64编码，通过data URI方式传递
+            import base64
+            mpd_b64 = base64.b64encode(mpd_content.encode('utf-8')).decode('utf-8')
+            return f"data:application/dash+xml;base64,{mpd_b64}"
+            
+        except Exception as e:
+            self.log(f"创建MPD失败: {e}")
+            # fallback到直接返回视频URL
+            return video_info["baseUrl"]
 
     def localProxy(self, param):
         """
-        如果播放器返回的内容带上本地代理前缀,则自动调用该方法处理
-        :param param: 接收的参数{"url": "http://example.com/live.m3u8"}
-        :return: 示例
-        [
-            200, # 状态码
-            "application/vnd.apple.mpegurl", # 返回的m3u8类型
-            [xxx.m3u], # 处理后的内容,比如去广告后m3u8数据
-            {"User-Agent":"xxx"}, # 响应头
-            False, # 是否为base64编码,默认否
-        ]
+        不使用本地代理，直接返回空
         """
-        try:
-            params = param
-            if params["type"] == "mpd":
-                return self.proxyMpd(params)
-            elif params["type"] == "media":
-                return self.proxyMedia(params)
-        except Exception as e:
-            self.log(f"本地代理处理失败: {e}")
         return None
 
     def destroy(self):
@@ -633,55 +697,16 @@ class Spider(Spider):
             return {"list": []}
 
     def proxyMpd(self, params):
-        content, durlinfos, mediaType = self.getDash(params)
-        if mediaType == "mpd":
-            return [200, "application/dash+xml", content]
-        else:
-            url = ""
-            urlList = (
-                [content] + durlinfos["durl"][0]["backup_url"]
-                if "backup_url" in durlinfos["durl"][0]
-                and durlinfos["durl"][0]["backup_url"]
-                else [content]
-            )
-            for url in urlList:
-                if "mcdn.bilivideo.cn" not in url:
-                    break
-            header = self.header.copy()
-            if "range" in params:
-                header["Range"] = params["range"]
-            if "127.0.0.1:7777" in url:
-                header["Location"] = url
-                return [302, "video/MP2T", None, header]
-            r = self.fetch(url, headers=header, stream=True)
-            return [206, "application/octet-stream", r.content]
+        """
+        不使用MPD代理
+        """
+        return None
 
     def proxyMedia(self, params, forceRefresh=False):
-        _, dashinfos, _ = self.getDash(params)
-        if "videoid" in params:
-            videoid = int(params["videoid"])
-            dashinfo = dashinfos["video"][videoid]
-        elif "audioid" in params:
-            audioid = int(params["audioid"])
-            dashinfo = dashinfos["audio"][audioid]
-        else:
-            return [404, "text/plain", ""]
-        url = ""
-        urlList = (
-            [dashinfo["baseUrl"]] + dashinfo["backupUrl"]
-            if "backupUrl" in dashinfo and dashinfo["backupUrl"]
-            else [dashinfo["baseUrl"]]
-        )
-        for url in urlList:
-            if "mcdn.bilivideo.cn" not in url:
-                break
-        if url == "":
-            return [404, "text/plain", ""]
-        header = self.header.copy()
-        if "range" in params:
-            header["Range"] = params["range"]
-        r = self.fetch(url, headers=header, stream=True)
-        return [206, "application/octet-stream", r.content]
+        """
+        不使用媒体代理
+        """
+        return None
     
     def getDash(self, params, forceRefresh=False):
         aid = params["aid"]
@@ -697,13 +722,19 @@ class Spider(Spider):
         else:
             data = self.getCache(key)
             if data:
-                return data["content"], data["dashinfos"], data["type"]
+                # 检查缓存是否过期
+                if time.time() < data.get("expiresAt", 0):
+                    return data["content"], data["dashinfos"], data["type"]
+                else:
+                    self.log(f"缓存已过期，重新获取: aid={aid}, cid={cid}")
 
         cookies = cookieDict.copy()
-        r = self.fetch(url, cookies=cookies, headers=header, timeout=5)
+        # 增加超时时间，确保能获取到完整的dash信息
+        r = self.fetch(url, cookies=cookies, headers=header, timeout=10)
         data = json.loads(self.cleanText(r.text))
         
         if data["code"] != 0:
+            self.log(f"DASH获取失败: code={data['code']}, message={data.get('message', '')}")
             return "", {}, ""
             
         if "dash" not in data["data"]:
@@ -736,13 +767,20 @@ class Spider(Spider):
         videoid = 0
         deadlineList = []
         
-        # 获取视频轨道过滤配置
-        max_video_tracks = int(self.extendDict.get("max_video_tracks", "2"))  # 默认保留3个视频轨道
-        selected_videos = self._filter_video_tracks_by_resolution(dashinfos["video"], max_video_tracks)
+        # 先过滤掉AV1格式的视频流
+        filtered_videos = self._filter_av1_videos(dashinfos["video"])
         
-        for video in selected_videos:
+        # 再按分辨率过滤，保留最高的几个
+        max_video_tracks = int(self.extendDict.get("max_video_tracks", "3"))
+        selected_videos = self._filter_video_tracks_by_resolution(filtered_videos, max_video_tracks)
+        
+        # 为每个视频轨道添加更详细的日志
+        self.log(f"处理视频轨道: 总共{len(dashinfos['video'])}个原始轨道 -> {len(selected_videos)}个保留轨道")
+        
+        for i, video in enumerate(selected_videos):
             try:
-                deadline = int(re.search(r"deadline=(\d+)", video["baseUrl"]).group(1))
+                deadline_match = re.search(r"deadline=(\d+)", video["baseUrl"])
+                deadline = int(deadline_match.group(1)) if deadline_match else int(time.time()) + 600
             except:
                 deadline = int(time.time()) + 600
             deadlineList.append(deadline)
@@ -754,6 +792,8 @@ class Spider(Spider):
             void = video["id"]
             vidparams = params.copy()
             vidparams["videoid"] = videoid
+            
+            # 使用更稳定的URL生成方式
             baseUrl = f"http://127.0.0.1:9978/proxy?do=py&type=media&cookies={quote(json.dumps(cookies))}&url={quote(url)}&aid={aid}&cid={cid}&videoid={videoid}"
             videoinfo = (
                 videoinfo
@@ -772,7 +812,8 @@ class Spider(Spider):
         audioid = 0
         for audio in selected_audio:
             try:
-                deadline = int(re.search(r"deadline=(\d+)", audio["baseUrl"]).group(1))
+                deadline_match = re.search(r"deadline=(\d+)", audio["baseUrl"])
+                deadline = int(deadline_match.group(1)) if deadline_match else int(time.time()) + 600
             except:
                 deadline = int(time.time()) + 600
             deadlineList.append(deadline)
@@ -810,7 +851,7 @@ class Spider(Spider):
         filtered_dashinfos["video"] = selected_videos
         filtered_dashinfos["audio"] = selected_audio
         
-        expiresAt = min(deadlineList) - 60
+        expiresAt = min(deadlineList) - 60 if deadlineList else int(time.time()) + 600
         self.setCache(
             key,
             {
@@ -821,6 +862,29 @@ class Spider(Spider):
             },
         )
         return mpd.replace("&", "&amp;"), filtered_dashinfos, "mpd"
+
+    def _filter_av1_videos(self, video_tracks):
+        """
+        过滤掉AV1格式的视频流
+        :param video_tracks: 原始视频轨道列表
+        :return: 过滤后的视频轨道列表（移除了AV1格式）
+        """
+        filtered_tracks = []
+        av1_removed_count = 0
+        
+        for track in video_tracks:
+            codecs = track.get('codecs', '').lower()
+            # 检查是否包含AV1编码格式
+            if 'av01' in codecs or 'av1' in codecs:
+                av1_removed_count += 1
+                self.log(f"移除AV1视频轨道: ID={track['id']}, 分辨率={track['width']}x{track['height']}, 编码={codecs}")
+                continue
+            filtered_tracks.append(track)
+        
+        if av1_removed_count > 0:
+            self.log(f"AV1过滤: 移除了{av1_removed_count}个AV1格式视频轨道")
+        
+        return filtered_tracks
 
     def _filter_video_tracks_by_resolution(self, video_tracks, max_tracks=3):
         """
