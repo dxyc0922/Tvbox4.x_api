@@ -20,50 +20,38 @@
             "key": "金牌",
             "name": "金牌",
             "type": 3,
-            "api": "https://raw.githubusercontent.com/alantang1977/X/04d655d5f4165e48a9f854652d09a3d7e784017c/py/%E9%87%91%E7%89%8C.py"
+            "api": "https://raw.githubusercontent.com/alantang1977/X/04d655d5f4165e48a9f854652d09a3d7e784017c/py/%E9%87%91%E7%89%8C.py",
+            "filterable": 1,
+            "quickSearch": 1,
+            "searchable": 1
         },
         {
             "key": "热播",
             "name": "热播",
             "type": 3,
             "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/py/%E6%A8%A1%E6%9D%BF/RJAPP.py",
+            "filterable": 1,
+            "quickSearch": 1,
+            "searchable": 1,
             "ext": "http://v.rbotv.cn"
         },
         {
-            "key": "3Q影视",
-            "name": "3Q影视",
+            "key": "饭团",
+            "name": "饭团",
             "type": 3,
-            "api": "./脚本/3Q影视.py"
-        }
-    ],
-    "parses": [
-        {
-            "name": "Demo",
-            "type": 3,
-            "url": "Demo"
+            "api": "https://daili.korice.eu.org/https://raw.githubusercontent.com/leexuben/BINGO-TV/refs/heads/main/py/饭团影视.py",
+            "filterable": 1,
+            "quickSearch": 1,
+            "searchable": 1
         },
         {
-            "name": "Web",
+            "key": "两个",
+            "name": "两个",
             "type": 3,
-            "url": "Web"
-        },
-        {
-            "name": "并发",
-            "type": 0,
-            "url": "https://down.nigx.cn/xjx.zzong6599.workers.dev/?url="
-        },
-        {
-            "name": "轮询",
-            "type": 0,
-            "url": "https://down.nigx.cn/jx.zzong6599.workers.dev/?url=",
-            "ext": {
-                "flag": [
-                    ".*."
-                ],
-                "header": {
-                    "User-Agent": "okhttp/4.9.1"
-                }
-            }
+            "api": "https://daili.korice.eu.org/https://raw.githubusercontent.com/leexuben/BINGO-TV/refs/heads/main/py/两个BT.py",
+            "filterable": 1,
+            "quickSearch": 1,
+            "searchable": 1
         }
     ],
     "lives": [
@@ -72,6 +60,231 @@
             "type": 0,
             "url": "./广东IPTV组播.txt",
             "epg": "http://epg.51zmt.top:8000/api/diyp/?ch={name}&date={date}"
+        }
+    ],
+    "rules": [
+        {
+            "name": "量子广告",
+            "hosts": [
+                "vip.lz*",
+                "hd.lz*",
+                ".cdnlz",
+                ".cdnlz*"
+            ],
+            "regex": [
+                "#EXTINF.*?\\s+[a-z0-9]{18,}\\.ts",
+                "[a-z0-9]{18,}\\.ts\\s+",
+                "#EXT-X-DISCONTINUITY\\r*\\n*#EXTINF.*?\\s+[a-z0-9]{18,}\\.ts[\\s\\S]*?#EXT-X-DISCONTINUITY"
+            ]
+        },
+        {
+            "name": "非凡广告",
+            "hosts": [
+                "vip.ffzy",
+                "hd.ffzy",
+                ".ffzy*",
+                "super.ffzy",
+                "super.ffzy*",
+                "svipsvip.ffzy",
+                "*.ffzy*"
+            ],
+            "regex": [
+                "#EXT-X-DISCONTINUITY(?:\n.*?){8}\n#EXT-X-DISCONTINUITY",
+                "#EXT-X-DISCONTINUITY(?:\n(?!#EXT-X-DISCONTINUITY).*){10}\n#EXT-X-DISCONTINUITY"
+            ]
+        },
+        {
+            "name": "暴风广告",
+            "hosts": [
+                "bfzy",
+                "bfbfvip",
+                "bfengbf"
+            ],
+            "regex": [
+                "#EXTINF.*?\\s+.*?adjump.*?\\.ts\\s+"
+            ]
+        }
+    ],
+    "ijk": [
+        {
+            "group": "软解码",
+            "options": [
+                {
+                    "category": 4,
+                    "name": "opensles",
+                    "value": "0"
+                },
+                {
+                    "category": 4,
+                    "name": "overlay-format",
+                    "value": "842225234"
+                },
+                {
+                    "category": 4,
+                    "name": "framedrop",
+                    "value": "1"
+                },
+                {
+                    "category": 4,
+                    "name": "soundtouch",
+                    "value": "1"
+                },
+                {
+                    "category": 4,
+                    "name": "start-on-prepared",
+                    "value": "1"
+                },
+                {
+                    "category": 1,
+                    "name": "http-detect-range-support",
+                    "value": "0"
+                },
+                {
+                    "category": 1,
+                    "name": "fflags",
+                    "value": "fastseek"
+                },
+                {
+                    "category": 2,
+                    "name": "skip_loop_filter",
+                    "value": "48"
+                },
+                {
+                    "category": 4,
+                    "name": "reconnect",
+                    "value": "1"
+                },
+                {
+                    "category": 4,
+                    "name": "enable-accurate-seek",
+                    "value": "0"
+                },
+                {
+                    "category": 4,
+                    "name": "mediacodec",
+                    "value": "0"
+                },
+                {
+                    "category": 4,
+                    "name": "mediacodec-auto-rotate",
+                    "value": "0"
+                },
+                {
+                    "category": 4,
+                    "name": "mediacodec-handle-resolution-change",
+                    "value": "0"
+                },
+                {
+                    "category": 4,
+                    "name": "mediacodec-hevc",
+                    "value": "0"
+                },
+                {
+                    "category": 1,
+                    "name": "dns_cache_timeout",
+                    "value": "600000000"
+                }
+            ]
+        },
+        {
+            "group": "硬解码",
+            "options": [
+                {
+                    "category": 4,
+                    "name": "opensles",
+                    "value": "1"
+                },
+                {
+                    "category": 4,
+                    "name": "overlay-format",
+                    "value": "842225234"
+                },
+                {
+                    "category": 4,
+                    "name": "framedrop",
+                    "value": "1"
+                },
+                {
+                    "category": 4,
+                    "name": "soundtouch",
+                    "value": "1"
+                },
+                {
+                    "category": 4,
+                    "name": "start-on-prepared",
+                    "value": "1"
+                },
+                {
+                    "category": 1,
+                    "name": "http-detect-range-support",
+                    "value": "0"
+                },
+                {
+                    "category": 1,
+                    "name": "fflags",
+                    "value": "fastseek"
+                },
+                {
+                    "category": 2,
+                    "name": "skip_loop_filter",
+                    "value": "48"
+                },
+                {
+                    "category": 4,
+                    "name": "reconnect",
+                    "value": "1"
+                },
+                {
+                    "category": 4,
+                    "name": "enable-accurate-seek",
+                    "value": "0"
+                },
+                {
+                    "category": 4,
+                    "name": "mediacodec",
+                    "value": "1"
+                },
+                {
+                    "category": 4,
+                    "name": "mediacodec-auto-rotate",
+                    "value": "1"
+                },
+                {
+                    "category": 4,
+                    "name": "mediacodec-handle-resolution-change",
+                    "value": "1"
+                },
+                {
+                    "category": 4,
+                    "name": "mediacodec-hevc",
+                    "value": "1"
+                },
+                {
+                    "category": 1,
+                    "name": "dns_cache_timeout",
+                    "value": "600000000"
+                }
+            ]
+        }
+    ],
+    "doh": [
+        {
+            "name": "阿里",
+            "url": "https://dns.alidns.com/dns-query"
+        },
+        {
+            "name": "騰讯",
+            "url": "https://doh.pub/dns-query"
+        },
+        {
+            "name": "Google",
+            "url": "https://dns.google/dns-query",
+            "ips": [
+                "8.8.4.4",
+                "8.8.8.8",
+                "2001:4860:4860::8888",
+                "2001:4860:4860::8844"
+            ]
         }
     ]
 }
