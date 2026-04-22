@@ -40,6 +40,24 @@
             "name": "荐片",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/yilishawk/js/9a7cecad38605c067a7861316c4ff4d97e999f43/py/荐片.py"
+        },
+        {
+            "key": "零三",
+            "name": "零三",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/yilishawk/js/9a7cecad38605c067a7861316c4ff4d97e999f43/py/03影院.py"
+        },
+        {
+            "key": "布布",
+            "name": "布布",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/yilishawk/js/9a7cecad38605c067a7861316c4ff4d97e999f43/py/布布影视.py"
+        },
+        {
+            "key": "独播",
+            "name": "独播",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/yilishawk/js/9a7cecad38605c067a7861316c4ff4d97e999f43/py/独播库.py"
         }
     ],
     "lives": [
