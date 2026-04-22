@@ -3,7 +3,7 @@
 
 源地址：https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/refs/heads/main/接口.json
 
-Github加速地址：https://daili.korice.eu.org/https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/refs/heads/main/接口.json
+Github加速地址：https://gh-proxy.com/https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/refs/heads/main/接口.json
 
 说明:由于盒子是安卓4.x+低版本app会导致加载一些新的接口会崩溃,无法加载,无法播放等异常情况,况且有些线路含18禁内容不适合在电视上展示,以及一些线路的资源不高清,码率低,含赌博广告,播放卡顿等问题都需要清除
 
