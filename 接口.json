@@ -39,157 +39,157 @@
             "key": "dr_可可影视[优]",
             "name": "🍒可可影视[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/可可影视[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/可可影视[优].js"
         },
         {
             "key": "dr_荐片[优]",
             "name": "🍒荐片[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
             "timeout": 30,
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/磁力/荐片[磁].js"
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/磁力/荐片[磁].js"
         },
         {
             "key": "dr_小苹果[优]",
             "name": "🍒小苹果[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/小苹果[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/小苹果[优].js"
         },
         {
             "key": "dr_麦田影院",
             "name": "🍒麦田影院[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/麦田影院.js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/麦田影院.js"
         },
         {
             "key": "dr_在线之家",
             "name": "🍒在线之家[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/在线之家.js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/在线之家.js"
         },
         {
             "key": "dr_LIBVIO[优]",
             "name": "🍒LIBVIO[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/LIBVIO[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/LIBVIO[优].js"
         },
         {
             "key": "dr_烧火影视[优]",
             "name": "🍒烧火影视[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/烧火影视[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/烧火影视[优].js"
         },
         {
             "key": "dr_农民影视[优]",
             "name": "🍒农民影视[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/农民影视[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/农民影视[优].js"
         },
         {
             "key": "dr_一起看[优]",
             "name": "🍒一起看[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/一起看[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/一起看[优].js"
         },
         {
             "key": "dr_柠檬影视[优]",
             "name": "🍒柠檬影视[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/柠檬影视[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/柠檬影视[优].js"
         },
         {
             "key": "dr_Emby[优]",
             "name": "🍒Emby[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/Emby[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/Emby[优].js"
         },
         {
             "key": "dr_555电影[优]",
             "name": "🍒555电影[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/555电影[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/555电影[优].js"
         },
         {
             "key": "dr_爱看机器人[优]",
             "name": "🍒爱看机器人[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/爱看机器人[虫].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/爱看机器人[虫].js"
         },
         {
             "key": "dr_茶杯狐[优]",
             "name": "🍒茶杯狐[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/茶杯狐.js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/茶杯狐.js"
         },
         {
             "key": "dr_HBO[优]",
             "name": "🍒HBO[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/HBO[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/HBO[优].js"
         },
         {
             "key": "dr_来看点播",
             "name": "🍒来看点播[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/来看点播.js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/来看点播.js"
         },
         {
             "key": "dr_瓜子影视",
             "name": "🍒瓜子影视[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/瓜子影视.js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/瓜子影视.js"
         },
         {
             "key": "dr_美剧天堂",
             "name": "🍒美剧天堂[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/美剧天堂.js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/美剧天堂.js"
         },
         {
             "key": "dr_柯南影视",
             "name": "🍒柯南影视[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/柯南影视.js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/柯南影视.js"
         },
         {
             "key": "dr_03影院[优]",
             "name": "🍒03影院[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/03影院[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/03影院[优].js"
         },
         {
             "key": "dr_金牌[优]",
             "name": "🍒金牌[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
             "click": "document.querySelector(\"#playleft iframe\").contentWindow.document.querySelector(\"#start\").click();",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/金牌[优].js"
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/金牌[优].js"
         },
         {
             "key": "dr_厂长资源[优]",
             "name": "🍒厂长资源[影][DR]",
             "type": 3,
-            "api": "https://github.dev/jak0099/dr/blob/master/libs/drpy2.min.js",
-            "ext": "https://github.dev/jak0099/dr/blob/master/js/影视/厂长资源[优].js"
+            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/厂长资源[优].js"
         }
     ],
     "lives": [
