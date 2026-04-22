@@ -20,13 +20,13 @@
             "key": "金牌",
             "name": "金牌",
             "type": 3,
-            "api": "https://raw.githubusercontent.com/alantang1977/X/04d655d5f4165e48a9f854652d09a3d7e784017c/py/%E9%87%91%E7%89%8C.py"
+            "api": "https://daili.korice.eu.org/https://raw.githubusercontent.com/alantang1977/X/04d655d5f4165e48a9f854652d09a3d7e784017c/py/%E9%87%91%E7%89%8C.py"
         },
         {
             "key": "热播",
             "name": "热播",
             "type": 3,
-            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/py/%E6%A8%A1%E6%9D%BF/RJAPP.py",
+            "api": "https://daili.korice.eu.org/https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/py/%E6%A8%A1%E6%9D%BF/RJAPP.py",
             "ext": "http://v.rbotv.cn"
         },
         {
@@ -39,23 +39,23 @@
             "key": "荐片",
             "name": "荐片",
             "type": 3,
-            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "api": "https://daili.korice.eu.org/https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
             "timeout": 30,
-            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/磁力/荐片[磁].js"
+            "ext": "https://daili.korice.eu.org/https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/磁力/荐片[磁].js"
         },
         {
             "key": "麦田",
             "name": "麦田",
             "type": 3,
-            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
-            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/麦田影院.js"
+            "api": "https://daili.korice.eu.org/https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://daili.korice.eu.org/https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/麦田影院.js"
         },
         {
             "key": "农民",
             "name": "农民",
             "type": 3,
-            "api": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
-            "ext": "https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/农民影视[优].js"
+            "api": "https://daili.korice.eu.org/https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/libs/drpy2.min.js",
+            "ext": "https://daili.korice.eu.org/https://raw.githubusercontent.com/jak0099/dr/refs/heads/master/js/影视/农民影视[优].js"
         }
     ],
     "lives": [
