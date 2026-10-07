@@ -2,19 +2,13 @@
     "wallpaper": "https://深色壁纸.xxooo.cf/",
     "sites": [
         {
-            "key": "腾讯",
-            "name": "腾讯视频",
-            "type": 3,
-            "api": "./脚本/腾讯视频.py"
-        },
-        {
-            "key": "豆瓣",
+            "key": "1",
             "name": "豆瓣",
             "type": 3,
             "api": "./脚本/豆瓣.py"
         },
         {
-            "key": "哔哩",
+            "key": "2",
             "name": "哔哩",
             "type": 3,
             "api": "./脚本/哔哩.py",
@@ -23,37 +17,37 @@
             }
         },
         {
-            "key": "金牌",
+            "key": "3",
             "name": "金牌影院",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/refs/heads/maing/py/%E9%87%91%E7%89%8CAPP.py"
         },
         {
-            "key": "VIP兔",
+            "key": "4",
             "name": "VIP兔",
             "type": 3,
             "api": "https://gh-proxy.com/https://github.com/wzxxcz/wzxxcz/raw/refs/heads/maing/py/VIP%E5%85%94%F0%9F%8D%80TG%20@hshsjk9.py"
         },
         {
-            "key": "看剧AI",
+            "key": "5",
             "name": "看剧AI",
             "type": 3,
             "api": "https://gh-proxy.com/https://github.com/wzxxcz/wzxxcz/raw/refs/heads/maing/py/%E7%9C%8B%E5%89%A7AI19.py"
         },
         {
-            "key": "搜剧AI",
+            "key": "6",
             "name": "搜剧AI",
             "type": 3,
             "api": "https://gh-proxy.com/https://github.com/wzxxcz/wzxxcz/raw/refs/heads/maing/py/%E6%90%9C%E5%89%A7AI%F0%9F%8D%80TG%20@hshsjk9.py"
         },
         {
-            "key": "韩小圈",
+            "key": "7",
             "name": "韩小圈",
             "type": 3,
             "api": "https://gh-proxy.com/https://github.com/wzxxcz/wzxxcz/raw/refs/heads/maing/py/%E9%9F%A9%E5%B0%8F%E5%9C%88.py"
         },
         {
-            "key": "飞流视频",
+            "key": "8",
             "name": "飞流视频",
             "type": 3,
             "api": "https://gh-proxy.com/https://github.com/wzxxcz/wzxxcz/raw/refs/heads/maing/py/%E9%A3%9E%E6%B5%81%E8%A7%86%E9%A2%91%F0%9F%8D%80TG%20@hshsjk9.py"
