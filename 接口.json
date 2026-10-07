@@ -5,7 +5,7 @@
             "key": "腾讯",
             "name": "腾讯视频",
             "type": 3,
-            "api": "./脚本/腾讯视频.js"
+            "api": "./脚本/腾讯视频.py"
         },
         {
             "key": "豆瓣",
@@ -35,28 +35,22 @@
             "api": "https://gh-proxy.com/https://github.com/wzxxcz/wzxxcz/raw/refs/heads/maing/py/VIP%E5%85%94%F0%9F%8D%80TG%20@hshsjk9.py"
         },
         {
-            "key": "厂长",
-            "name": "厂长资源",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://github.com/qist/tvbox/raw/ab9b3b0e6328da424b4212732f76f04c9e03338e/py/Czsapp.py"
-        },
-        {
             "key": "看剧AI",
             "name": "看剧AI",
             "type": 3,
             "api": "https://gh-proxy.com/https://github.com/wzxxcz/wzxxcz/raw/refs/heads/maing/py/%E7%9C%8B%E5%89%A7AI19.py"
         },
         {
+            "key": "搜剧AI",
+            "name": "搜剧AI",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://github.com/wzxxcz/wzxxcz/raw/refs/heads/maing/py/%E6%90%9C%E5%89%A7AI%F0%9F%8D%80TG%20@hshsjk9.py"
+        },
+        {
             "key": "韩小圈",
             "name": "韩小圈",
             "type": 3,
             "api": "https://gh-proxy.com/https://github.com/wzxxcz/wzxxcz/raw/refs/heads/maing/py/%E9%9F%A9%E5%B0%8F%E5%9C%88.py"
-        },
-        {
-            "key": "首映网",
-            "name": "首映网",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://github.com/wzxxcz/wzxxcz/raw/refs/heads/maing/py/%E9%A6%96%E6%98%A0%E7%BD%91%F0%9F%8D%80TG%20@hshsjk9.py"
         },
         {
             "key": "飞流视频",
