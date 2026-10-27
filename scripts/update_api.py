@@ -60,6 +60,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "require_spider_class": True,
         "dedupe_identical_scripts": True,
     },
+    "functional": {
+        "enabled": False,
+        "report": "reports/functional-report.json",
+        "min_score": 0,
+        "keyword": "庆余年",
+        "timeout": 30,
+        "workers": 6,
+    },
     "safety": {
         "min_previous_ratio": 0.5,
         "max_download_failure_ratio": 0.2,
@@ -177,7 +185,7 @@ class ProbeResult:
 class ScriptResult:
     filename: str
     name: str
-    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded
+    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / low_quality
     hosts: list[str] = field(default_factory=list)
     tier: str = ""
     checked_host: str | None = None
@@ -185,6 +193,7 @@ class ScriptResult:
     error: str | None = None
     entry: dict[str, Any] | None = None
     fingerprint: str = ""
+    quality: dict[str, Any] | None = None
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -878,6 +887,21 @@ def load_existing(path: Path) -> tuple[dict[str, Any], str]:
     return data, newline
 
 
+def load_functional_report(path: Path) -> dict[str, dict[str, Any]]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {}
+    rows = data.get("scripts") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return {}
+    quality: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if isinstance(row, dict) and row.get("file"):
+            quality[str(row["file"])] = row
+    return quality
+
+
 def write_json(path: Path, data: Any, newline: str = "\n") -> None:
     text = json.dumps(data, ensure_ascii=False, indent=4) + "\n"
     if newline == "\r\n":
@@ -968,6 +992,8 @@ def build_report(
             "skipped": counts.get("skipped", 0),
             "duplicate": counts.get("duplicate", 0),
             "excluded": counts.get("excluded", 0),
+            "low_quality": counts.get("low_quality", 0),
+            "with_quality": sum(1 for result in results if result.quality),
         },
         "host_checks": {
             origin: {
@@ -989,6 +1015,7 @@ def build_report(
                 "http_status": result.http_status,
                 "error": result.error,
                 "api": result.entry["api"] if result.entry else None,
+                "quality": result.quality,
             }
             for result in sorted(results, key=lambda item: item.filename)
         ],
@@ -1015,6 +1042,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0, help="只处理前 N 个脚本")
     parser.add_argument("--no-report", action="store_true", help="不写校验报告")
     parser.add_argument("--force", action="store_true", help="跳过可用站点骤降保护")
+    parser.add_argument(
+        "--functional-report",
+        help="functional_check.py 生成的报告，用于给站点打功能评分",
+    )
     parser.add_argument("--verbose", action="store_true", help="输出更多日志")
     return parser.parse_args(argv)
 
@@ -1148,6 +1179,43 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     reasons.append(f"{host} -> {check.error}")
             result.error = "; ".join(reasons)
+
+    quality_map: dict[str, dict[str, Any]] = {}
+    functional_cfg = config.get("functional") or {}
+    quality_path: Path | None = None
+    if args.functional_report:
+        quality_path = Path(args.functional_report).resolve()
+    elif functional_cfg.get("enabled"):
+        quality_path = (
+            ROOT / str(functional_cfg.get("report") or "reports/functional-report.json")
+        ).resolve()
+    if quality_path is not None and quality_path.exists():
+        quality_map = load_functional_report(quality_path)
+        print(f"功能校验报告: {quality_path}（{len(quality_map)} 条）")
+    if quality_map:
+        min_score = int(functional_cfg.get("min_score") or 0)
+        for result in results:
+            quality = quality_map.get(result.filename)
+            if quality is None:
+                continue
+            result.quality = quality
+            if (
+                min_score > 0
+                and result.status == "valid"
+                and int(quality.get("score") or 0) < min_score
+            ):
+                result.status = "low_quality"
+                result.error = f"功能校验 {quality.get('score')}/3 < {min_score}"
+        scores = Counter(
+            int(result.quality.get("score") or 0)
+            for result in results
+            if result.quality and result.status == "valid"
+        )
+        print(
+            "功能评分（有效站点）: "
+            f"3分 {scores.get(3, 0)}，2分 {scores.get(2, 0)}，"
+            f"1分 {scores.get(1, 0)}，0分 {scores.get(0, 0)}"
+        )
 
     entries, skipped = dedupe_entries(results, preserved_names, config)
     counts = Counter(result.status for result in results)

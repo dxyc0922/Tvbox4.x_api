@@ -34,6 +34,30 @@ Github加速地址：https://gh-proxy.com/https://raw.githubusercontent.com/dxyc
 - `wallpaper`、`lives`、`doh`、`rules`、`ads` 等其他顶层字段保持不变。
 - 校验报告作为 Actions artifact 上传，保留 7 天。
 
+### 功能校验（可选）
+
+host 可达不代表脚本能用。`scripts/functional_check.py` 会在隔离环境里真正调用脚本：
+
+1. `homeContent` —— 能否取到首页片单；
+2. `searchContent` —— 用关键词搜索能否取到结果；
+3. `detailContent` —— 能否拿到 `vod_play_url` 播放地址。
+
+每通过一项记 1 分，满分 3 分。结果写入 `reports/functional-report.json`，`update_api.py`
+用 `--functional-report` 读取并附加到 `接口.json` 的校验报告里。
+
+```bash
+# 本地调试（会执行第三方代码，建议在虚拟机里跑）
+python scripts/functional_check.py --source-dir /path/to/py --limit 20
+
+# 把评分合并进校验报告
+python scripts/update_api.py --functional-report reports/functional-report.json
+```
+
+工作流里这一步跑在 Docker 容器中：不注入任何密钥、`/work` 只读、限制内存/CPU/进程数、
+禁止访问内网和回环地址。默认 **只评分不删源**，因为 GitHub runner 在境外，
+国内站点可能被地区限制而误判。确认识别准确后，可把 `functional.min_score` 设为 2 或 3
+来剔除低分脚本。
+
 ### 本地运行
 
 ```bash
@@ -52,6 +76,9 @@ python scripts/update_api.py --source-dir /path/to/py --dry-run
 - `exclude_scripts` / `exclude_names`：排除不想加入的脚本。
 - `filters.require_spider_class`：只接受定义了 `class Spider` 的脚本，默认 `true`。
 - `filters.dedupe_identical_scripts`：按代码内容去重改名副本，默认 `true`。
+- `functional.enabled` / `functional.report`：是否自动读取功能校验报告。
+- `functional.min_score`：最低功能评分（0–3），默认 `0` 表示只评分不删源。
+- `functional.keyword` / `timeout` / `workers`：搜索关键词、单脚本超时、并发数。
 - `request.accept_4xx`：是否把 403/404 等算作可达，默认 `true`。
 - `request.timeout` / `request.workers`：请求超时和并发数。
 

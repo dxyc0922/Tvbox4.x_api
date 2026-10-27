@@ -18,6 +18,14 @@
         "require_spider_class": true,
         "dedupe_identical_scripts": true
     },
+    "functional": {
+        "enabled": false,
+        "report": "reports/functional-report.json",
+        "min_score": 0,
+        "keyword": "庆余年",
+        "timeout": 30,
+        "workers": 6
+    },
     "safety": {
         "min_previous_ratio": 0.5,
         "max_download_failure_ratio": 0.2
