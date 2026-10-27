@@ -21,6 +21,9 @@ jobs:
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
+        with:
+          # 不把 token 写进 .git/config，避免容器里的第三方脚本读到。
+          persist-credentials: false
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -32,7 +35,10 @@ jobs:
         continue-on-error: true
         timeout-minutes: 30
         run: |
+          set -o pipefail
           mkdir -p reports .cache
+          # 容器内 root 被 --cap-drop ALL 去掉了 DAC_OVERRIDE，需要放开这两个目录。
+          chmod 777 reports .cache
           docker run --rm \
             --network bridge \
             --memory 2g --cpus 2 --pids-limit 512 \
@@ -42,7 +48,16 @@ jobs:
             -v "$PWD/.cache":/cache \
             -w /tmp \
             python:3.12-slim \
-            sh -c "pip install --quiet --no-cache-dir requests beautifulsoup4 pyquery pycryptodome lxml && python /work/scripts/functional_check.py --cache-dir /cache --output /out/functional-report.json"
+            sh -c "pip install --quiet --no-cache-dir requests beautifulsoup4 pyquery pycryptodome lxml && python /work/scripts/functional_check.py --cache-dir /cache --output /out/functional-report.json" 2>&1 | tee reports/functional-check.log
+
+      - name: 检查功能校验结果
+        if: always()
+        run: |
+          if [ -f reports/functional-report.json ]; then
+            echo "功能校验报告已生成"
+          else
+            echo "::warning::功能校验未生成报告，本次只做 host 校验（详见 functional-check.log）"
+          fi
 
       - name: 拉取、校验并更新接口.json
         env:
@@ -57,11 +72,15 @@ jobs:
           path: |
             reports/validation-report.json
             reports/functional-report.json
+            reports/functional-check.log
           if-no-files-found: ignore
           retention-days: 7
 
       - name: 提交并推送
         if: github.ref == 'refs/heads/main'
+        env:
+          # persist-credentials: false 之后需要显式用 token 推送。
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -70,5 +89,5 @@ jobs:
             echo "接口.json 没有变化，跳过提交"
           else
             git commit -m "chore: 自动更新接口.json ($(date -u +%F))"
-            git push
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"
           fi
