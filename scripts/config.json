@@ -27,7 +27,8 @@
         "workers": 6
     },
     "quality": {
-        "min_grade": ""
+        "min_grade": "",
+        "drop_unverified": false
     },
     "safety": {
         "min_previous_ratio": 0.5,

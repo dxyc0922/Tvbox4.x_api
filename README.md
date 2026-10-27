@@ -97,7 +97,8 @@ GitHub Actions 里这一步跑在 Docker 容器中：不注入任何密钥、`/w
 | **A 自营** | 播放地址和站点同主域，自己转码自己发 | 域名比对一致 |
 | **B 第三方直连** | 直连 m3u8/mp4，但走的是别家 CDN | 域名不一致 |
 | **C 搬运/解析** | 播放地址落在抖音/快手/西瓜等平台 CDN，或需要网页解析 | 平台域名 / `parse=1` / 页面型地址 |
-| **D 无法验证** | 本地代理、取不到地址、请求失败 | — |
+| **D 无法验证** | 请求失败、返回非视频内容 | — |
+| **U 未取得播放地址** | 没解析出播放地址（地区限制/超时/本地代理） | 不参与过滤 |
 
 另外会记录 `ad_score`：`#EXT-X-CUE-OUT` / `#EXT-X-DATERANGE` / `SCTE35` 广告标记各 +3，
 分片来自多个域名（少数域名占比 ≤20%）+2。命中即判 C。
@@ -115,6 +116,13 @@ python scripts/stream_check.py "https://xxx/index.m3u8" --site-host https://www.
 
 想按等级过滤，把 `scripts/config.json` 里的 `quality.min_grade` 设为 `B`（保留 A/B，剔除 C/D）
 或 `A`（只保留自营）。默认空字符串表示不过滤。
+
+**注意**：拿不到播放地址的脚本（地区限制、超时、本地代理 `127.0.0.1`）单独记为 **U 未取得播放地址**，
+默认**不参与等级过滤**——测不出来不等于源差。实测 231 个脚本里 U 有 115 个，若把它们一起删掉会误伤
+大量可用站点。确实想只保留「验证过的源」，再把 `quality.drop_unverified` 设为 `true`。
+
+以当前数据为例：`min_grade = "B"` 只会剔除 2 个 C 级（1234影视、华数TV）；加上
+`drop_unverified = true` 后站点数会从 172 掉到 57。
 
 ### 本地运行
 
@@ -138,6 +146,7 @@ python scripts/update_api.py --source-dir /path/to/py --dry-run
 - `functional.min_score`：最低功能评分（0–3），默认 `0` 表示只评分不删源。
 - `functional.keyword` / `timeout` / `workers`：搜索关键词、单脚本超时、并发数。
 - `quality.min_grade`：最低源质量等级（`A`/`B`/`C`/`D`），默认 `""` 不过滤；设为 `B` 会剔除 C/D。
+- `quality.drop_unverified`：是否连「拿不到播放地址（U）」的源一起剔除，默认 `false`。
 - `request.accept_4xx`：是否把 403/404 等算作可达，默认 `true`。
 - `request.timeout` / `request.workers`：请求超时和并发数。
 

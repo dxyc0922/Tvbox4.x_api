@@ -70,6 +70,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "quality": {
         "min_grade": "",
+        "drop_unverified": False,
     },
     "safety": {
         "min_previous_ratio": 0.5,
@@ -905,6 +906,20 @@ def load_functional_report(path: Path) -> dict[str, dict[str, Any]]:
     return quality
 
 
+def effective_grade(quality: dict[str, Any] | None) -> str:
+    """把功能校验结果换算成 A/B/C/D，无法验证的返回 U。
+
+    U 包括：没拿到播放地址、请求失败、本地代理（127.0.0.1）。
+    这些是「测不出来」，不代表源差，默认不参与等级过滤。
+    """
+    stream = (quality or {}).get("stream") or {}
+    grade = str(stream.get("grade") or "").upper()
+    kind = str(stream.get("kind") or "")
+    if not grade or kind in ("local", "unknown"):
+        return "U"
+    return grade
+
+
 def write_json(path: Path, data: Any, newline: str = "\n") -> None:
     text = json.dumps(data, ensure_ascii=False, indent=4) + "\n"
     if newline == "\r\n":
@@ -980,7 +995,7 @@ def build_report(
 ) -> dict[str, Any]:
     counts = Counter(result.status for result in results)
     grades = Counter(
-        str((result.quality.get("stream") or {}).get("grade") or "D")
+        effective_grade(result.quality)
         for result in results
         if result.quality and result.status == "valid"
     )
@@ -1006,6 +1021,7 @@ def build_report(
             "grade_b": grades.get("B", 0),
             "grade_c": grades.get("C", 0),
             "grade_d": grades.get("D", 0),
+            "grade_unverified": grades.get("U", 0),
         },
         "host_checks": {
             origin: {
@@ -1208,6 +1224,7 @@ def main(argv: list[str] | None = None) -> int:
         min_score = int(functional_cfg.get("min_score") or 0)
         quality_cfg = config.get("quality") or {}
         min_grade = str(quality_cfg.get("min_grade") or "").strip().upper()
+        drop_unverified = bool(quality_cfg.get("drop_unverified"))
         grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
         for result in results:
             quality = quality_map.get(result.filename)
@@ -1221,8 +1238,13 @@ def main(argv: list[str] | None = None) -> int:
                 result.error = f"功能校验 {quality.get('score')}/3 < {min_score}"
                 continue
             if min_grade in grade_rank:
-                grade = str((quality.get("stream") or {}).get("grade") or "D").upper()
-                if grade_rank.get(grade, 3) > grade_rank[min_grade]:
+                grade = effective_grade(quality)
+                if grade == "U":
+                    # 没拿到播放地址（地区限制/超时/本地代理）不等于源差，默认保留。
+                    if drop_unverified:
+                        result.status = "low_quality"
+                        result.error = "源质量无法验证"
+                elif grade_rank.get(grade, 3) > grade_rank[min_grade]:
                     result.status = "low_quality"
                     result.error = f"源质量 {grade} 低于 {min_grade}"
         scores = Counter(
@@ -1236,14 +1258,15 @@ def main(argv: list[str] | None = None) -> int:
             f"1分 {scores.get(1, 0)}，0分 {scores.get(0, 0)}"
         )
         grades = Counter(
-            str((result.quality.get("stream") or {}).get("grade") or "D")
+            effective_grade(result.quality)
             for result in results
             if result.quality and result.status == "valid"
         )
         print(
             "源质量（有效站点）: "
             f"A 自营 {grades.get('A', 0)}，B 第三方 {grades.get('B', 0)}，"
-            f"C 搬运/解析 {grades.get('C', 0)}，D 无法验证 {grades.get('D', 0)}"
+            f"C 搬运/解析 {grades.get('C', 0)}，D 无法验证 {grades.get('D', 0)}，"
+            f"U 未取得播放地址 {grades.get('U', 0)}"
         )
 
     entries, skipped = dedupe_entries(results, preserved_names, config)
