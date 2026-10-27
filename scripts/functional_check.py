@@ -80,6 +80,27 @@ def make_limits(timeout: int) -> dict[str, int] | None:
     }
 
 
+def kill_tree(process: subprocess.Popen) -> None:
+    """超时后连同子孙进程一起结束；Windows 下 kill() 只能杀掉直接子进程。"""
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True,
+                timeout=15,
+            )
+            return
+        except (OSError, subprocess.SubprocessError):
+            pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (ProcessLookupError, AttributeError, OSError):
+        try:
+            process.kill()
+        except OSError:
+            pass
+
+
 def read_result(path: Path) -> dict[str, Any] | None:
     try:
         with open(path, encoding="utf-8") as handle:
@@ -127,10 +148,7 @@ def run_one(
             out, err = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             timed_out = True
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except (ProcessLookupError, AttributeError):
-                process.kill()
+            kill_tree(process)
             out, err = process.communicate()
         stdout = out.decode("utf-8", "replace")[-2000:]
         stderr = err.decode("utf-8", "replace")[-2000:]

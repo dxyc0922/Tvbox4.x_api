@@ -1,9 +1,8 @@
 name: 自动更新接口
 
 on:
-  schedule:
-    # 每周一 02:00（北京时间）= 周日 18:00 UTC
-    - cron: "0 18 * * 0"
+  # 定时任务已改到本机运行（scripts/run_local.py + 任务计划程序），
+  # 这里保留手动触发，作为本机不可用时的备用通道。
   workflow_dispatch:
 
 permissions:

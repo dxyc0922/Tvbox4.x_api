@@ -19,9 +19,9 @@ Github加速地址：https://gh-proxy.com/https://raw.githubusercontent.com/dxyc
 
 ## 自动同步接口
 
-工作流：`.github/workflows/update-api.yml`
+更新逻辑：`scripts/update_api.py`；定时运行在**本机**（Windows 任务计划程序），
+GitHub Actions 只保留手动触发作为备用通道。
 
-- 每周一 02:00（北京时间）自动运行，也可以在 GitHub Actions 页面手动触发。
 - 临时拉取上游 `wzxxcz/wzxxcz` 的 `py/` 目录，不提交脚本文件。
 - 解析每个脚本里的 host（支持 `HOST`、`HOSTS`、`host`、`xurl` 等变量，以及 `_dk8` 混淆字符串）。
 - 只接受定义了 `class Spider` 的脚本：上游混入的报错 HTML、命令行脚本会被跳过。
@@ -32,7 +32,33 @@ Github加速地址：https://gh-proxy.com/https://raw.githubusercontent.com/dxyc
   - 所有 http/https 站点删除后，用校验通过的上游脚本重新生成；
   - 脚本链接统一使用 `https://gh-proxy.com/https://raw.githubusercontent.com/...`。
 - `wallpaper`、`lives`、`doh`、`rules`、`ads` 等其他顶层字段保持不变。
-- 校验报告作为 Actions artifact 上传，保留 7 天。
+- 可用站点骤降保护：本次生成数少于上次的一半、或下载失败率超过 20% 时不写入，直接报错退出。
+
+### 本机定时运行（推荐）
+
+```powershell
+# 1. 先手动跑一次，确认能生成、能推送
+python scripts/run_local.py --dry-run     # 只校验，不写文件
+python scripts/run_local.py               # 校验 + 生成 + 提交推送
+
+# 2. 注册每周任务（默认每周一 02:00，当前登录用户）
+powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1
+
+# 可选参数
+#   -Day Sunday -Time 03:30        改时间
+#   -Functional                    顺带跑功能校验
+#   -RunWhenLoggedOff              未登录也运行（会提示输入该用户密码）
+#   -Unregister                    删除任务
+```
+
+`run_local.py` 每次运行会：
+
+1. `git pull --rebase --autostash`（失败忽略，不影响生成）；
+2. 可选跑 `functional_check.py`（`--functional`，默认关闭）；
+3. 调用 `update_api.py` 重建 `接口.json`；
+4. 有变化才提交，推送失败会重试 3 次；仍失败则保留本地提交，下次运行自动带上。
+
+日志写在 `logs/local-run-<时间>.log`，任务计划程序里也能看到上次运行结果。
 
 ### 功能校验（可选）
 
@@ -53,10 +79,14 @@ python scripts/functional_check.py --source-dir /path/to/py --limit 20
 python scripts/update_api.py --functional-report reports/functional-report.json
 ```
 
-工作流里这一步跑在 Docker 容器中：不注入任何密钥、`/work` 只读、限制内存/CPU/进程数、
-禁止访问内网和回环地址。默认 **只评分不删源**，因为 GitHub runner 在境外，
-国内站点可能被地区限制而误判。确认识别准确后，可把 `functional.min_score` 设为 2 或 3
-来剔除低分脚本。
+GitHub Actions 里这一步跑在 Docker 容器中：不注入任何密钥、`/work` 只读、限制内存/CPU/进程数、
+禁止访问内网和回环地址。**本机运行（`--functional`）没有容器隔离**，等于在自己的机器上执行
+221 个陌生脚本，只做了超时杀进程和「禁止访问内网地址」两道防护；除非装了 Docker/WSL2，
+否则不建议在本机开启。
+
+默认 **只评分不删源**（`functional.min_score = 0`）。实测 221 个脚本里约 39% 能拿到 2 分以上，
+0 分的绝大多数是「请求成功但搜不到结果」——多半是境外 IP 被地区限制，按分数删源会误删。
+确认识别准确后再把 `min_score` 设为 2 或 3。
 
 ### 本地运行
 
