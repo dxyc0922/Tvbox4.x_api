@@ -21,7 +21,7 @@ Github加速地址：https://gh-proxy.com/https://raw.githubusercontent.com/dxyc
 
 工作流：`.github/workflows/update-api.yml`
 
-- 每天北京时间 02:00 自动运行，也可以在 GitHub Actions 页面手动触发。
+- 每周一 02:00（北京时间）自动运行，也可以在 GitHub Actions 页面手动触发。
 - 临时拉取上游 `wzxxcz/wzxxcz` 的 `py/` 目录，不提交脚本文件。
 - 解析每个脚本里的 host（支持 `HOST`、`HOSTS`、`host`、`xurl` 等变量，以及 `_dk8` 混淆字符串）。
 - 只接受定义了 `class Spider` 的脚本：上游混入的报错 HTML、命令行脚本会被跳过。

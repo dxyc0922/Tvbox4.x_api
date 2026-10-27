@@ -2,8 +2,8 @@ name: 自动更新接口
 
 on:
   schedule:
-    # UTC 18:00 = 北京时间次日 02:00
-    - cron: "0 18 * * *"
+    # 每周一 02:00（北京时间）= 周日 18:00 UTC
+    - cron: "0 18 * * 0"
   workflow_dispatch:
 
 permissions:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-每天从 wzxxcz/wzxxcz 的 py 目录拉取脚本，校验脚本里的 host，重建 接口.json。
+定期从 wzxxcz/wzxxcz 的 py 目录拉取脚本，校验脚本里的 host，重建 接口.json。
 
 规则：
 - 接口.json 中 api 以 ./ 开头（或不是 http/https）的站点原样保留；
