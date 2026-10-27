@@ -68,6 +68,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "timeout": 30,
         "workers": 6,
     },
+    "quality": {
+        "min_grade": "",
+    },
     "safety": {
         "min_previous_ratio": 0.5,
         "max_download_failure_ratio": 0.2,
@@ -976,6 +979,11 @@ def build_report(
     output: Path,
 ) -> dict[str, Any]:
     counts = Counter(result.status for result in results)
+    grades = Counter(
+        str((result.quality.get("stream") or {}).get("grade") or "D")
+        for result in results
+        if result.quality and result.status == "valid"
+    )
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "upstream": dict(config["upstream"]),
@@ -994,6 +1002,10 @@ def build_report(
             "excluded": counts.get("excluded", 0),
             "low_quality": counts.get("low_quality", 0),
             "with_quality": sum(1 for result in results if result.quality),
+            "grade_a": grades.get("A", 0),
+            "grade_b": grades.get("B", 0),
+            "grade_c": grades.get("C", 0),
+            "grade_d": grades.get("D", 0),
         },
         "host_checks": {
             origin: {
@@ -1194,18 +1206,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"功能校验报告: {quality_path}（{len(quality_map)} 条）")
     if quality_map:
         min_score = int(functional_cfg.get("min_score") or 0)
+        quality_cfg = config.get("quality") or {}
+        min_grade = str(quality_cfg.get("min_grade") or "").strip().upper()
+        grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
         for result in results:
             quality = quality_map.get(result.filename)
             if quality is None:
                 continue
             result.quality = quality
-            if (
-                min_score > 0
-                and result.status == "valid"
-                and int(quality.get("score") or 0) < min_score
-            ):
+            if result.status != "valid":
+                continue
+            if min_score > 0 and int(quality.get("score") or 0) < min_score:
                 result.status = "low_quality"
                 result.error = f"功能校验 {quality.get('score')}/3 < {min_score}"
+                continue
+            if min_grade in grade_rank:
+                grade = str((quality.get("stream") or {}).get("grade") or "D").upper()
+                if grade_rank.get(grade, 3) > grade_rank[min_grade]:
+                    result.status = "low_quality"
+                    result.error = f"源质量 {grade} 低于 {min_grade}"
         scores = Counter(
             int(result.quality.get("score") or 0)
             for result in results
@@ -1215,6 +1234,16 @@ def main(argv: list[str] | None = None) -> int:
             "功能评分（有效站点）: "
             f"3分 {scores.get(3, 0)}，2分 {scores.get(2, 0)}，"
             f"1分 {scores.get(1, 0)}，0分 {scores.get(0, 0)}"
+        )
+        grades = Counter(
+            str((result.quality.get("stream") or {}).get("grade") or "D")
+            for result in results
+            if result.quality and result.status == "valid"
+        )
+        print(
+            "源质量（有效站点）: "
+            f"A 自营 {grades.get('A', 0)}，B 第三方 {grades.get('B', 0)}，"
+            f"C 搬运/解析 {grades.get('C', 0)}，D 无法验证 {grades.get('D', 0)}"
         )
 
     entries, skipped = dedupe_entries(results, preserved_names, config)

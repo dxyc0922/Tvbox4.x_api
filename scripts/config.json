@@ -26,6 +26,9 @@
         "timeout": 30,
         "workers": 6
     },
+    "quality": {
+        "min_grade": ""
+    },
     "safety": {
         "min_previous_ratio": 0.5,
         "max_download_failure_ratio": 0.2

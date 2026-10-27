@@ -88,6 +88,34 @@ GitHub Actions 里这一步跑在 Docker 容器中：不注入任何密钥、`/w
 0 分的绝大多数是「请求成功但搜不到结果」——多半是境外 IP 被地区限制，按分数删源会误删。
 确认识别准确后再把 `min_score` 设为 2 或 3。
 
+### 源质量分级（A/B/C/D）
+
+功能校验拿到播放地址后，`scripts/stream_check.py` 会再走一遍 `playerContent`，用真实播放地址判断来源：
+
+| 等级 | 含义 | 判断依据 |
+|---|---|---|
+| **A 自营** | 播放地址和站点同主域，自己转码自己发 | 域名比对一致 |
+| **B 第三方直连** | 直连 m3u8/mp4，但走的是别家 CDN | 域名不一致 |
+| **C 搬运/解析** | 播放地址落在抖音/快手/西瓜等平台 CDN，或需要网页解析 | 平台域名 / `parse=1` / 页面型地址 |
+| **D 无法验证** | 本地代理、取不到地址、请求失败 | — |
+
+另外会记录 `ad_score`：`#EXT-X-CUE-OUT` / `#EXT-X-DATERANGE` / `SCTE35` 广告标记各 +3，
+分片来自多个域名（少数域名占比 ≤20%）+2。命中即判 C。
+
+```bash
+# 单独看某个播放地址
+python scripts/stream_check.py "https://xxx/index.m3u8" --site-host https://www.example.com
+```
+
+**关于「广告藏在 m3u8 不规则时间段」**：实测不成立。220 个脚本里 81 个能解析出播放地址，
+`ad_score` 全为 0，55 个 HLS 全部单域名分片、无 CUE/DATERANGE 标记；而正常转码源（VFR）
+普遍存在 0.2–1 秒短分片和大量 `#EXT-X-DISCONTINUITY`（例如金牌蓝兔子 307 个短分片、
+低端影视 277 个），按「时长不规则」判断会把正常源大面积误判成广告。广告更可能来自
+解析器/网页播放器（C 级）或视频画面本身（搬运源水印）。
+
+想按等级过滤，把 `scripts/config.json` 里的 `quality.min_grade` 设为 `B`（保留 A/B，剔除 C/D）
+或 `A`（只保留自营）。默认空字符串表示不过滤。
+
 ### 本地运行
 
 ```bash
@@ -109,6 +137,7 @@ python scripts/update_api.py --source-dir /path/to/py --dry-run
 - `functional.enabled` / `functional.report`：是否自动读取功能校验报告。
 - `functional.min_score`：最低功能评分（0–3），默认 `0` 表示只评分不删源。
 - `functional.keyword` / `timeout` / `workers`：搜索关键词、单脚本超时、并发数。
+- `quality.min_grade`：最低源质量等级（`A`/`B`/`C`/`D`），默认 `""` 不过滤；设为 `B` 会剔除 C/D。
 - `request.accept_4xx`：是否把 403/404 等算作可达，默认 `true`。
 - `request.timeout` / `request.workers`：请求超时和并发数。
 

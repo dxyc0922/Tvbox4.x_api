@@ -60,11 +60,25 @@ def clean_env(workdir: Path) -> dict[str, str]:
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTHONUNBUFFERED": "1",
     }
-    # Windows 上缺少 SYSTEMROOT/WINDIR 会导致 ssl/socket 初始化失败。
-    for key in ("SYSTEMROOT", "WINDIR", "COMSPEC", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE"):
+    # Windows 上缺少 SYSTEMROOT/WINDIR 会导致 ssl/socket 初始化失败；
+    # 缺少 APPDATA 时 Python 找不到用户级 site-packages（本机依赖常装在那里）。
+    for key in (
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_ARCHITECTURE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "USERPROFILE",
+    ):
         value = os.environ.get(key)
         if value:
             env[key] = value
+    # 让子进程沿用父进程能看到的依赖路径（含用户级 site-packages）。
+    extra_path = os.pathsep.join(p for p in sys.path if p and os.path.isdir(p))
+    if extra_path:
+        env["PYTHONPATH"] = extra_path
     return {key: value for key, value in env.items() if value}
 
 
@@ -130,7 +144,9 @@ def run_one(
 
     script_dir = workdir / "cwd" / str(index)
     script_dir.mkdir(parents=True, exist_ok=True)
-    command = [sys.executable, "-I", str(RUNNER), str(job_path)]
+    # -P：不把脚本目录/当前目录加进 sys.path（防止脚本目录里的同名模块被优先导入）；
+    # 不用 -I，因为 -I 会连带禁用用户 site-packages，本机依赖常装在那里。
+    command = [sys.executable, "-P", str(RUNNER), str(job_path)]
     started = time.time()
     timed_out = False
     stdout = ""
@@ -244,6 +260,70 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return summary
 
 
+def analyze_streams(
+    rows: list[dict[str, Any]],
+    scripts: list[Path],
+    config: dict[str, Any],
+    workers: int,
+) -> dict[str, int]:
+    """对拿到播放地址的脚本做二次分析：源类型 + 广告特征。"""
+    import stream_check
+
+    by_name = {path.name: path for path in scripts}
+    request_cfg = config.get("request") or {}
+    max_hosts = int(request_cfg.get("max_hosts_per_script") or 8)
+    max_fallback = int(request_cfg.get("max_fallback_hosts") or 3)
+
+    def site_hosts(name: str) -> list[str]:
+        path = by_name.get(name)
+        if path is None:
+            return []
+        try:
+            source = path.read_text(encoding="utf-8", errors="replace")
+            hosts, _tier = update_api.extract_hosts(source, max_hosts, max_fallback)
+            return hosts
+        except OSError:
+            return []
+
+    targets = [
+        row
+        for row in rows
+        if row.get("stream_url") and int(row.get("stream_parse") or 0) == 0
+    ]
+    if not targets:
+        return {}
+
+    print(f"分析播放地址: {len(targets)} 个，并发 {workers}")
+    done = 0
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(
+                stream_check.analyze_stream,
+                row["stream_url"],
+                site_hosts(str(row.get("file") or "")),
+                None,
+                12.0,
+            ): row
+            for row in targets
+        }
+        for future in as_completed(futures):
+            row = futures[future]
+            try:
+                row["stream"] = future.result()
+            except Exception as exc:  # noqa: BLE001
+                row["stream"] = {"grade": "D", "error": f"{type(exc).__name__}: {exc}"}
+            done += 1
+            if done % 20 == 0 or done == len(futures):
+                print(f"  已分析 {done}/{len(futures)}")
+
+    summary: dict[str, int] = {}
+    for row in rows:
+        stream = row.get("stream") or {}
+        grade = stream.get("grade") or "D"
+        summary[grade] = summary.get(grade, 0) + 1
+    return summary
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="隔离执行上游 py 脚本，做功能校验")
     parser.add_argument("--config", default=str(update_api.DEFAULT_CONFIG_PATH))
@@ -253,6 +333,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--keyword", help="搜索关键词，默认取配置")
     parser.add_argument("--timeout", type=int, help="单个脚本超时秒数")
     parser.add_argument("--workers", type=int, help="并发数")
+    parser.add_argument("--stream-workers", type=int, help="播放地址分析并发数")
+    parser.add_argument("--no-stream", action="store_true", help="不分析播放地址（跳过广告/源类型判断）")
     parser.add_argument("--limit", type=int, default=0, help="只测前 N 个脚本")
     return parser.parse_args(argv)
 
@@ -295,6 +377,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  已测试 {done}/{len(futures)}")
 
     rows.sort(key=lambda row: str(row.get("file")))
+
+    stream_summary: dict[str, int] = {}
+    if not args.no_stream:
+        stream_summary = analyze_streams(rows, scripts, config, args.stream_workers or 6)
+
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "keyword": keyword,
@@ -302,6 +389,7 @@ def main(argv: list[str] | None = None) -> int:
         "workers": workers,
         "total": len(rows),
         "summary": summarize(rows),
+        "stream_summary": stream_summary,
         "scripts": rows,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -314,6 +402,14 @@ def main(argv: list[str] | None = None) -> int:
         f"1分 {summary['score1']}，0分 {summary['score0']}，"
         f"超时 {summary['timeout']}，导入失败 {summary['import_failed']}"
     )
+    if stream_summary:
+        print(
+            "源质量: "
+            f"A 自营 {stream_summary.get('A', 0)}，"
+            f"B 第三方 {stream_summary.get('B', 0)}，"
+            f"C 搬运/解析 {stream_summary.get('C', 0)}，"
+            f"D 无法验证 {stream_summary.get('D', 0)}"
+        )
     print(f"报告: {output}")
     return 0
 
