@@ -1,0 +1,55 @@
+name: 自动更新接口
+
+on:
+  schedule:
+    # UTC 18:00 = 北京时间次日 02:00
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-tvbox-api
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 拉取、校验并更新接口.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/update_api.py
+
+      - name: 上传校验报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: reports/validation-report.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 提交并推送
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "接口.json"
+          if git diff --cached --quiet; then
+            echo "接口.json 没有变化，跳过提交"
+          else
+            git commit -m "chore: 自动更新接口.json ($(date -u +%F))"
+            git push
+          fi

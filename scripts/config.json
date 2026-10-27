@@ -1,0 +1,31 @@
+{
+    "upstream": {
+        "owner": "wzxxcz",
+        "repo": "wzxxcz",
+        "branch": "maing",
+        "path": "py"
+    },
+    "output": "接口.json",
+    "accelerator": "https://gh-proxy.com/",
+    "auto_key_prefix": "wzxxcz_",
+    "preserve_api_prefixes": [
+        "./"
+    ],
+    "preserve_non_http": true,
+    "exclude_scripts": [],
+    "exclude_names": [],
+    "safety": {
+        "min_previous_ratio": 0.5,
+        "max_download_failure_ratio": 0.2
+    },
+    "request": {
+        "timeout": 10,
+        "retries": 1,
+        "workers": 20,
+        "download_workers": 12,
+        "accept_4xx": true,
+        "accept_5xx": false,
+        "max_hosts_per_script": 8,
+        "max_fallback_hosts": 3
+    }
+}
