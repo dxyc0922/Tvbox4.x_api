@@ -24,6 +24,8 @@ Github加速地址：https://gh-proxy.com/https://raw.githubusercontent.com/dxyc
 - 每天北京时间 02:00 自动运行，也可以在 GitHub Actions 页面手动触发。
 - 临时拉取上游 `wzxxcz/wzxxcz` 的 `py/` 目录，不提交脚本文件。
 - 解析每个脚本里的 host（支持 `HOST`、`HOSTS`、`host`、`xurl` 等变量，以及 `_dk8` 混淆字符串）。
+- 只接受定义了 `class Spider` 的脚本：上游混入的报错 HTML、命令行脚本会被跳过。
+- 代码内容相同的脚本（改名副本）只保留一个，优先保留文件名不带广告后缀、更短的那个。
 - host 返回 `2xx/3xx/4xx` 视为可达；`5xx`、DNS 失败、连接超时视为失效。
 - 重建 `接口.json` 的 `sites`：
   - `api` 以 `./` 开头（本地脚本）或其他非 http 站点原样保留；
@@ -48,6 +50,8 @@ python scripts/update_api.py --source-dir /path/to/py --dry-run
 
 - `accelerator`：GitHub 加速前缀，默认 `https://gh-proxy.com/`。
 - `exclude_scripts` / `exclude_names`：排除不想加入的脚本。
+- `filters.require_spider_class`：只接受定义了 `class Spider` 的脚本，默认 `true`。
+- `filters.dedupe_identical_scripts`：按代码内容去重改名副本，默认 `true`。
 - `request.accept_4xx`：是否把 403/404 等算作可达，默认 `true`。
 - `request.timeout` / `request.workers`：请求超时和并发数。
 

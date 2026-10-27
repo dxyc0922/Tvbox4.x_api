@@ -7,6 +7,8 @@
 - 接口.json 中 api 以 ./ 开头（或不是 http/https）的站点原样保留；
 - 所有 http/https 站点删除后，用校验通过的上游脚本重新生成；
 - host 返回 2xx/3xx/4xx 视为可达，5xx、DNS 失败、连接超时视为失效；
+- 只接受定义了 Spider 类的脚本，错误页/命令行脚本会被跳过；
+- 代码内容相同的脚本只保留一个；
 - 只读取/解析上游脚本，不执行任何上游代码。
 """
 
@@ -54,6 +56,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "preserve_non_http": True,
     "exclude_scripts": [],
     "exclude_names": [],
+    "filters": {
+        "require_spider_class": True,
+        "dedupe_identical_scripts": True,
+    },
     "safety": {
         "min_previous_ratio": 0.5,
         "max_download_failure_ratio": 0.2,
@@ -178,6 +184,7 @@ class ScriptResult:
     http_status: int | None = None
     error: str | None = None
     entry: dict[str, Any] | None = None
+    fingerprint: str = ""
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -626,6 +633,41 @@ def is_error_page(source: str) -> bool:
     return False
 
 
+def has_spider_class(source: str) -> bool:
+    """TVBox/影视仓 的 py 源必须定义 class Spider，否则加载即失败。"""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return bool(re.search(r"^\s*class\s+Spider\b", source, re.M))
+    return any(
+        isinstance(node, ast.ClassDef) and node.name == "Spider"
+        for node in ast.walk(tree)
+    )
+
+
+def source_fingerprint(source: str) -> str:
+    """代码指纹：忽略注释/空白/中文文案，保留 URL，用于识别改名副本。"""
+    try:
+        parts: list[str] = []
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type in (
+                tokenize.COMMENT,
+                tokenize.NL,
+                tokenize.NEWLINE,
+                tokenize.INDENT,
+                tokenize.DEDENT,
+                tokenize.ENCODING,
+            ):
+                continue
+            parts.append(token.string)
+        normalized = "\x00".join(parts)
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        normalized = re.sub(r"#[^\n]*", "", source)
+        normalized = re.sub(r"\s+", "", normalized)
+    normalized = re.sub(r"[\u4e00-\u9fff]+", "CN", normalized)
+    return hashlib.md5(normalized.encode("utf-8")).hexdigest()
+
+
 def sanitize_name(filename: str) -> str:
     name = Path(filename).stem
     name = AD_SUFFIX_RE.sub("", name)
@@ -868,6 +910,7 @@ def dedupe_entries(
     )
 
     seen_names = set(preserved_names)
+    seen_fingerprints: dict[str, str] = {}
     entries: list[dict[str, Any]] = []
     skipped: list[ScriptResult] = []
     for result in candidates:
@@ -883,6 +926,14 @@ def dedupe_entries(
             result.error = "同名站点已存在"
             skipped.append(result)
             continue
+        if result.fingerprint:
+            twin = seen_fingerprints.get(result.fingerprint)
+            if twin:
+                result.status = "duplicate"
+                result.error = f"与 {twin} 代码内容相同"
+                skipped.append(result)
+                continue
+            seen_fingerprints[result.fingerprint] = result.filename
         seen_names.add(name)
         entries.append(result.entry)
 
@@ -1016,6 +1067,9 @@ def main(argv: list[str] | None = None) -> int:
     download_workers = int(config["request"]["download_workers"])
     max_hosts = int(config["request"]["max_hosts_per_script"])
     max_fallback = int(config["request"]["max_fallback_hosts"])
+    filters = config.get("filters") or {}
+    require_spider = bool(filters.get("require_spider_class", True))
+    dedupe_by_content = bool(filters.get("dedupe_identical_scripts", True))
 
     def process(filename: str) -> ScriptResult:
         name = sanitize_name(filename)
@@ -1029,10 +1083,24 @@ def main(argv: list[str] | None = None) -> int:
             return ScriptResult(
                 filename, name, "skipped", error=f"错误页/HTML: {source_url}"
             )
+        if require_spider and not has_spider_class(source):
+            return ScriptResult(
+                filename, name, "skipped", error="缺少 class Spider，不是 TVBox py 源"
+            )
+        fingerprint = source_fingerprint(source) if dedupe_by_content else ""
         hosts, tier = extract_hosts(source, max_hosts, max_fallback)
         if not hosts:
-            return ScriptResult(filename, name, "no_host", tier=tier)
-        return ScriptResult(filename, name, "pending", hosts=hosts, tier=tier)
+            return ScriptResult(
+                filename, name, "no_host", tier=tier, fingerprint=fingerprint
+            )
+        return ScriptResult(
+            filename,
+            name,
+            "pending",
+            hosts=hosts,
+            tier=tier,
+            fingerprint=fingerprint,
+        )
 
     print(f"开始下载并解析脚本（并发 {download_workers}）...")
     with ThreadPoolExecutor(max_workers=download_workers) as executor:

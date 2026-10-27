@@ -14,6 +14,10 @@
     "preserve_non_http": true,
     "exclude_scripts": [],
     "exclude_names": [],
+    "filters": {
+        "require_spider_class": true,
+        "dedupe_identical_scripts": true
+    },
     "safety": {
         "min_previous_ratio": 0.5,
         "max_download_failure_ratio": 0.2
