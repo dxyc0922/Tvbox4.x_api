@@ -915,7 +915,7 @@ def effective_grade(quality: dict[str, Any] | None) -> str:
     stream = (quality or {}).get("stream") or {}
     grade = str(stream.get("grade") or "").upper()
     kind = str(stream.get("kind") or "")
-    if not grade or kind in ("local", "unknown"):
+    if not grade or not kind or kind in ("local", "unknown"):
         return "U"
     return grade
 
@@ -1330,9 +1330,14 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        if len(removed) >= 10 and len(entries) < len(removed) * min_previous_ratio:
+        # 质量过滤是我们主动删源，不算「上游异常」，回加后再比较。
+        intentional = counts.get("low_quality", 0)
+        if (
+            len(removed) >= 10
+            and len(entries) + intentional < len(removed) * min_previous_ratio
+        ):
             print(
-                f"本次可用站点 {len(entries)} 个，比上次的 {len(removed)} 个少了一半以上，"
+                f"本次可用站点 {len(entries) + intentional} 个，比上次的 {len(removed)} 个少了一半以上，"
                 "为避免误删，本次不写入。确认无误可加 --force。",
                 file=sys.stderr,
             )

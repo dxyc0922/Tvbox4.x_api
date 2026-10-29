@@ -70,6 +70,9 @@ AD_KEYWORD = re.compile(
     re.I,
 )
 
+# 字节系 VOD 存储路径：域名会轮换（douyinvod.com / zjcdn.com / ...），但路径稳定。
+BYTEDANCE_PATH = re.compile(r"/video/tos/|/tos-cn-|tos-cn-v-", re.I)
+
 GRADE_ORDER = {"A": 0, "B": 1, "C": 2, "D": 3}
 
 
@@ -88,21 +91,35 @@ def registrable_domain(host: str) -> str:
     return ".".join(parts[-2:])
 
 
-def platform_of(host: str) -> str | None:
+def platform_of(url_or_host: str) -> str | None:
+    """命中平台 CDN 返回平台名。
+
+    除了域名名单，还要看路径特征：字节的 VOD 存储路径形如
+    `/video/tos/cn/tos-cn-v-xxxx/`，即使域名轮换成 zjcdn.com 也能认出来。
+    """
+    value = url_or_host or ""
+    if "://" in value:
+        parsed = urllib.parse.urlparse(value)
+        host, path = parsed.netloc, parsed.path
+    else:
+        host, path = value, ""
     domain = registrable_domain(host)
     if domain in PLATFORM_HOSTS:
         return PLATFORM_HOSTS[domain]
     for suffix, name in PLATFORM_HOSTS.items():
-        if domain.endswith("." + suffix):
+        if domain == suffix or domain.endswith("." + suffix):
             return name
+    if BYTEDANCE_PATH.search(path):
+        return "抖音"
     return None
 
 
-def site_relation(stream_host: str, site_hosts: list[str]) -> str:
+def site_relation(stream_url: str, site_hosts: list[str], final_url: str = "") -> str:
     """self / platform / third"""
-    if platform_of(stream_host):
+    if platform_of(stream_url) or (final_url and platform_of(final_url)):
         return "platform"
-    target = registrable_domain(stream_host)
+    value = stream_url if "://" in stream_url else "http://" + stream_url
+    target = registrable_domain(urllib.parse.urlparse(value).netloc)
     for site in site_hosts:
         if target and target == registrable_domain(site):
             return "self"
@@ -287,6 +304,7 @@ def analyze_stream(
         result.update(kind="local", error="本地代理地址，无法在外部验证")
         return result
 
+    final_url = ""
     try:
         resp = request(url, referer, timeout, stream=True)
         content_type = (resp.headers.get("Content-Type") or "").lower()
@@ -298,22 +316,30 @@ def analyze_stream(
             body = resp.content[:262144]
         elif "video/" in content_type or "octet-stream" in content_type:
             size = resp.headers.get("Content-Length")
-            result.update(kind="mp4" if "mp4" in content_type else "video", size=int(size) if size and size.isdigit() else None)
+            result.update(
+                kind="mp4" if "mp4" in content_type else "video",
+                size=int(size) if size and size.isdigit() else None,
+                final_url=final_url[:300],
+            )
             resp.close()
-            result["relation"] = site_relation(host, site_hosts)
+            result["relation"] = site_relation(url, site_hosts, final_url)
             result["grade"] = grade_of(result)
             return result
         elif "audio/" in content_type:
             size = resp.headers.get("Content-Length")
-            result.update(kind="audio", size=int(size) if size and size.isdigit() else None)
+            result.update(
+                kind="audio",
+                size=int(size) if size and size.isdigit() else None,
+                final_url=final_url[:300],
+            )
             resp.close()
-            result["relation"] = site_relation(host, site_hosts)
+            result["relation"] = site_relation(url, site_hosts, final_url)
             result["grade"] = grade_of(result)
             return result
         resp.close()
     except Exception as exc:  # noqa: BLE001
         result["error"] = f"{type(exc).__name__}: {exc}"[:200]
-        result["relation"] = site_relation(host, site_hosts)
+        result["relation"] = site_relation(url, site_hosts, final_url)
         return result
 
     text = body.decode("utf-8", "replace")
@@ -321,7 +347,7 @@ def analyze_stream(
     if "#EXTM3U" in text:
         detail = analyze_hls(final_url, referer, timeout)
         result.update(detail)
-        result["relation"] = site_relation(host, site_hosts)
+        result["relation"] = site_relation(url, site_hosts, final_url)
     elif "<html" in text.lower() or "<!doctype" in text.lower():
         found = find_m3u8(text, final_url)
         result.update(kind="page", page_url=final_url, m3u8_found=len(found))
@@ -329,11 +355,11 @@ def analyze_stream(
             detail = analyze_hls(found[0], final_url, timeout)
             if detail.get("kind") == "hls":
                 result.update(detail)
-                result["relation"] = site_relation(host, site_hosts)
+                result["relation"] = site_relation(url, site_hosts, final_url)
             else:
-                result["relation"] = site_relation(host, site_hosts)
+                result["relation"] = site_relation(url, site_hosts, final_url)
     else:
-        result["relation"] = site_relation(host, site_hosts)
+        result["relation"] = site_relation(url, site_hosts, final_url)
 
     result["grade"] = grade_of(result)
     return result

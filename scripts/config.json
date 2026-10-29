@@ -19,7 +19,7 @@
         "dedupe_identical_scripts": true
     },
     "functional": {
-        "enabled": false,
+        "enabled": true,
         "report": "reports/functional-report.json",
         "min_score": 0,
         "keyword": "庆余年",
@@ -27,8 +27,8 @@
         "workers": 6
     },
     "quality": {
-        "min_grade": "",
-        "drop_unverified": false
+        "min_grade": "B",
+        "drop_unverified": true
     },
     "safety": {
         "min_previous_ratio": 0.5,
