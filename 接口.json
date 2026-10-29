@@ -95,6 +95,12 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E4%BD%8E%E7%AB%AF%E5%BD%B1%E8%A7%86.py"
         },
         {
+            "key": "wzxxcz_65e7fa6d3289",
+            "name": "八度影院",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%85%AB%E5%BA%A6%E5%BD%B1%E9%99%A2.py"
+        },
+        {
             "key": "wzxxcz_a2bce5b5d0c8",
             "name": "分享央视",
             "type": 3,
@@ -269,6 +275,12 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%94%B5%E5%BD%B1%E4%BE%A0.py"
         },
         {
+            "key": "wzxxcz_b0b6e09f681b",
+            "name": "电影猎手",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%94%B5%E5%BD%B1%E7%8C%8E%E6%89%8B.py"
+        },
+        {
             "key": "wzxxcz_4cb04cb64ffd",
             "name": "看剧AIxcz",
             "type": 3,
@@ -339,6 +351,12 @@
             "name": "追剧猫",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E8%BF%BD%E5%89%A7%E7%8C%AB.py"
+        },
+        {
+            "key": "wzxxcz_6cdd06cd7473",
+            "name": "追剧达人",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E8%BF%BD%E5%89%A7%E8%BE%BE%E4%BA%BA.py"
         },
         {
             "key": "wzxxcz_de99ad504f23",
