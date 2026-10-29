@@ -41,18 +41,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/AI%E6%90%9C%E5%89%A7.py"
         },
         {
-            "key": "wzxxcz_8f8e75196f06",
-            "name": "EcoHub影视",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/EcoHub%E5%BD%B1%E8%A7%86%F0%9F%8D%80TG%20%40hshsjk9.py"
-        },
-        {
-            "key": "wzxxcz_b5503e1a86e1",
-            "name": "ZIP0影视",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/ZIP0%E5%BD%B1%E8%A7%86.py"
-        },
-        {
             "key": "wzxxcz_7eb950e5e300",
             "name": "vidhub",
             "type": 3,
@@ -93,12 +81,6 @@
             "name": "低端影视",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E4%BD%8E%E7%AB%AF%E5%BD%B1%E8%A7%86.py"
-        },
-        {
-            "key": "wzxxcz_65e7fa6d3289",
-            "name": "八度影院",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%85%AB%E5%BA%A6%E5%BD%B1%E9%99%A2.py"
         },
         {
             "key": "wzxxcz_a2bce5b5d0c8",
@@ -287,12 +269,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%9C%8B%E5%89%A7AIxcz.py"
         },
         {
-            "key": "wzxxcz_7f8aa687b404",
-            "name": "看看鸭",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%9C%8B%E7%9C%8B%E9%B8%AD.py"
-        },
-        {
             "key": "wzxxcz_b9d2b449dce7",
             "name": "短剧巴士",
             "type": 3,
@@ -389,12 +365,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%A3%9E%E5%BF%ABTV.py"
         },
         {
-            "key": "wzxxcz_f5097323037b",
-            "name": "飞流视频",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%A3%9E%E6%B5%81%E8%A7%86%E9%A2%91%F0%9F%8D%80TG%20%40hshsjk9.py"
-        },
-        {
             "key": "wzxxcz_89c6b034a623",
             "name": "饭搭子影视",
             "type": 3,
@@ -417,12 +387,6 @@
             "name": "麻花影视",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%BA%BB%E8%8A%B1%E5%BD%B1%E8%A7%86.py"
-        },
-        {
-            "key": "wzxxcz_c8ea777bf84a",
-            "name": "黄豆短剧",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%BB%84%E8%B1%86%E7%9F%AD%E5%89%A7.py"
         }
     ],
     "lives": [

@@ -135,6 +135,23 @@ python scripts/update_api.py
 python scripts/update_api.py --source-dir /path/to/py --dry-run
 ```
 
+### 成人内容过滤
+
+默认开启（`filters.exclude_adult = true`）。判定分两条，都不依赖关键词搜索是否准确：
+
+1. **分类名**：首页 `homeContent` 返回的分类里出现 `伦理片` / `理论片` / `福利` / `里番` / `无码` /
+   `三级` / `成人` / `麻豆` / `蜜桃` / `星空传媒` / `自拍` / `偷拍` / `乱伦` 等。
+   `伦理` / `理论` 必须带「片」或单独成词，所以「家庭伦理」「伦理现实」「女性成长」这类正常短剧分类不会被误判。
+2. **探针搜索**：用 `functional.adult_probe_keywords`（默认「麻豆传媒」「被家长调教的女教师」）再搜一遍。
+   只要结果标题里出现探针关键词原文、工作室品牌或明确成人词，就判定为成人源——能搜出完整成人片名，
+   说明站点确实收录了这类内容。
+
+实测 221 个脚本命中 6 个：EcoHub影视（`伦理片` 分类）、ZIP0影视、飞流视频（能搜出
+《家访后，被家长调教的女教师》）、悟空传媒、熊猫秒播、黄豆短剧。`接口.json` 因此从 70 个站点降到 64 个。
+
+如果某个源被误判，把文件名加进 `filters.adult_allow`（例如 `["ZIP0影视.py"]`）即可豁免。
+代价是每个首页正常的脚本多 1–2 次搜索，整轮多约 17 秒。
+
 ### 耗时与并发
 
 一次完整流程（221 个脚本）约 **4 分钟**：
@@ -159,6 +176,10 @@ python scripts/update_api.py --source-dir /path/to/py --dry-run
 - `exclude_scripts` / `exclude_names`：排除不想加入的脚本。
 - `filters.require_spider_class`：只接受定义了 `class Spider` 的脚本，默认 `true`。
 - `filters.dedupe_identical_scripts`：按代码内容去重改名副本，默认 `true`。
+- `filters.exclude_adult`：剔除成人内容源，默认 `true`。
+- `filters.adult_keywords` / `adult_title_keywords`：自定义分类/标题关键词，留空用内置词表。
+- `filters.adult_allow`：误判豁免的文件名列表，例如 `["ZIP0影视.py"]`。
+- `functional.adult_probe_keywords`：成人内容探针关键词，默认「麻豆传媒」「被家长调教的女教师」。
 - `functional.enabled` / `functional.report`：是否自动读取功能校验报告。
 - `functional.min_score`：最低功能评分（0–3），默认 `0` 表示只评分不删源。
 - `functional.keyword` / `timeout` / `workers`：搜索关键词、单脚本超时、并发数。

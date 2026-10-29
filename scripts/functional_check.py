@@ -129,6 +129,7 @@ def run_one(
     index: int,
     keyword: str,
     timeout: int,
+    adult_probe: list[str] | None = None,
 ) -> dict[str, Any]:
     job_path = workdir / "jobs" / f"{index}.json"
     result_path = workdir / "results" / f"{index}.json"
@@ -138,6 +139,8 @@ def run_one(
         "shim": str(SHIM),
         "result": str(result_path),
         "keyword": keyword,
+        "timeout": timeout,
+        "adult_probe": adult_probe or [],
         "limits": make_limits(timeout),
     }
     job_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
@@ -374,9 +377,10 @@ def main(argv: list[str] | None = None) -> int:
     (workdir / "results").mkdir(parents=True, exist_ok=True)
 
     rows: list[dict[str, Any]] = []
+    probes = [str(k) for k in (settings.get("adult_probe_keywords") or []) if str(k).strip()]
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
-            executor.submit(run_one, script, workdir, index, keyword, timeout): script
+            executor.submit(run_one, script, workdir, index, keyword, timeout, probes): script
             for index, script in enumerate(scripts)
         }
         for done, future in enumerate(as_completed(futures), 1):

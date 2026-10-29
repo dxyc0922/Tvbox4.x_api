@@ -16,13 +16,21 @@
     "exclude_names": [],
     "filters": {
         "require_spider_class": true,
-        "dedupe_identical_scripts": true
+        "dedupe_identical_scripts": true,
+        "exclude_adult": true,
+        "adult_keywords": [],
+        "adult_title_keywords": [],
+        "adult_allow": []
     },
     "functional": {
         "enabled": true,
         "report": "reports/functional-report.json",
         "min_score": 0,
         "keyword": "庆余年",
+        "adult_probe_keywords": [
+            "麻豆传媒",
+            "被家长调教的女教师"
+        ],
         "timeout": 30,
         "workers": 12,
         "stream_workers": 12

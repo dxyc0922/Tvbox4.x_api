@@ -59,6 +59,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "filters": {
         "require_spider_class": True,
         "dedupe_identical_scripts": True,
+        "exclude_adult": True,
+        "adult_keywords": [],
+        "adult_title_keywords": [],
+        "adult_allow": [],
     },
     "functional": {
         "enabled": False,
@@ -907,6 +911,106 @@ def load_functional_report(path: Path) -> dict[str, dict[str, Any]]:
     return quality
 
 
+# 分类名精确匹配：这些词单独出现就是成人分类。
+ADULT_CATEGORY_EXACT = frozenset(
+    {"伦理", "理论", "福利", "里番", "无码", "三级", "成人", "情色", "色情", "三级片", "成人片"}
+)
+
+# 分类名包含匹配：必须足够明确，避免「家庭伦理」「伦理现实」这类正常短剧分类被误杀。
+ADULT_CATEGORY_KEYWORDS = (
+    "伦理片",
+    "理论片",
+    "福利片",
+    "成人",
+    "三级",
+    "AV片",
+    "麻豆",
+    "蜜桃",
+    "天美",
+    "星空传媒",
+    "果冻传媒",
+    "精东",
+    "91传媒",
+    "女优",
+    "素人",
+    "自拍",
+    "偷拍",
+    "乱伦",
+    "迷奸",
+    "强奸",
+    "反差婊",
+    "禁忌",
+    "车震",
+    "换妻",
+    "性爱",
+    "换脸",
+    "少妇",
+    "人妻",
+    "调教",
+    "18禁",
+    "R18",
+)
+
+# 标题只认工作室品牌和明确成人词；「调教」「人妻」这类词在正常短剧标题里也会出现。
+ADULT_TITLE_KEYWORDS = (
+    "麻豆传媒",
+    "星空传媒",
+    "果冻传媒",
+    "精东传媒",
+    "天美传媒",
+    "蜜桃传媒",
+    "91制片厂",
+    "无码",
+    "里番",
+    "三级片",
+    "成人片",
+    "18禁",
+    "R18",
+    "AV女优",
+    "女优",
+)
+
+
+def detect_adult(
+    quality: dict[str, Any] | None,
+    category_keywords: tuple[str, ...] | list[str],
+    title_keywords: tuple[str, ...] | list[str],
+    probe_phrases: tuple[str, ...] | list[str] = (),
+) -> list[str]:
+    """从首页分类名和探针搜索结果的分类/标题里识别成人内容。
+
+    分类名用宽一点的词表；标题只用工作室品牌、明确成人词，以及探针关键词原文
+    （站点能搜出「被家长调教的女教师」这种完整片名，说明它确实收录了成人片）。
+    """
+    if not quality:
+        return []
+    hits: list[str] = []
+
+    def add(value: str) -> None:
+        if value not in hits:
+            hits.append(value)
+
+    for label in quality.get("classes") or []:
+        text = str(label).strip()
+        if text in ADULT_CATEGORY_EXACT:
+            add(text)
+        for keyword in category_keywords:
+            if keyword and keyword.lower() in text.lower():
+                add(keyword)
+
+    phrases = [str(p) for p in probe_phrases if str(p).strip()]
+    for label in quality.get("probe_labels") or []:
+        text = str(label)
+        for keyword in title_keywords:
+            if keyword and keyword.lower() in text.lower():
+                add(keyword)
+        for phrase in phrases:
+            if phrase in text:
+                add(f"探针:{phrase}")
+
+    return hits
+
+
 def effective_grade(quality: dict[str, Any] | None) -> str:
     """把功能校验结果换算成 A/B/C/D，无法验证的返回 U。
 
@@ -1016,6 +1120,7 @@ def build_report(
             "skipped": counts.get("skipped", 0),
             "duplicate": counts.get("duplicate", 0),
             "excluded": counts.get("excluded", 0),
+            "excluded_adult": counts.get("excluded_adult", 0),
             "low_quality": counts.get("low_quality", 0),
             "with_quality": sum(1 for result in results if result.quality),
             "grade_a": grades.get("A", 0),
@@ -1225,15 +1330,38 @@ def main(argv: list[str] | None = None) -> int:
     if quality_map:
         min_score = int(functional_cfg.get("min_score") or 0)
         quality_cfg = config.get("quality") or {}
+        filter_cfg = config.get("filters") or {}
+        exclude_adult = bool(filter_cfg.get("exclude_adult", True))
+        adult_keywords = tuple(
+            filter_cfg.get("adult_keywords") or ADULT_CATEGORY_KEYWORDS
+        )
+        adult_title_keywords = tuple(
+            filter_cfg.get("adult_title_keywords") or ADULT_TITLE_KEYWORDS
+        )
+        adult_probes = tuple(
+            str(k) for k in (functional_cfg.get("adult_probe_keywords") or []) if str(k).strip()
+        )
+        adult_allow = {str(name) for name in (filter_cfg.get("adult_allow") or [])}
         min_grade = str(quality_cfg.get("min_grade") or "").strip().upper()
         drop_unverified = bool(quality_cfg.get("drop_unverified"))
         grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
+        adult_hits: list[tuple[str, list[str]]] = []
         for result in results:
             quality = quality_map.get(result.filename)
             if quality is None:
                 continue
             result.quality = quality
+            hits = detect_adult(
+                quality, adult_keywords, adult_title_keywords, adult_probes
+            )
+            if hits:
+                quality["adult_hits"] = hits
+                adult_hits.append((result.filename, hits))
             if result.status != "valid":
+                continue
+            if hits and exclude_adult and result.filename not in adult_allow:
+                result.status = "excluded_adult"
+                result.error = "成人内容: " + "、".join(hits[:5])
                 continue
             if min_score > 0 and int(quality.get("score") or 0) < min_score:
                 result.status = "low_quality"
@@ -1270,6 +1398,13 @@ def main(argv: list[str] | None = None) -> int:
             f"C 搬运/解析 {grades.get('C', 0)}，D 无法验证 {grades.get('D', 0)}，"
             f"U 未取得播放地址 {grades.get('U', 0)}"
         )
+        if adult_hits:
+            print(
+                f"成人内容: 命中 {len(adult_hits)} 个"
+                + ("（已剔除）" if exclude_adult else "（仅标记，未剔除）")
+            )
+            for filename, hits in adult_hits[:10]:
+                print(f"  - {filename}: {'、'.join(hits[:5])}")
 
     entries, skipped = dedupe_entries(results, preserved_names, config)
     counts = Counter(result.status for result in results)
@@ -1281,7 +1416,8 @@ def main(argv: list[str] | None = None) -> int:
         f"不可用 {counts.get('invalid', 0)}，"
         f"无 host {counts.get('no_host', 0)}，"
         f"下载失败 {counts.get('download_failed', 0)}，"
-        f"跳过 {counts.get('skipped', 0)}"
+        f"跳过 {counts.get('skipped', 0)}，"
+        f"成人剔除 {counts.get('excluded_adult', 0)}"
     )
     print(
         f"生成站点: {len(entries)}（同名/排除跳过 {len(skipped)}），"

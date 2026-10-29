@@ -97,6 +97,45 @@ def video_list(payload: Any) -> list[dict[str, Any]]:
     return []
 
 
+def category_names(payload: Any) -> list[str]:
+    """从 homeContent 的 class / filters 里取出分类名，用于识别成人站点。"""
+    names: list[str] = []
+    if not isinstance(payload, dict):
+        return names
+    classes = payload.get("class") or payload.get("classes") or []
+    if isinstance(classes, list):
+        for item in classes:
+            if isinstance(item, dict):
+                value = item.get("type_name") or item.get("name")
+                if value:
+                    names.append(str(value))
+            elif isinstance(item, str):
+                names.append(item)
+    filters = payload.get("filters")
+    if isinstance(filters, dict):
+        for entries in filters.values():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                if str(entry.get("key") or "") != "分类":
+                    continue
+                for value in entry.get("value") or []:
+                    if isinstance(value, dict) and value.get("n"):
+                        names.append(str(value["n"]))
+    return names
+
+
+def item_labels(item: dict[str, Any]) -> list[str]:
+    labels = []
+    for key in ("vod_class", "type_name", "class", "vod_tag", "vod_name", "name"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            labels.append(value.strip())
+    return labels
+
+
 def pick_id(item: dict[str, Any]) -> str | None:
     for key in ("vod_id", "id", "vodId", "ids"):
         value = item.get(key)
@@ -144,6 +183,9 @@ class Reporter:
             "stream_url": "",
             "stream_parse": -1,
             "stream_header": {},
+            "classes": [],
+            "probe_hits": 0,
+            "probe_labels": [],
             "score": 0,
             "stage": "start",
             "elapsed": 0.0,
@@ -224,7 +266,11 @@ def main() -> int:
         try:
             home = getattr(spider, "homeContent", None)
             if callable(home):
-                home_items = video_list(call(home, [False]))
+                payload = call(home, [False])
+                home_items = video_list(payload)
+                classes = category_names(payload)
+                if classes:
+                    reporter.set(classes=classes[:80])
             reporter.set(home_items=len(home_items), home_ok=bool(home_items))
         except Exception as exc:  # noqa: BLE001
             reporter.set(error=f"home: {type(exc).__name__}: {exc}")
@@ -241,6 +287,37 @@ def main() -> int:
             current = reporter.data.get("error")
             reporter.set(error=f"{current}; search: {type(exc).__name__}: {exc}" if current else f"search: {type(exc).__name__}: {exc}")
         reporter.flush()
+
+        # 成人内容探针：只对首页正常的站点跑，且只取分类/标签，不判断标题。
+        probes = [str(k) for k in (job.get("adult_probe") or []) if str(k).strip()]
+        if probes and reporter.data.get("home_ok"):
+            budget = float(job.get("timeout") or 0)
+            reporter.set(stage="adult_probe")
+            labels: list[str] = []
+            hits = 0
+            try:
+                search = getattr(spider, "searchContent", None)
+                if callable(search):
+                    for probe in probes[:3]:
+                        if budget and float(reporter.data.get("elapsed") or 0) > budget * 0.6:
+                            break
+                        items = video_list(call(search, [probe, False, "1"]))
+                        if not items:
+                            continue
+                        hits += len(items)
+                        for item in items[:20]:
+                            labels.extend(item_labels(item))
+                        if len(labels) >= 40:
+                            break
+            except Exception:  # noqa: BLE001
+                pass
+            if labels:
+                unique: list[str] = []
+                for value in labels:
+                    if value not in unique:
+                        unique.append(value)
+                reporter.set(probe_hits=hits, probe_labels=unique[:40])
+            reporter.flush()
 
         vod_id = None
         for item in home_items + search_items:
