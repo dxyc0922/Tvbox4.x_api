@@ -21,6 +21,7 @@ import argparse
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 from datetime import datetime
@@ -31,6 +32,8 @@ SCRIPTS = ROOT / "scripts"
 LOG_DIR = ROOT / "logs"
 OUTPUT = ROOT / "接口.json"
 FUNCTIONAL_REPORT = ROOT / "reports" / "functional-report.json"
+# 功能校验下载好的脚本缓存，生成阶段直接复用，避免重复下载 200+ 个文件。
+SCRIPT_CACHE = Path(tempfile.gettempdir()) / "tvbox-py-cache"
 
 
 def configure_stdio() -> None:
@@ -209,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
                 str(SCRIPTS / "functional_check.py"),
                 "--config",
                 args.config,
+                "--cache-dir",
+                str(SCRIPT_CACHE),
                 "--output",
                 str(FUNCTIONAL_REPORT),
             ]
@@ -218,6 +223,10 @@ def main(argv: list[str] | None = None) -> int:
                 logger.write("功能校验失败，继续只用 host 校验结果\n")
 
         command = [sys.executable, str(SCRIPTS / "update_api.py"), "--config", args.config]
+        # 功能校验已经把脚本下到缓存里了，直接复用，省掉一次全量下载。
+        if args.functional and SCRIPT_CACHE.is_dir() and any(SCRIPT_CACHE.glob("*.py")):
+            command += ["--source-dir", str(SCRIPT_CACHE)]
+            logger.write(f"复用脚本缓存: {SCRIPT_CACHE}\n")
         if args.dry_run:
             command.append("--dry-run")
         if args.force:

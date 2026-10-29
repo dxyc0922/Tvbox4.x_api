@@ -24,7 +24,8 @@
         "min_score": 0,
         "keyword": "庆余年",
         "timeout": 30,
-        "workers": 6
+        "workers": 12,
+        "stream_workers": 12
     },
     "quality": {
         "min_grade": "B",

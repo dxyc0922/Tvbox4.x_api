@@ -211,6 +211,7 @@ def collect_scripts(
     limit: int,
 ) -> list[Path]:
     filenames = update_api.get_upstream_filenames(config, source_dir, None)
+    all_names = list(filenames)
     if limit > 0:
         filenames = filenames[:limit]
     if source_dir is not None:
@@ -218,6 +219,18 @@ def collect_scripts(
 
     target = cache_dir or (Path(os.environ.get("TEMP", "/tmp")) / "tvbox-py-cache")
     target.mkdir(parents=True, exist_ok=True)
+    # 上游已删除的脚本要同步清掉，否则 update_api --source-dir 会带上过期文件。
+    wanted = set(all_names)
+    stale = 0
+    for path in target.glob("*.py"):
+        if path.name not in wanted:
+            try:
+                path.unlink()
+                stale += 1
+            except OSError:
+                pass
+    if stale:
+        print(f"缓存清理 {stale} 个已下线的脚本")
     missing = [name for name in filenames if not (target / name).is_file()]
     if missing:
         workers = int(config["request"]["download_workers"])
@@ -380,7 +393,10 @@ def main(argv: list[str] | None = None) -> int:
 
     stream_summary: dict[str, int] = {}
     if not args.no_stream:
-        stream_summary = analyze_streams(rows, scripts, config, args.stream_workers or 6)
+        stream_workers = int(
+            args.stream_workers or settings.get("stream_workers") or 12
+        )
+        stream_summary = analyze_streams(rows, scripts, config, stream_workers)
 
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

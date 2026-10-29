@@ -135,6 +135,22 @@ python scripts/update_api.py
 python scripts/update_api.py --source-dir /path/to/py --dry-run
 ```
 
+### 耗时与并发
+
+一次完整流程（221 个脚本）约 **4 分钟**：
+
+| 阶段 | 耗时 | 并发 |
+|---|---|---|
+| 功能校验 + 播放地址分析 | ~150s | 12 |
+| 读取脚本 + host 校验 | ~80s | 12 / 20 |
+| 提交推送 | ~5s | — |
+
+功能校验会把脚本缓存到 `%TEMP%\tvbox-py-cache`，生成阶段直接复用（`--source-dir`），
+不再重复下载——之前重复下载 221 个文件要走 gh-proxy，光这一项就要 5 分钟。上游删掉的脚本
+会自动从缓存清理。并发数在 `config.json` 里调：`functional.workers`（功能校验）、
+`functional.stream_workers`（播放地址分析）、`request.workers`（host 校验）、
+`request.download_workers`（下载）。
+
 ### 自定义
 
 编辑 `scripts/config.json`：

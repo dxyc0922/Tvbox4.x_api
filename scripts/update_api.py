@@ -66,7 +66,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "min_score": 0,
         "keyword": "庆余年",
         "timeout": 30,
-        "workers": 6,
+        "workers": 12,
+        "stream_workers": 12,
     },
     "quality": {
         "min_grade": "",
@@ -1161,7 +1162,8 @@ def main(argv: list[str] | None = None) -> int:
             fingerprint=fingerprint,
         )
 
-    print(f"开始下载并解析脚本（并发 {download_workers}）...")
+    action = "读取" if args.source_dir else "下载"
+    print(f"开始{action}并解析脚本（并发 {download_workers}）...")
     with ThreadPoolExecutor(max_workers=download_workers) as executor:
         futures = {executor.submit(process, filename): filename for filename in filenames}
         for index, future in enumerate(as_completed(futures), 1):
