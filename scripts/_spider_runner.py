@@ -164,6 +164,39 @@ def play_stats(vod: dict[str, Any]) -> tuple[int, int, str, str]:
     return len(lines), episodes, first, first_flag
 
 
+def line_samples(vod: dict[str, Any], limit: int) -> list[dict[str, Any]]:
+    """每条线路取第一集的播放地址，最多取 limit 条。
+
+    vod_play_url 用 `$$$` 分隔线路、`#` 分隔集数、`$` 分隔名称和地址，
+    vod_play_from 用 `$$$` 分隔线路名，两者顺序一一对应。
+    """
+    raw = vod.get("vod_play_url") or ""
+    froms = vod.get("vod_play_from") or ""
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    lines = [part for part in raw.split("$$$") if part.strip()]
+    flags = [part for part in str(froms).split("$$$")] if froms else []
+    samples: list[dict[str, Any]] = []
+    for index, line in enumerate(lines):
+        first = ""
+        for item in line.split("#"):
+            if "$" in item:
+                first = item.split("$", 1)[1]
+                break
+        if not first:
+            continue
+        samples.append(
+            {
+                "flag": flags[index] if index < len(flags) else "",
+                "url": first,
+                "index": index,
+            }
+        )
+        if len(samples) >= max(limit, 1):
+            break
+    return samples
+
+
 class Reporter:
     def __init__(self, path: str, name: str) -> None:
         self.path = path
@@ -183,6 +216,7 @@ class Reporter:
             "stream_url": "",
             "stream_parse": -1,
             "stream_header": {},
+            "lines": [],
             "classes": [],
             "probe_hits": 0,
             "probe_labels": [],
@@ -326,16 +360,15 @@ def main() -> int:
                 break
 
         reporter.set(stage="detail")
-        sample_url = ""
-        sample_flag = ""
+        vod: dict[str, Any] | None = None
         try:
             detail = getattr(spider, "detailContent", None)
             if callable(detail) and vod_id:
                 payload = call(detail, [[vod_id]])
                 videos = video_list(payload)
                 if videos:
-                    froms, episodes, sample, flag = play_stats(videos[0])
-                    sample_url, sample_flag = sample, flag
+                    vod = videos[0]
+                    froms, episodes, sample, flag = play_stats(vod)
                     reporter.set(
                         play_from=froms,
                         play_episodes=episodes,
@@ -357,29 +390,51 @@ def main() -> int:
             reporter.set(error=f"{current}; {message}" if current else message)
         reporter.flush()
 
-        # 再走一遍 playerContent，拿到真正的播放地址（m3u8/mp4），用于判断广告。
-        if sample_url:
-            reporter.set(stage="player")
-            try:
+        # 逐线路取第一集调 playerContent，拿到每条线路的真实播放地址。
+        # 只测前 max_lines 条，并用剩余时间预算保护，避免把整个脚本跑超时。
+        if vod is not None:
+            samples = line_samples(vod, int(job.get("max_lines") or 4))
+            if samples:
+                reporter.set(stage="player")
+                budget = float(job.get("timeout") or 0)
                 player = getattr(spider, "playerContent", None)
-                if callable(player):
-                    resolved = call(player, [sample_flag, sample_url, []])
-                    if isinstance(resolved, dict):
-                        stream = str(resolved.get("url") or "")
+                rows: list[dict[str, Any]] = []
+                for sample in samples:
+                    if budget and float(reporter.data.get("elapsed") or 0) > budget * 0.85:
+                        break
+                    row: dict[str, Any] = {
+                        "flag": str(sample["flag"])[:40],
+                        "url": sample["url"][:600],
+                        "parse": -1,
+                    }
+                    if callable(player):
                         try:
-                            parse_flag = int(resolved.get("parse", 0) or 0)
-                        except (TypeError, ValueError):
-                            parse_flag = -1
+                            resolved = call(player, [sample["flag"], sample["url"], []])
+                            if isinstance(resolved, dict):
+                                row["url"] = str(resolved.get("url") or sample["url"])[:600]
+                                try:
+                                    row["parse"] = int(resolved.get("parse", 0) or 0)
+                                except (TypeError, ValueError):
+                                    row["parse"] = -1
+                                header = resolved.get("header") or {}
+                                if isinstance(header, dict) and header:
+                                    row["header"] = {
+                                        str(key): str(value) for key, value in header.items()
+                                    }
+                        except Exception as exc:  # noqa: BLE001
+                            row["error"] = f"{type(exc).__name__}: {exc}"[:200]
+                    else:
+                        row["error"] = "没有 playerContent"
+                    rows.append(row)
+                    if row.get("url") and row.get("parse") == 0 and not reporter.data.get("stream_url"):
                         reporter.set(
-                            stream_url=stream[:600],
-                            stream_parse=parse_flag,
-                            stream_header=resolved.get("header") or {},
+                            stream_url=row["url"],
+                            stream_parse=0,
+                            stream_header=row.get("header") or {},
                         )
-            except Exception as exc:  # noqa: BLE001
-                current = reporter.data.get("error")
-                message = f"player: {type(exc).__name__}: {exc}"
-                reporter.set(error=f"{current}; {message}" if current else message)
-            reporter.flush()
+                if rows:
+                    reporter.set(lines=rows)
+                reporter.flush()
 
         reporter.set(stage="done")
         reporter.flush()

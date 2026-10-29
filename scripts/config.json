@@ -37,7 +37,10 @@
     },
     "quality": {
         "min_grade": "B",
-        "drop_unverified": true
+        "drop_unverified": true,
+        "min_bitrate_kbps": 800,
+        "max_lines": 4,
+        "bitrate_allow": []
     },
     "safety": {
         "min_previous_ratio": 0.5,

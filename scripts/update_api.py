@@ -76,6 +76,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "quality": {
         "min_grade": "",
         "drop_unverified": False,
+        "min_bitrate_kbps": 800,
+        "max_lines": 4,
+        "bitrate_allow": [],
     },
     "safety": {
         "min_previous_ratio": 0.5,
@@ -194,7 +197,7 @@ class ProbeResult:
 class ScriptResult:
     filename: str
     name: str
-    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / low_quality
+    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / low_quality / low_bitrate
     hosts: list[str] = field(default_factory=list)
     tier: str = ""
     checked_host: str | None = None
@@ -1025,6 +1028,70 @@ def effective_grade(quality: dict[str, Any] | None) -> str:
     return grade
 
 
+VIDEO_KINDS = ("hls", "mp4", "video")
+
+
+def bitrate_verdict(
+    quality: dict[str, Any] | None, min_kbps: float
+) -> dict[str, Any]:
+    """判断一个源的所有采样线路是否都低于 min_kbps。
+
+    只有「每条视频线路都测到了码率，且都低于阈值」才算低码率源。
+    有任何一条线路测不出来（解析线路、页面、超时）就保留——没测到不等于低。
+    音频源（听书/音乐）不参与码率判定。
+    """
+    verdict: dict[str, Any] = {
+        "lines": [],
+        "measured": 0,
+        "unknown": 0,
+        "untested": 0,
+        "all_low": False,
+    }
+    if not quality:
+        return verdict
+    entries = list(quality.get("line_streams") or [])
+    if not entries:
+        stream = quality.get("stream") or {}
+        if stream:
+            entries = [{"flag": "", "stream": stream}]
+    measured = 0
+    unknown = 0
+    for entry in entries:
+        stream = entry.get("stream") or {}
+        kind = str(stream.get("kind") or "")
+        if kind == "audio":
+            continue
+        bitrate = int(stream.get("bitrate_kbps") or 0)
+        if kind in VIDEO_KINDS and bitrate > 0:
+            measured += 1
+            low = bitrate < min_kbps
+        else:
+            unknown += 1
+            low = False
+        verdict["lines"].append(
+            {
+                "flag": str(entry.get("flag") or ""),
+                "kind": kind,
+                "bitrate_kbps": bitrate,
+                "height": int(stream.get("height") or 0),
+                "low": low,
+            }
+        )
+    verdict["measured"] = measured
+    # 没测到的线路（解析线路、超出 max_lines 的线路）一律按「未知」处理，源保留。
+    raw_lines = list(quality.get("lines") or [])
+    untested = max(0, len(raw_lines) - len(entries))
+    declared = int(quality.get("play_from") or 0)
+    if declared > len(raw_lines):
+        untested += declared - len(raw_lines)
+    verdict["untested"] = untested
+    verdict["unknown"] = unknown + untested
+    verdict["all_low"] = bool(measured) and verdict["unknown"] == 0 and all(
+        item["low"] for item in verdict["lines"]
+    )
+    return verdict
+
+
 def write_json(path: Path, data: Any, newline: str = "\n") -> None:
     text = json.dumps(data, ensure_ascii=False, indent=4) + "\n"
     if newline == "\r\n":
@@ -1122,6 +1189,7 @@ def build_report(
             "excluded": counts.get("excluded", 0),
             "excluded_adult": counts.get("excluded_adult", 0),
             "low_quality": counts.get("low_quality", 0),
+            "low_bitrate": counts.get("low_bitrate", 0),
             "with_quality": sum(1 for result in results if result.quality),
             "grade_a": grades.get("A", 0),
             "grade_b": grades.get("B", 0),
@@ -1344,6 +1412,10 @@ def main(argv: list[str] | None = None) -> int:
         adult_allow = {str(name) for name in (filter_cfg.get("adult_allow") or [])}
         min_grade = str(quality_cfg.get("min_grade") or "").strip().upper()
         drop_unverified = bool(quality_cfg.get("drop_unverified"))
+        min_bitrate = float(quality_cfg.get("min_bitrate_kbps") or 0)
+        bitrate_allow = {
+            str(name) for name in (quality_cfg.get("bitrate_allow") or [])
+        }
         grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
         adult_hits: list[tuple[str, list[str]]] = []
         for result in results:
@@ -1377,6 +1449,21 @@ def main(argv: list[str] | None = None) -> int:
                 elif grade_rank.get(grade, 3) > grade_rank[min_grade]:
                     result.status = "low_quality"
                     result.error = f"源质量 {grade} 低于 {min_grade}"
+            if (
+                min_bitrate > 0
+                and result.status == "valid"
+                and result.filename not in bitrate_allow
+            ):
+                verdict = bitrate_verdict(quality, min_bitrate)
+                quality["bitrate"] = verdict
+                if verdict["all_low"]:
+                    result.status = "low_bitrate"
+                    detail = "、".join(
+                        f"{item['bitrate_kbps']}kbps" for item in verdict["lines"]
+                    )
+                    result.error = (
+                        f"所有线路码率低于 {min_bitrate:g} kbps（{detail}）"
+                    )
         scores = Counter(
             int(result.quality.get("score") or 0)
             for result in results
@@ -1405,6 +1492,16 @@ def main(argv: list[str] | None = None) -> int:
             )
             for filename, hits in adult_hits[:10]:
                 print(f"  - {filename}: {'、'.join(hits[:5])}")
+        if min_bitrate > 0:
+            low_bitrate = [
+                result for result in results if result.status == "low_bitrate"
+            ]
+            print(
+                f"码率过滤: 剔除 {len(low_bitrate)} 个"
+                f"（所有采样线路均低于 {min_bitrate:g} kbps）"
+            )
+            for result in low_bitrate[:10]:
+                print(f"  - {result.filename}: {result.error}")
 
     entries, skipped = dedupe_entries(results, preserved_names, config)
     counts = Counter(result.status for result in results)
@@ -1417,7 +1514,8 @@ def main(argv: list[str] | None = None) -> int:
         f"无 host {counts.get('no_host', 0)}，"
         f"下载失败 {counts.get('download_failed', 0)}，"
         f"跳过 {counts.get('skipped', 0)}，"
-        f"成人剔除 {counts.get('excluded_adult', 0)}"
+        f"成人剔除 {counts.get('excluded_adult', 0)}，"
+        f"码率剔除 {counts.get('low_bitrate', 0)}"
     )
     print(
         f"生成站点: {len(entries)}（同名/排除跳过 {len(skipped)}），"
@@ -1469,7 +1567,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
         # 质量过滤是我们主动删源，不算「上游异常」，回加后再比较。
-        intentional = counts.get("low_quality", 0)
+        intentional = counts.get("low_quality", 0) + counts.get("low_bitrate", 0)
         if (
             len(removed) >= 10
             and len(entries) + intentional < len(removed) * min_previous_ratio

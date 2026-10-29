@@ -130,6 +130,7 @@ def run_one(
     keyword: str,
     timeout: int,
     adult_probe: list[str] | None = None,
+    max_lines: int = 4,
 ) -> dict[str, Any]:
     job_path = workdir / "jobs" / f"{index}.json"
     result_path = workdir / "results" / f"{index}.json"
@@ -141,6 +142,7 @@ def run_one(
         "keyword": keyword,
         "timeout": timeout,
         "adult_probe": adult_probe or [],
+        "max_lines": max_lines,
         "limits": make_limits(timeout),
     }
     job_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
@@ -282,13 +284,18 @@ def analyze_streams(
     config: dict[str, Any],
     workers: int,
 ) -> dict[str, int]:
-    """对拿到播放地址的脚本做二次分析：源类型 + 广告特征。"""
+    """对拿到播放地址的脚本做二次分析：源类型 + 广告特征 + 码率。
+
+    每条线路各取第一集分析（上限 quality.max_lines），结果写进 line_streams；
+    stream 仍保留第一条线路的结果，兼容旧报告和等级判定。
+    """
     import stream_check
 
     by_name = {path.name: path for path in scripts}
     request_cfg = config.get("request") or {}
     max_hosts = int(request_cfg.get("max_hosts_per_script") or 8)
     max_fallback = int(request_cfg.get("max_fallback_hosts") or 3)
+    max_lines = int((config.get("quality") or {}).get("max_lines") or 4)
 
     def site_hosts(name: str) -> list[str]:
         path = by_name.get(name)
@@ -301,36 +308,73 @@ def analyze_streams(
         except OSError:
             return []
 
-    targets = [
-        row
-        for row in rows
-        if row.get("stream_url") and int(row.get("stream_parse") or 0) == 0
-    ]
-    if not targets:
+    jobs: list[tuple[dict[str, Any], int, str, str, list[str]]] = []
+    for row in rows:
+        picked: list[tuple[int, str, str]] = []
+        for index, line in enumerate((row.get("lines") or [])[:max_lines]):
+            url = str(line.get("url") or "")
+            if not url:
+                continue
+            try:
+                parse = int(line.get("parse") or 0)
+            except (TypeError, ValueError):
+                parse = -1
+            if parse != 0:
+                continue
+            picked.append((index, str(line.get("flag") or ""), url))
+        if not picked:
+            url = str(row.get("stream_url") or "")
+            if url and int(row.get("stream_parse") or 0) == 0:
+                picked = [(0, str(row.get("play_flag") or ""), url)]
+        if not picked:
+            continue
+        hosts = site_hosts(str(row.get("file") or ""))
+        row["line_streams"] = []
+        for index, flag, url in picked:
+            jobs.append((row, index, flag, url, hosts))
+
+    if not jobs:
         return {}
 
-    print(f"分析播放地址: {len(targets)} 个，并发 {workers}")
+    sources = len({id(job[0]) for job in jobs})
+    print(f"分析播放地址: {len(jobs)} 条线路（{sources} 个源），并发 {workers}")
     done = 0
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
             executor.submit(
                 stream_check.analyze_stream,
-                row["stream_url"],
-                site_hosts(str(row.get("file") or "")),
+                url,
+                hosts,
                 None,
                 12.0,
-            ): row
-            for row in targets
+            ): (row, index, flag, url)
+            for row, index, flag, url, hosts in jobs
         }
         for future in as_completed(futures):
-            row = futures[future]
+            row, index, flag, url = futures[future]
             try:
-                row["stream"] = future.result()
+                stream = future.result()
             except Exception as exc:  # noqa: BLE001
-                row["stream"] = {"grade": "D", "error": f"{type(exc).__name__}: {exc}"}
+                stream = {"grade": "D", "error": f"{type(exc).__name__}: {exc}"}
+            row["line_streams"].append(
+                {
+                    "flag": flag,
+                    "index": index,
+                    "url": url[:300],
+                    "stream": stream,
+                }
+            )
+            # 第一条线路的结果同时写进 stream，保持原有等级判定口径。
+            if index == 0 and not row.get("stream"):
+                row["stream"] = stream
             done += 1
             if done % 20 == 0 or done == len(futures):
                 print(f"  已分析 {done}/{len(futures)}")
+
+    for row in rows:
+        lines = row.get("line_streams")
+        if lines:
+            row["line_streams"] = sorted(lines, key=lambda item: item.get("index", 0))
 
     summary: dict[str, int] = {}
     for row in rows:
@@ -378,9 +422,12 @@ def main(argv: list[str] | None = None) -> int:
 
     rows: list[dict[str, Any]] = []
     probes = [str(k) for k in (settings.get("adult_probe_keywords") or []) if str(k).strip()]
+    max_lines = int((config.get("quality") or {}).get("max_lines") or 4)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
-            executor.submit(run_one, script, workdir, index, keyword, timeout, probes): script
+            executor.submit(
+                run_one, script, workdir, index, keyword, timeout, probes, max_lines
+            ): script
             for index, script in enumerate(scripts)
         }
         for done, future in enumerate(as_completed(futures), 1):

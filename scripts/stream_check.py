@@ -21,7 +21,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import statistics
+import subprocess
 import urllib.parse
 from typing import Any
 
@@ -126,18 +128,80 @@ def site_relation(stream_url: str, site_hosts: list[str], final_url: str = "") -
     return "third"
 
 
-def request(url: str, referer: str | None = None, timeout: float = 12.0, stream: bool = False):
-    headers = {"User-Agent": UA}
+def request(
+    url: str,
+    referer: str | None = None,
+    timeout: float = 12.0,
+    stream: bool = False,
+    headers: dict[str, str] | None = None,
+):
+    merged = {"User-Agent": UA}
     if referer:
-        headers["Referer"] = referer
+        merged["Referer"] = referer
+    if headers:
+        merged.update(headers)
     return requests.get(
         url,
-        headers=headers,
+        headers=merged,
         timeout=timeout,
         verify=False,
         allow_redirects=True,
         stream=stream,
     )
+
+
+FFPROBE = shutil.which("ffprobe")
+
+
+def probe_media(url: str, referer: str | None, timeout: float = 8.0) -> dict[str, Any]:
+    """用 ffprobe 读取视频流的码率和分辨率。
+
+    只对 mp4/直链视频用，HLS 有更便宜的办法（master 的 BANDWIDTH 或分片大小）。
+    没装 ffprobe、超时、流不可解析都返回空字典，调用方按「未知」处理。
+    """
+    if not FFPROBE:
+        return {}
+    headers = f"User-Agent: {UA}\r\n"
+    if referer:
+        headers += f"Referer: {referer}\r\n"
+    limit = max(float(timeout), 3.0)
+    command = [
+        FFPROBE,
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=bit_rate,height,width",
+        "-of", "json",
+        "-headers", headers,
+        "-rw_timeout", str(int(limit * 1_000_000)),
+        "-i", url,
+    ]
+    try:
+        done = subprocess.run(
+            command,
+            capture_output=True,
+            timeout=limit + 2,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if done.returncode != 0:
+        return {}
+    try:
+        payload = json.loads(done.stdout.decode("utf-8", "replace"))
+    except json.JSONDecodeError:
+        return {}
+    streams = payload.get("streams") or []
+    if not streams or not isinstance(streams[0], dict):
+        return {}
+    stream = streams[0]
+    bitrate = stream.get("bit_rate")
+    height = stream.get("height")
+    result: dict[str, Any] = {}
+    if str(bitrate).isdigit() and int(bitrate) > 0:
+        result["bitrate_kbps"] = round(int(bitrate) / 1000)
+    if str(height).isdigit() and int(height) > 0:
+        result["height"] = int(height)
+    return result
 
 
 def parse_master(text: str, base: str) -> list[dict[str, Any]]:
@@ -166,6 +230,7 @@ def parse_master(text: str, base: str) -> list[dict[str, Any]]:
 def parse_media(text: str, base: str) -> dict[str, Any]:
     segments: list[str] = []
     durations: list[float] = []
+    entries: list[dict[str, Any]] = []
     current: float | None = None
     tags: list[str] = []
     for raw in text.splitlines():
@@ -180,8 +245,11 @@ def parse_media(text: str, base: str) -> dict[str, Any]:
                 except ValueError:
                     current = None
             continue
-        segments.append(urllib.parse.urljoin(base, line))
-        durations.append(current if current is not None else 0.0)
+        url = urllib.parse.urljoin(base, line)
+        duration = current if current is not None else 0.0
+        segments.append(url)
+        durations.append(duration)
+        entries.append({"url": url, "duration": duration})
         current = None
 
     hosts: dict[str, int] = {}
@@ -194,8 +262,66 @@ def parse_media(text: str, base: str) -> dict[str, Any]:
         "segments": len(segments),
         "hosts": hosts,
         "durations": real,
+        "entries": entries,
         "tags": tags,
     }
+
+
+def segment_size(url: str, referer: str | None, timeout: float) -> int:
+    """取分片总字节数。用 Range 只请求 2 字节，靠 Content-Range 拿总大小。
+
+    有些服务器不认 Range，会返回 200 + 完整 Content-Length；这里用 stream=True，
+    拿到响应头就关闭，不会真的下载整个分片。
+    """
+    try:
+        resp = request(
+            url, referer, timeout, stream=True, headers={"Range": "bytes=0-1"}
+        )
+    except Exception:  # noqa: BLE001
+        return 0
+    try:
+        if resp.status_code >= 400:
+            return 0
+        content_range = resp.headers.get("Content-Range") or ""
+        if "/" in content_range:
+            total = content_range.rsplit("/", 1)[-1].strip()
+            if total.isdigit():
+                return int(total)
+        length = resp.headers.get("Content-Length") or ""
+        return int(length) if length.isdigit() else 0
+    finally:
+        resp.close()
+
+
+def estimate_bitrate(
+    entries: list[dict[str, Any]],
+    referer: str | None,
+    timeout: float,
+    samples: int = 6,
+) -> int:
+    """媒体列表没有 BANDWIDTH 时，用分片大小和 EXTINF 时长估算码率。
+
+    实测这类源的 EXTINF 是 VFR 的（同一条线路里 0.2–10 秒的分片混排），
+    单个分片的瞬时码率能从 249 kbps 跳到 6 Mbps，所以：
+    - 按「总字节 / 总时长」算平均码率，不用中位数（会被静态画面拉低）；
+    - 均匀取 6 个分片，样本太少时误差能到 2 倍。
+    """
+    usable = [entry for entry in entries if float(entry.get("duration") or 0) > 0]
+    if not usable:
+        return 0
+    step = max(1, len(usable) // max(samples, 1))
+    picks = usable[::step][:samples]
+    total_bytes = 0
+    total_seconds = 0.0
+    for entry in picks:
+        size = segment_size(str(entry["url"]), referer, timeout)
+        if size <= 0:
+            continue
+        total_bytes += size
+        total_seconds += float(entry["duration"])
+    if total_seconds <= 0 or total_bytes <= 0:
+        return 0
+    return round(total_bytes * 8 / total_seconds / 1000)
 
 
 def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]:
@@ -221,6 +347,24 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
     hosts = media["hosts"]
     total = sum(media["durations"])
     median = statistics.median(media["durations"]) if media["durations"] else 0
+
+    height = 0
+    if resolution and "x" in resolution.lower():
+        try:
+            height = int(resolution.lower().split("x", 1)[1])
+        except ValueError:
+            height = 0
+    # 优先用分片实测：很多源的 BANDWIDTH 是 128 / 800000 这种占位值，
+    # 实测同一线路的声明值和分片估算能差 2 倍以上。BYTERANGE 列表没法这样估，跳过。
+    bitrate = 0
+    bitrate_source = ""
+    if not any(tag.startswith("#EXT-X-BYTERANGE") for tag in tags):
+        bitrate = estimate_bitrate(media["entries"], final_url, timeout)
+        if bitrate:
+            bitrate_source = "segments"
+    if not bitrate and bandwidth:
+        bitrate = round(bandwidth / 1000)
+        bitrate_source = "master"
 
     # 广告分片：占比很小但确实存在的第二个域名
     segments = media["segments"] or 1
@@ -258,7 +402,10 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
         "url": url,
         "final_url": final_url,
         "resolution": resolution,
+        "height": height,
         "bandwidth": bandwidth,
+        "bitrate_kbps": bitrate,
+        "bitrate_source": bitrate_source,
         "variants": len(variants),
         "segments": media["segments"],
         "duration": round(total, 1),
@@ -291,6 +438,8 @@ def analyze_stream(
         "ad_reasons": [],
         "grade": "D",
         "host": "",
+        "bitrate_kbps": 0,
+        "height": 0,
     }
     if not url:
         result["error"] = "没有播放地址"
@@ -322,6 +471,8 @@ def analyze_stream(
                 final_url=final_url[:300],
             )
             resp.close()
+            # mp4 没有分片可估，只能让 ffprobe 读一下 moov 里的码率。
+            result.update(probe_media(final_url or url, referer, min(timeout, 8.0)))
             result["relation"] = site_relation(url, site_hosts, final_url)
             result["grade"] = grade_of(result)
             return result
@@ -402,6 +553,8 @@ def describe(result: dict[str, Any]) -> str:
     parts = [f"{grade} {label}", result.get("kind", "?")]
     if result.get("resolution"):
         parts.append(result["resolution"])
+    if result.get("bitrate_kbps"):
+        parts.append(f"{result['bitrate_kbps']} kbps")
     if result.get("relation") and result["relation"] != "unknown":
         parts.append({"self": "同主域", "third": "第三方", "platform": "平台CDN"}[result["relation"]])
     if result.get("ad_score"):
