@@ -42,6 +42,18 @@ from typing import Any, Iterable
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = ROOT / "scripts" / "config.json"
 
+# 按分辨率（短边）定最低码率，单位 kbps。阈值取在实测数据的空档里：
+# 1080p 1600（1536 档算低、1647+ 保留）、720p 900（822 档算低、936+ 保留）、
+# 480p 600（481 档算低、691+ 保留）。分辨率未知时用 quality.min_bitrate_kbps。
+DEFAULT_BITRATE_THRESHOLDS: dict[str, int] = {
+    "2160": 6000,
+    "1440": 3500,
+    "1080": 1600,
+    "720": 900,
+    "480": 600,
+    "360": 400,
+}
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "upstream": {
         "owner": "wzxxcz",
@@ -77,6 +89,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "min_grade": "",
         "drop_unverified": False,
         "min_bitrate_kbps": 800,
+        "bitrate_thresholds": dict(DEFAULT_BITRATE_THRESHOLDS),
         "max_lines": 4,
         "bitrate_allow": [],
     },
@@ -1031,10 +1044,45 @@ def effective_grade(quality: dict[str, Any] | None) -> str:
 VIDEO_KINDS = ("hls", "mp4", "video")
 
 
+def resolution_threshold(
+    stream: dict[str, Any],
+    default_kbps: float,
+    thresholds: dict[str, Any] | None = None,
+) -> float:
+    """按分辨率返回最低码率。
+
+    竖屏短剧会出现 720x1280 这种分辨率，所以用短边（min(宽,高)）判档，
+    否则 720x1280 会被当成 1440p。分辨率未知时退回 default_kbps。
+    """
+    table = thresholds or DEFAULT_BITRATE_THRESHOLDS
+    width = int(stream.get("width") or 0)
+    height = int(stream.get("height") or 0)
+    short = min(width, height) if width and height else height
+    if short <= 0:
+        return float(default_kbps)
+    best: tuple[int, float] | None = None
+    for key, value in table.items():
+        try:
+            level = int(key)
+        except (TypeError, ValueError):
+            continue
+        if short >= level and (best is None or level > best[0]):
+            best = (level, float(value))
+    if best is not None:
+        return best[1]
+    # 比最低档还小（240p 之类），用最低档的阈值。
+    try:
+        return float(min(float(value) for value in table.values()))
+    except ValueError:
+        return float(default_kbps)
+
+
 def bitrate_verdict(
-    quality: dict[str, Any] | None, min_kbps: float
+    quality: dict[str, Any] | None,
+    min_kbps: float,
+    thresholds: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """判断一个源的所有采样线路是否都低于 min_kbps。
+    """判断一个源的所有采样线路是否都低于对应分辨率的最低码率。
 
     只有「每条视频线路都测到了码率，且都低于阈值」才算低码率源。
     有任何一条线路测不出来（解析线路、页面、超时）就保留——没测到不等于低。
@@ -1064,8 +1112,10 @@ def bitrate_verdict(
         bitrate = int(stream.get("bitrate_kbps") or 0)
         if kind in VIDEO_KINDS and bitrate > 0:
             measured += 1
-            low = bitrate < min_kbps
+            limit = resolution_threshold(stream, min_kbps, thresholds)
+            low = bitrate < limit
         else:
+            limit = 0.0
             unknown += 1
             low = False
         verdict["lines"].append(
@@ -1073,6 +1123,8 @@ def bitrate_verdict(
                 "flag": str(entry.get("flag") or ""),
                 "kind": kind,
                 "bitrate_kbps": bitrate,
+                "min_kbps": round(limit),
+                "width": int(stream.get("width") or 0),
                 "height": int(stream.get("height") or 0),
                 "low": low,
             }
@@ -1413,6 +1465,8 @@ def main(argv: list[str] | None = None) -> int:
         min_grade = str(quality_cfg.get("min_grade") or "").strip().upper()
         drop_unverified = bool(quality_cfg.get("drop_unverified"))
         min_bitrate = float(quality_cfg.get("min_bitrate_kbps") or 0)
+        bitrate_thresholds = dict(DEFAULT_BITRATE_THRESHOLDS)
+        bitrate_thresholds.update(quality_cfg.get("bitrate_thresholds") or {})
         bitrate_allow = {
             str(name) for name in (quality_cfg.get("bitrate_allow") or [])
         }
@@ -1454,16 +1508,17 @@ def main(argv: list[str] | None = None) -> int:
                 and result.status == "valid"
                 and result.filename not in bitrate_allow
             ):
-                verdict = bitrate_verdict(quality, min_bitrate)
+                verdict = bitrate_verdict(quality, min_bitrate, bitrate_thresholds)
                 quality["bitrate"] = verdict
                 if verdict["all_low"]:
                     result.status = "low_bitrate"
                     detail = "、".join(
-                        f"{item['bitrate_kbps']}kbps" for item in verdict["lines"]
+                        f"{item['bitrate_kbps']}kbps@"
+                        f"{min(item['width'], item['height']) if item['width'] and item['height'] else item['height']}p"
+                        f"<{item['min_kbps']}"
+                        for item in verdict["lines"]
                     )
-                    result.error = (
-                        f"所有线路码率低于 {min_bitrate:g} kbps（{detail}）"
-                    )
+                    result.error = f"所有线路码率低于分辨率阈值（{detail}）"
         scores = Counter(
             int(result.quality.get("score") or 0)
             for result in results
@@ -1498,7 +1553,7 @@ def main(argv: list[str] | None = None) -> int:
             ]
             print(
                 f"码率过滤: 剔除 {len(low_bitrate)} 个"
-                f"（所有采样线路均低于 {min_bitrate:g} kbps）"
+                "（所有采样线路均低于对应分辨率阈值）"
             )
             for result in low_bitrate[:10]:
                 print(f"  - {result.filename}: {result.error}")

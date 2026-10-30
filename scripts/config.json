@@ -39,6 +39,14 @@
         "min_grade": "B",
         "drop_unverified": true,
         "min_bitrate_kbps": 800,
+        "bitrate_thresholds": {
+            "2160": 6000,
+            "1440": 3500,
+            "1080": 1600,
+            "720": 900,
+            "480": 600,
+            "360": 400
+        },
         "max_lines": 4,
         "bitrate_allow": []
     },

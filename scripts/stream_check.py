@@ -154,9 +154,10 @@ FFPROBE = shutil.which("ffprobe")
 
 
 def probe_media(url: str, referer: str | None, timeout: float = 8.0) -> dict[str, Any]:
-    """用 ffprobe 读取视频流的码率和分辨率。
+    """用 ffprobe 读取视频流的分辨率和码率。
 
-    只对 mp4/直链视频用，HLS 有更便宜的办法（master 的 BANDWIDTH 或分片大小）。
+    mp4/直链视频直接读；HLS 媒体列表没有 RESOLUTION 时也用它补分辨率
+    （ffprobe 会把 dimensions 放在 programs[0].streams 里）。
     没装 ffprobe、超时、流不可解析都返回空字典，调用方按「未知」处理。
     """
     if not FFPROBE:
@@ -171,6 +172,8 @@ def probe_media(url: str, referer: str | None, timeout: float = 8.0) -> dict[str
         "-select_streams", "v:0",
         "-show_entries", "stream=bit_rate,height,width",
         "-of", "json",
+        "-probesize", "1000000",
+        "-analyzeduration", "2000000",
         "-headers", headers,
         "-rw_timeout", str(int(limit * 1_000_000)),
         "-i", url,
@@ -191,16 +194,23 @@ def probe_media(url: str, referer: str | None, timeout: float = 8.0) -> dict[str
     except json.JSONDecodeError:
         return {}
     streams = payload.get("streams") or []
+    if not streams:
+        programs = payload.get("programs") or []
+        if programs and isinstance(programs[0], dict):
+            streams = programs[0].get("streams") or []
     if not streams or not isinstance(streams[0], dict):
         return {}
     stream = streams[0]
     bitrate = stream.get("bit_rate")
     height = stream.get("height")
+    width = stream.get("width")
     result: dict[str, Any] = {}
     if str(bitrate).isdigit() and int(bitrate) > 0:
         result["bitrate_kbps"] = round(int(bitrate) / 1000)
     if str(height).isdigit() and int(height) > 0:
         result["height"] = int(height)
+    if str(width).isdigit() and int(width) > 0:
+        result["width"] = int(width)
     return result
 
 
@@ -348,12 +358,14 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
     total = sum(media["durations"])
     median = statistics.median(media["durations"]) if media["durations"] else 0
 
+    width = 0
     height = 0
     if resolution and "x" in resolution.lower():
         try:
-            height = int(resolution.lower().split("x", 1)[1])
+            raw_width, raw_height = resolution.lower().split("x", 1)
+            width, height = int(raw_width), int(raw_height)
         except ValueError:
-            height = 0
+            width = height = 0
     # 优先用分片实测：很多源的 BANDWIDTH 是 128 / 800000 这种占位值，
     # 实测同一线路的声明值和分片估算能差 2 倍以上。BYTERANGE 列表没法这样估，跳过。
     bitrate = 0
@@ -365,6 +377,14 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
     if not bitrate and bandwidth:
         bitrate = round(bandwidth / 1000)
         bitrate_source = "master"
+    # 媒体列表没有 master，拿不到 RESOLUTION；用 ffprobe 读一下真实分辨率，
+    # 否则低码率判断只能退回「按绝对码率」的粗口径。
+    if bitrate and not height:
+        probed = probe_media(final_url, referer, min(timeout, 10.0))
+        if probed.get("height"):
+            height = int(probed["height"])
+            width = int(probed.get("width") or 0)
+            resolution = f"{width}x{height}" if width else f"{height}p"
 
     # 广告分片：占比很小但确实存在的第二个域名
     segments = media["segments"] or 1
@@ -402,6 +422,7 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
         "url": url,
         "final_url": final_url,
         "resolution": resolution,
+        "width": width,
         "height": height,
         "bandwidth": bandwidth,
         "bitrate_kbps": bitrate,
@@ -439,6 +460,7 @@ def analyze_stream(
         "grade": "D",
         "host": "",
         "bitrate_kbps": 0,
+        "width": 0,
         "height": 0,
     }
     if not url:
