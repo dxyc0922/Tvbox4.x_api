@@ -29,16 +29,16 @@
             "api": "./脚本/独播库.py"
         },
         {
-            "key": "wzxxcz_26e1293751af",
-            "name": "迷你影视",
-            "type": 3,
-            "api": "./脚本/迷你影视.py"
-        },
-        {
             "key": "wzxxcz_6cdd06cd7473",
             "name": "追剧达人",
             "type": 3,
             "api": "./脚本/追剧达人.py"
+        },
+        {
+            "key": "wzxxcz_26e1293751af",
+            "name": "迷你影视",
+            "type": 3,
+            "api": "./脚本/迷你影视.py"
         },
         {
             "key": "wzxxcz_5d42ff53f61e",
@@ -47,52 +47,22 @@
             "api": "./脚本/大白鲨影院.py"
         },
         {
-            "key": "wzxxcz_65e7fa6d3289",
-            "name": "八度影院",
-            "type": 3,
-            "api": "./脚本/八度影院.py"
-        },
-        {
             "key": "wzxxcz_63cc7ccfec95",
             "name": "云朵视频(关梯)",
             "type": 3,
             "api": "./脚本/云朵视频(关梯).py"
         },
         {
-            "key": "wzxxcz_7d6c4ed4f63c",
-            "name": "达达兔影院",
+            "key": "wzxxcz_65e7fa6d3289",
+            "name": "八度影院",
             "type": 3,
-            "api": "./脚本/达达兔影院.py"
+            "api": "./脚本/八度影院.py"
         },
         {
-            "key": "wzxxcz_de99ad504f23",
-            "name": "采集聚合",
+            "key": "wzxxcz_a2bce5b5d0c8",
+            "name": "分享央视",
             "type": 3,
-            "api": "./脚本/采集聚合.py"
-        },
-        {
-            "key": "wzxxcz_3ae915672cf8",
-            "name": "LIBVIO",
-            "type": 3,
-            "api": "./脚本/LIBVIO.py"
-        },
-        {
-            "key": "wzxxcz_b3ca09b39432",
-            "name": "千千影视",
-            "type": 3,
-            "api": "./脚本/千千影视.py"
-        },
-        {
-            "key": "wzxxcz_b0b6e09f681b",
-            "name": "电影猎手",
-            "type": 3,
-            "api": "./脚本/电影猎手.py"
-        },
-        {
-            "key": "wzxxcz_2f7177104166",
-            "name": "猎手",
-            "type": 3,
-            "api": "./脚本/猎手.py"
+            "api": "./脚本/分享央视.py"
         },
         {
             "key": "wzxxcz_d68ac251a6fc",
@@ -107,46 +77,10 @@
             "api": "./脚本/AI搜剧.py"
         },
         {
-            "key": "wzxxcz_1160fb4e6b2f",
-            "name": "不卡影视",
-            "type": 3,
-            "api": "./脚本/不卡影视.py"
-        },
-        {
-            "key": "wzxxcz_3f5ce72740f6",
-            "name": "大马猴影视",
-            "type": 3,
-            "api": "./脚本/大马猴影视.py"
-        },
-        {
-            "key": "wzxxcz_ffd8cc926e2c",
-            "name": "人人视频",
-            "type": 3,
-            "api": "./脚本/人人视频.py"
-        },
-        {
             "key": "wzxxcz_32a0326da571",
             "name": "欧洲影院",
             "type": 3,
             "api": "./脚本/欧洲影院.py"
-        },
-        {
-            "key": "wzxxcz_075e73129a50",
-            "name": "看看剧",
-            "type": 3,
-            "api": "./脚本/看看剧.py"
-        },
-        {
-            "key": "wzxxcz_b632dc9ec0ee",
-            "name": "第七影院",
-            "type": 3,
-            "api": "./脚本/第七影院.py"
-        },
-        {
-            "key": "wzxxcz_b91c700aaf47",
-            "name": "奇优影院",
-            "type": 3,
-            "api": "./脚本/奇优影院.py"
         },
         {
             "key": "wzxxcz_d2c369bfee55",
@@ -155,22 +89,10 @@
             "api": "./脚本/99短剧网.py"
         },
         {
-            "key": "wzxxcz_b9d2b449dce7",
-            "name": "短剧巴士",
+            "key": "wzxxcz_ffd8cc926e2c",
+            "name": "人人视频",
             "type": 3,
-            "api": "./脚本/短剧巴士.py"
-        },
-        {
-            "key": "wzxxcz_12bb37d126ba",
-            "name": "飞快TV",
-            "type": 3,
-            "api": "./脚本/飞快TV.py"
-        },
-        {
-            "key": "wzxxcz_58a8da623293",
-            "name": "华谊影视",
-            "type": 3,
-            "api": "./脚本/华谊影视.py"
+            "api": "./脚本/人人视频.py"
         },
         {
             "key": "wzxxcz_4e850e9d91ee",
@@ -185,10 +107,58 @@
             "api": "./脚本/看剧AIxcz.py"
         },
         {
-            "key": "wzxxcz_5bf72f5af13e",
-            "name": "电影侠",
+            "key": "wzxxcz_b0b6e09f681b",
+            "name": "电影猎手",
             "type": 3,
-            "api": "./脚本/电影侠.py"
+            "api": "./脚本/电影猎手.py"
+        },
+        {
+            "key": "wzxxcz_7a11a5da6b40",
+            "name": "君念影院",
+            "type": 3,
+            "api": "./脚本/君念影院.py"
+        },
+        {
+            "key": "wzxxcz_3f5ce72740f6",
+            "name": "大马猴影视",
+            "type": 3,
+            "api": "./脚本/大马猴影视.py"
+        },
+        {
+            "key": "wzxxcz_b3ca09b39432",
+            "name": "千千影视",
+            "type": 3,
+            "api": "./脚本/千千影视.py"
+        },
+        {
+            "key": "wzxxcz_72295b156259",
+            "name": "云途影视",
+            "type": 3,
+            "api": "./脚本/云途影视.py"
+        },
+        {
+            "key": "wzxxcz_075e73129a50",
+            "name": "看看剧",
+            "type": 3,
+            "api": "./脚本/看看剧.py"
+        },
+        {
+            "key": "wzxxcz_2f7177104166",
+            "name": "猎手",
+            "type": 3,
+            "api": "./脚本/猎手.py"
+        },
+        {
+            "key": "wzxxcz_f90bb21f7693",
+            "name": "滴答影院",
+            "type": 3,
+            "api": "./脚本/滴答影院.py"
+        },
+        {
+            "key": "wzxxcz_58a8da623293",
+            "name": "华谊影视",
+            "type": 3,
+            "api": "./脚本/华谊影视.py"
         },
         {
             "key": "wzxxcz_7807886225cc",
@@ -197,16 +167,22 @@
             "api": "./脚本/蝶卡影视.py"
         },
         {
+            "key": "wzxxcz_5bf72f5af13e",
+            "name": "电影侠",
+            "type": 3,
+            "api": "./脚本/电影侠.py"
+        },
+        {
+            "key": "wzxxcz_b91c700aaf47",
+            "name": "奇优影院",
+            "type": 3,
+            "api": "./脚本/奇优影院.py"
+        },
+        {
             "key": "wzxxcz_3bb7b9e9fdb7",
             "name": "动漫巴士",
             "type": 3,
             "api": "./脚本/动漫巴士.py"
-        },
-        {
-            "key": "wzxxcz_f90bb21f7693",
-            "name": "滴答影院",
-            "type": 3,
-            "api": "./脚本/滴答影院.py"
         },
         {
             "key": "wzxxcz_9ead44fb6c4b",
@@ -233,6 +209,24 @@
             "api": "./脚本/vidhub.py"
         },
         {
+            "key": "wzxxcz_7d6c4ed4f63c",
+            "name": "达达兔影院",
+            "type": 3,
+            "api": "./脚本/达达兔影院.py"
+        },
+        {
+            "key": "wzxxcz_de99ad504f23",
+            "name": "采集聚合",
+            "type": 3,
+            "api": "./脚本/采集聚合.py"
+        },
+        {
+            "key": "wzxxcz_b9d2b449dce7",
+            "name": "短剧巴士",
+            "type": 3,
+            "api": "./脚本/短剧巴士.py"
+        },
+        {
             "key": "wzxxcz_a044207dc927",
             "name": "首映网",
             "type": 3,
@@ -245,16 +239,10 @@
             "api": "./脚本/6080影视.py"
         },
         {
-            "key": "wzxxcz_7a11a5da6b40",
-            "name": "君念影院",
+            "key": "wzxxcz_3ae915672cf8",
+            "name": "LIBVIO",
             "type": 3,
-            "api": "./脚本/君念影院.py"
-        },
-        {
-            "key": "wzxxcz_72295b156259",
-            "name": "云途影视",
-            "type": 3,
-            "api": "./脚本/云途影视.py"
+            "api": "./脚本/LIBVIO.py"
         },
         {
             "key": "wzxxcz_6fabb7d1442e",
@@ -263,10 +251,22 @@
             "api": "./脚本/低端影视.py"
         },
         {
-            "key": "wzxxcz_a2bce5b5d0c8",
-            "name": "分享央视",
+            "key": "wzxxcz_1160fb4e6b2f",
+            "name": "不卡影视",
             "type": 3,
-            "api": "./脚本/分享央视.py"
+            "api": "./脚本/不卡影视.py"
+        },
+        {
+            "key": "wzxxcz_b632dc9ec0ee",
+            "name": "第七影院",
+            "type": 3,
+            "api": "./脚本/第七影院.py"
+        },
+        {
+            "key": "wzxxcz_12bb37d126ba",
+            "name": "飞快TV",
+            "type": 3,
+            "api": "./脚本/飞快TV.py"
         },
         {
             "key": "wzxxcz_740dc8609bd3",

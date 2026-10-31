@@ -1190,18 +1190,23 @@ VIDEO_KINDS = ("hls", "mp4", "video")
 
 
 def quality_sort_key(result: ScriptResult) -> tuple:
-    """站点排序：等级（A>B>C>D>U）→ 功能评分 → 最高线路码率 → 最快速度比 → 名称。"""
+    """站点排序：等级（A>B>C>D>U）→ 功能评分 → 最高 bpp（画质密度）→ 最快速度比 → 名称。
+
+    bpp = 码率 ÷ (宽×高×fps)，把分辨率/帧率归一化，比绝对码率更能反映真实画质：
+    720p@2500kbps 的 bpp 是 1080p@2500kbps 的两倍多，应排前面；绝对码率会高估
+    高分辨率低码率源（如 1080p 但 2309kbps 的采集聚合）。
+    """
     quality = result.quality or {}
     grade = effective_grade(quality)
     grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3, "U": 4, "": 4}.get(grade, 4)
     score = int(quality.get("score") or 0)
-    best_bitrate = 0
+    best_bpp = 0.0
     best_speed = 0.0
     for entry in quality.get("line_streams") or []:
         stream = entry.get("stream") or {}
-        best_bitrate = max(best_bitrate, int(stream.get("bitrate_kbps") or 0))
+        best_bpp = max(best_bpp, stream_bpp(stream))
         best_speed = max(best_speed, float(stream.get("speed_ratio") or 0))
-    return (grade_rank, -score, -best_bitrate, -best_speed, result.name)
+    return (grade_rank, -score, -best_bpp, -best_speed, result.name)
 
 
 def resolution_threshold(
@@ -2339,7 +2344,7 @@ def main(argv: list[str] | None = None) -> int:
     def _entry_sort_key(entry: dict[str, Any]) -> tuple:
         result = result_by_entry.get(id(entry))
         if result is None:
-            return (4, 0, 0, 0.0, str(entry.get("name") or ""))
+            return (4, 0, 0.0, 0.0, str(entry.get("name") or ""))
         return quality_sort_key(result)
 
     entries.sort(key=_entry_sort_key)
