@@ -389,6 +389,15 @@ def collect_scripts(
                 dest.write_text(source, encoding="utf-8")
                 done += 1
             print(f"  下载完成 {done}/{len(missing)}")
+    # 记录来源映射，供 update_api --source-dir 恢复（接口-remote 需要真实上游）。
+    # 缓存目录放 sources.json：{相对路径: 来源序号}，子目录脚本也能恢复。
+    try:
+        src_map = {str(k): int(v) for k, v in filenames.items()}
+        (target / "sources.json").write_text(
+            json.dumps(src_map, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError as exc:
+        print(f"  来源映射写入失败（接口-remote 可能用错上游）: {exc}")
     return [target / name for name in filenames if (target / name).is_file()]
 
 

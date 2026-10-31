@@ -472,6 +472,18 @@ def get_upstream_filenames(
             path.relative_to(source_dir).as_posix()
             for path in source_dir.rglob("*.py")
         )
+        # 若 functional_check 写过 sources.json，恢复来源映射（接口-remote 需要真实上游）。
+        src_map: dict[str, int] = {}
+        src_file = source_dir / "sources.json"
+        if src_file.is_file():
+            try:
+                data = json.loads(src_file.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    src_map = {str(k): int(v) for k, v in data.items()}
+            except (OSError, ValueError):
+                src_map = {}
+        if src_map:
+            return {f: src_map.get(f, 0) for f in files}
         return {f: 0 for f in files}
 
     ups = upstream_list(config)
