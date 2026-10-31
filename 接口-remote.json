@@ -771,5 +771,187 @@
         "cache.ott.wasulive.itv.cmvideo.cn=base-v4-free-mghy.e.cdn.chinamobile.com",
         "cache.ott.fifalive.itv.cmvideo.cn=base-v4-free-mghy.e.cdn.chinamobile.com",
         "cache.ott.hnbblive.itv.cmvideo.cn=base-v4-free-mghy.e.cdn.chinamobile.com"
+    ],
+    "ijk": [
+        {
+            "group": "硬解码",
+            "options": [
+                {
+                    "name": "opensles",
+                    "category": 4,
+                    "value": "0"
+                },
+                {
+                    "name": "framedrop",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "soundtouch",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "start-on-prepared",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "http-detect-range-support",
+                    "category": 1,
+                    "value": "0"
+                },
+                {
+                    "name": "fflags",
+                    "category": 1,
+                    "value": "fastseek"
+                },
+                {
+                    "name": "skip_loop_filter",
+                    "category": 2,
+                    "value": "48"
+                },
+                {
+                    "name": "threads",
+                    "category": 2,
+                    "value": "2"
+                },
+                {
+                    "name": "reconnect",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "enable-accurate-seek",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "mediacodec",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "mediacodec-all-videos",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "mediacodec-auto-rotate",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "mediacodec-handle-resolution-change",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "mediacodec-hevc",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "max-buffer-size",
+                    "category": 4,
+                    "value": "15728640"
+                },
+                {
+                    "name": "dns_cache_timeout",
+                    "category": 1,
+                    "value": "600000000"
+                }
+            ]
+        },
+        {
+            "group": "软解码",
+            "options": [
+                {
+                    "name": "opensles",
+                    "category": 4,
+                    "value": "0"
+                },
+                {
+                    "name": "framedrop",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "soundtouch",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "start-on-prepared",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "http-detect-range-support",
+                    "category": 1,
+                    "value": "0"
+                },
+                {
+                    "name": "fflags",
+                    "category": 1,
+                    "value": "fastseek"
+                },
+                {
+                    "name": "skip_loop_filter",
+                    "category": 2,
+                    "value": "48"
+                },
+                {
+                    "name": "threads",
+                    "category": 2,
+                    "value": "2"
+                },
+                {
+                    "name": "reconnect",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "enable-accurate-seek",
+                    "category": 4,
+                    "value": "1"
+                },
+                {
+                    "name": "mediacodec",
+                    "category": 4,
+                    "value": "0"
+                },
+                {
+                    "name": "mediacodec-all-videos",
+                    "category": 4,
+                    "value": "0"
+                },
+                {
+                    "name": "mediacodec-auto-rotate",
+                    "category": 4,
+                    "value": "0"
+                },
+                {
+                    "name": "mediacodec-handle-resolution-change",
+                    "category": 4,
+                    "value": "0"
+                },
+                {
+                    "name": "mediacodec-hevc",
+                    "category": 4,
+                    "value": "0"
+                },
+                {
+                    "name": "max-buffer-size",
+                    "category": 4,
+                    "value": "15728640"
+                },
+                {
+                    "name": "dns_cache_timeout",
+                    "category": 1,
+                    "value": "600000000"
+                }
+            ]
+        }
     ]
 }
