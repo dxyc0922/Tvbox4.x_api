@@ -83,7 +83,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- "接口.json" "脚本"
+          git add -- "接口.json" "接口-remote.json" "脚本"
           if git diff --cached --quiet; then
             echo "接口.json 与本地脚本没有变化，跳过提交"
           else

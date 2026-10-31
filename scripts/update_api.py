@@ -89,6 +89,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "adult_keywords": [],
         "adult_title_keywords": [],
         "adult_allow": [],
+        # 已知广告/贴片域名片段（如 "adcdn"、"ads.example.com"）；命中即记广告分。
+        "ad_hosts": [],
     },
     "functional": {
         "enabled": False,
@@ -247,6 +249,8 @@ class ScriptResult:
     fingerprint: str = ""
     quality: dict[str, Any] | None = None
     source: str = ""
+    strike: int = 0
+    pending: str = ""
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -1095,6 +1099,21 @@ def effective_grade(quality: dict[str, Any] | None) -> str:
 VIDEO_KINDS = ("hls", "mp4", "video")
 
 
+def quality_sort_key(result: ScriptResult) -> tuple:
+    """站点排序：等级（A>B>C>D>U）→ 功能评分 → 最高线路码率 → 最快速度比 → 名称。"""
+    quality = result.quality or {}
+    grade = effective_grade(quality)
+    grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3, "U": 4, "": 4}.get(grade, 4)
+    score = int(quality.get("score") or 0)
+    best_bitrate = 0
+    best_speed = 0.0
+    for entry in quality.get("line_streams") or []:
+        stream = entry.get("stream") or {}
+        best_bitrate = max(best_bitrate, int(stream.get("bitrate_kbps") or 0))
+        best_speed = max(best_speed, float(stream.get("speed_ratio") or 0))
+    return (grade_rank, -score, -best_bitrate, -best_speed, result.name)
+
+
 def resolution_threshold(
     stream: dict[str, Any],
     default_kbps: float,
@@ -1318,6 +1337,88 @@ def speed_verdict(
 # 标记注入代码块，用于识别「本仓库生成过、可安全清理」的本地脚本。
 LINE_FILTER_MARKER = "# ---- TVBox 本地线路过滤（自动生成，勿改） ----"
 
+# 两振出局：源要连续两轮被判「要剔除」才真剔除；第一轮保留（strike1）。
+HISTORY_REMOVE_STATUSES = {"low_quality", "low_bitrate", "slow_stream"}
+HISTORY_MAX_ROUNDS = 8
+
+
+def load_history(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"rounds": [], "streaks": {}, "line_low": {}, "line_dead": {}}
+    if not isinstance(data, dict):
+        return {"rounds": [], "streaks": {}, "line_low": {}, "line_dead": {}}
+    data.setdefault("rounds", [])
+    data.setdefault("streaks", {})
+    data.setdefault("line_low", {})
+    data.setdefault("line_dead", {})
+    return data
+
+
+def save_history(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(path, data, "\n")
+
+
+def apply_two_strike(
+    results: list[ScriptResult], history: dict[str, Any]
+) -> tuple[dict[str, str], dict[str, str]]:
+    """源级两振出局。
+
+    本轮判定为 low_quality/low_bitrate/slow_stream 的源：若上一轮（含更早）已连续
+    在「要剔除」状态，则本轮真剔除；否则保留（strike1，status 回退为 valid）。
+    返回 (本轮最终 streaks, 本轮最终 statuses)。
+    """
+    streaks = {str(k): int(v) for k, v in (history.get("streaks") or {}).items()}
+    new_streaks: dict[str, str] = {}
+    statuses: dict[str, str] = {}
+    for result in results:
+        name = result.filename
+        if result.status in HISTORY_REMOVE_STATUSES:
+            streak = streaks.get(name, 0) + 1
+            if streak < 2:
+                result.strike = 1
+                result.pending = result.status
+                result.status = "valid"
+            new_streaks[name] = str(streak)
+        else:
+            new_streaks[name] = "0"
+        statuses[name] = result.status
+    return new_streaks, statuses
+
+
+def seed_two_strike_history(
+    history: dict[str, Any], existing: dict[str, Any], filenames: list[str]
+) -> None:
+    """两振首轮（无历史）基线：以上一轮已提交的接口为准。
+
+    上一轮不在接口里的上游源 = 上一轮已被排除 → 视为已有第 1 振；本轮若仍是
+    「剔除候选」，第 2 振直接剔除，避免首轮把上轮已过滤的源全部加回（54→172）。
+    """
+    if history.get("rounds"):
+        return
+    prev_basenames: set[str] = set()
+    for site in existing.get("sites") or []:
+        if not isinstance(site, dict):
+            continue
+        api = str(site.get("api") or "").strip()
+        if not api:
+            continue
+        base = urllib.parse.unquote(api.rstrip("/").rsplit("/", 1)[-1])
+        if base.endswith(".py"):
+            prev_basenames.add(base)
+    streaks = {str(k): int(v) for k, v in (history.get("streaks") or {}).items()}
+    seeded = 0
+    for filename in filenames:
+        base = Path(filename).name
+        if base not in prev_basenames and streaks.get(filename, 0) < 1:
+            streaks[filename] = 1
+            seeded += 1
+    history["streaks"] = {k: str(v) for k, v in streaks.items()}
+    if seeded:
+        print(f"两振基线: 上轮已排除 {seeded} 个上游源视为第 1 振（本轮仍为候选则第 2 振剔除）")
+
 
 def line_prune_drops(
     quality: dict[str, Any] | None,
@@ -1325,24 +1426,34 @@ def line_prune_drops(
     min_kbps: float,
     thresholds: dict[str, Any] | None,
     min_bpp: float,
+    source: str = "",
+    prev_low: set[str] | None = None,
+    prev_dead: set[str] | None = None,
     skip_quality: bool = False,
-) -> dict[str, str]:
-    """返回 {线路名: 剔除原因}。
+) -> tuple[dict[str, str], set[str], set[str]]:
+    """计算线路裁减，返回 (要剔除的 {线路名: 原因}, 本轮低质量集合, 本轮疑似不通集合)。
 
-    两类剔除：
-    1. **不可用**：HTTP 状态码 >= dead_status_min（token 过期、404 失效等）。
-       这类不看有没有替代线路——它本身就是坏的。
-    2. **低质量**：线路实测码率低于对应分辨率阈值，且该源至少有另一条线路达标。
-       （只有一条线路或者全都不达标时不动，避免把源删空；全都不达标会在
-       码率过滤阶段整源剔除。）
+    剔除规则（两振出局）：
+    - **不可用**：HTTP >= 400，且**上一轮同样是 4xx/5xx**（连续两轮）才剔除。
+      单集 token 过期是 403/404 误报（华谊 K蓝光某集 403、换集就 200），一振不删。
+    - **低质量**：码率低于阈值且同源另有达标线路，且**连续两轮**低质量才剔除。
+    - 手动黑名单在调用方直接加入，不经过两振。
     """
     drops: dict[str, str] = {}
+    current_low: set[str] = set()
+    current_dead: set[str] = set()
+    prev_low = prev_low or set()
+    prev_dead = prev_dead or set()
     if not quality:
-        return drops
+        return drops, current_low, current_dead
+
     dead_min = int((line_prune_cfg or {}).get("dead_status_min") or 0)
     entries = list(quality.get("line_streams") or [])
 
-    # 1) 不可用线路（无论有没有替代都删；但若全都不通，留给整源过滤，避免删空）。
+    def key(flag: str) -> str:
+        return f"{source}::{flag}"
+
+    # 1) 不可用线路：>=400 一振记录；连续两轮（上一轮也在 dead 集合）才剔除。
     playable: set[str] = set()
     for entry in entries:
         stream = entry.get("stream") or {}
@@ -1352,19 +1463,20 @@ def line_prune_drops(
         status = int(stream.get("status") or 0)
         if not (dead_min and status >= dead_min):
             playable.add(flag)
-    dead_flags: dict[str, str] = {}
-    if playable:
-        for entry in entries:
-            stream = entry.get("stream") or {}
-            flag = str(entry.get("flag") or "").strip()
-            if not flag:
-                continue
-            status = int(stream.get("status") or 0)
-            if dead_min and status >= dead_min:
-                dead_flags.setdefault(flag, f"HTTP {status}")
-    drops.update(dead_flags)
+    for entry in entries:
+        stream = entry.get("stream") or {}
+        flag = str(entry.get("flag") or "").strip()
+        if not flag:
+            continue
+        status = int(stream.get("status") or 0)
+        if status >= 400:
+            current_dead.add(flag)
+            # 立即剔除：dead_status_min>0 且整源还有可玩线路；或连续两轮 4xx。
+            immediate = bool(dead_min and status >= dead_min and playable)
+            if (immediate or key(flag) in prev_dead) and flag not in drops:
+                drops[flag] = f"HTTP {status}" + ("" if immediate else "（连续两轮）")
 
-    # 2) 低质量线路：仅当同源存在至少一条达标线路时，删掉不达标的。
+    # 2) 低质量线路：仅当同源存在至少一条达标线路时删；连续两轮低质量才删。
     if not skip_quality:
         passing: list[str] = []
         failing: list[tuple[str, int, float]] = []
@@ -1395,8 +1507,10 @@ def line_prune_drops(
                 failing.append((flag, bitrate, limit))
         if passing and failing:
             for flag, bitrate, limit in failing:
-                drops.setdefault(flag, f"{bitrate}kbps<{round(limit)}kbps")
-    return drops
+                current_low.add(flag)
+                if key(flag) in prev_low and flag not in drops:
+                    drops[flag] = f"{bitrate}kbps<{round(limit)}kbps（连续两轮）"
+    return drops, current_low, current_dead
 
 
 def inject_line_filter(source: str, drop_flags: list[str]) -> str:
@@ -1461,16 +1575,18 @@ def write_local_spiders(
     quality_map: dict[str, dict[str, Any]],
     script_out: Path,
     write: bool = True,
-) -> dict[str, dict[str, str]]:
-    """把保留的源脚本写入本地目录并注入线路过滤，返回 {filename: {flag: reason}}。
+    prev_low: set[str] | None = None,
+    prev_dead: set[str] | None = None,
+) -> tuple[dict[str, dict[str, str]], set[str], set[str]]:
+    """把保留的源脚本写入本地目录并注入线路过滤。
 
+    返回 (每个源的 {flag: reason}, 本轮低质量 `source::flag` 集合, 本轮疑似不通集合)。
     write=False 时只计算不落盘（dry-run），也不清理旧文件。
     """
     script_out.mkdir(parents=True, exist_ok=True)
     quality_cfg = config.get("quality") or {}
     line_prune_cfg = quality_cfg.get("line_prune") or {}
     enabled = bool(line_prune_cfg.get("enabled"))
-    dead_min = int(line_prune_cfg.get("dead_status_min") or 0)
     blacklist = {
         str(k): {str(v).strip() for v in (val or [])}
         for k, val in (line_prune_cfg.get("blacklist") or {}).items()
@@ -1480,9 +1596,13 @@ def write_local_spiders(
     thresholds = dict(DEFAULT_BITRATE_THRESHOLDS)
     thresholds.update(quality_cfg.get("bitrate_thresholds") or {})
     bitrate_allow = {str(n) for n in (quality_cfg.get("bitrate_allow") or [])}
+    prev_low = prev_low or set()
+    prev_dead = prev_dead or set()
 
     kept_files: set[str] = set()
     pruned: dict[str, dict[str, str]] = {}
+    new_low: set[str] = set()
+    new_dead: set[str] = set()
     for result in kept:
         if not result.source:
             continue
@@ -1490,18 +1610,23 @@ def write_local_spiders(
         kept_files.add(filename)
         drops: dict[str, str] = {}
         if enabled:
-            # 手动黑名单优先；码率豁免的源不做质量自动剔除。
+            # 手动黑名单优先（用户确认，不经过两振）；码率豁免的源不做质量自动剔除。
             for flag in blacklist.get(filename, ()):
                 drops.setdefault(flag, "手动配置")
             skip_quality = filename in bitrate_allow
-            auto = line_prune_drops(
+            auto, low_flags, dead_flags = line_prune_drops(
                 quality_map.get(filename),
                 line_prune_cfg,
                 min_kbps,
                 thresholds,
                 min_bpp,
+                source=filename,
+                prev_low=prev_low,
+                prev_dead=prev_dead,
                 skip_quality=skip_quality,
             )
+            new_low |= {f"{filename}::{f}" for f in low_flags}
+            new_dead |= {f"{filename}::{f}" for f in dead_flags}
             for flag, reason in auto.items():
                 drops.setdefault(flag, reason)
         pruned[filename] = drops
@@ -1524,7 +1649,7 @@ def write_local_spiders(
             (script_out / filename).write_text(text, encoding="utf-8", newline="")
 
     if not write:
-        return pruned
+        return pruned, new_low, new_dead
 
     # 清理上一轮生成、这轮已不再保留的本地脚本（只动带标记的）。
     for old in script_out.glob("*.py"):
@@ -1539,7 +1664,7 @@ def write_local_spiders(
                 old.unlink()
             except OSError:
                 pass
-    return pruned
+    return pruned, new_low, new_dead
 
 
 def write_json(path: Path, data: Any, newline: str = "\n") -> None:
@@ -1691,6 +1816,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--output", help="输出 JSON 路径")
     parser.add_argument("--report", help="校验报告路径")
+    parser.add_argument("--history", help="两振出局历史文件路径（默认 reports/history.json）")
     parser.add_argument("--dry-run", action="store_true", help="只校验，不写 接口.json")
     parser.add_argument("--limit", type=int, default=0, help="只处理前 N 个脚本")
     parser.add_argument("--no-report", action="store_true", help="不写校验报告")
@@ -1718,6 +1844,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.report
         else (ROOT / "reports" / "validation-report.json").resolve()
     )
+    history_path = (
+        Path(args.history).resolve()
+        if args.history
+        else (ROOT / "reports" / "history.json").resolve()
+    )
+    history = load_history(history_path)
+    history_streaks: dict[str, str] = {}
+    history_statuses: dict[str, str] = {}
+    prev_line_low = set(str(k) for k, v in (history.get("line_low") or {}).items() if v)
+    prev_line_dead = set(str(k) for k, v in (history.get("line_dead") or {}).items() if v)
 
     existing, newline = load_existing(output)
     sites = existing.get("sites")
@@ -1998,6 +2134,20 @@ def main(argv: list[str] | None = None) -> int:
             for result in slow_stream[:10]:
                 print(f"  - {result.filename}: {result.error}")
 
+    # 两振出局：本轮判「要剔除」的源，若上一轮也处于剔除候选，才真剔除；否则保留一振。
+    if not args.dry_run:
+        seed_two_strike_history(history, existing, filenames)
+        history_streaks, history_statuses = apply_two_strike(results, history)
+        pending = [result for result in results if getattr(result, "strike", 0)]
+        if pending:
+            print(
+                "两振出局: "
+                + "、".join(
+                    f"{result.filename}({result.pending} 第1振)" for result in pending
+                )
+                + " —— 本轮保留，下一轮仍如此才剔除"
+            )
+
     # 本地托管脚本由本流程重新生成，不能当作「保留的本地站点」，否则会和生成结果同名冲突。
     # 判断依据：api 落在 local_spider_dir 下，且文件名是本轮生成的脚本，或文件带托管标记
     # （上一轮生成、这轮掉出名单的也要清掉）。
@@ -2034,6 +2184,21 @@ def main(argv: list[str] | None = None) -> int:
 
     entries, skipped = dedupe_entries(results, preserved_names, config)
     counts = Counter(result.status for result in results)
+
+    # 质量优先排序：打开接口第一个就是最好的源（只排自动生成部分，保留站点仍在前）。
+    result_by_entry = {
+        id(result.entry): result
+        for result in results
+        if result.entry is not None and result.status == "valid"
+    }
+
+    def _entry_sort_key(entry: dict[str, Any]) -> tuple:
+        result = result_by_entry.get(id(entry))
+        if result is None:
+            return (4, 0, 0, 0.0, str(entry.get("name") or ""))
+        return quality_sort_key(result)
+
+    entries.sort(key=_entry_sort_key)
 
     print("-" * 60)
     print(
@@ -2116,6 +2281,8 @@ def main(argv: list[str] | None = None) -> int:
     # 同步脚本到本地目录并注入线路过滤（接口指向本地文件）。
     local_spider_dir = str(config.get("local_spider_dir") or "").strip().strip("/")
     pruned: dict[str, dict[str, str]] = {}
+    new_line_low: set[str] = set()
+    new_line_dead: set[str] = set()
     if local_spider_dir:
         entry_ids = {id(entry) for entry in entries}
         kept = [
@@ -2126,8 +2293,14 @@ def main(argv: list[str] | None = None) -> int:
             and id(result.entry) in entry_ids
         ]
         script_out = output.parent / local_spider_dir
-        pruned = write_local_spiders(
-            kept, config, quality_map, script_out, write=not args.dry_run
+        pruned, new_line_low, new_line_dead = write_local_spiders(
+            kept,
+            config,
+            quality_map,
+            script_out,
+            write=not args.dry_run,
+            prev_low=prev_line_low,
+            prev_dead=prev_line_dead,
         )
         pruned_flags = {f for drops in pruned.values() for f in drops}
         print(f"本地脚本: {len(kept)} 个 -> {script_out}，线路裁减 {len(pruned_flags)} 条")
@@ -2144,6 +2317,34 @@ def main(argv: list[str] | None = None) -> int:
     else:
         write_json(output, new_data, newline)
         print(f"已写入: {output}")
+
+        # 同时输出远程直链版：生成站点用 gh-proxy 绝对链接，兼容只发布单文件、不带脚本目录的托管。
+        if local_spider_dir:
+            remote_entries: list[dict[str, Any]] = []
+            for entry in entries:
+                result = result_by_entry.get(id(entry))
+                if result is not None:
+                    remote_entries.append(
+                        dict(entry, api=upstream_api_url(config, result.filename))
+                    )
+                else:
+                    remote_entries.append(entry)
+            remote_data = dict(existing)
+            remote_data["sites"] = preserved + remote_entries
+            remote_path = output.with_name(
+                output.stem + "-remote" + output.suffix
+            )
+            write_json(remote_path, remote_data, newline)
+            print(f"已写入: {remote_path}")
+
+        # 两振出局历史：追加本轮状态，保留最近 N 轮；连击/线路集合只存最后一轮。
+        history["rounds"].append(history_statuses)
+        history["rounds"] = history["rounds"][-HISTORY_MAX_ROUNDS:]
+        history["streaks"] = history_streaks
+        history["line_low"] = {k: True for k in new_line_low}
+        history["line_dead"] = {k: True for k in new_line_dead}
+        save_history(history_path, history)
+        print(f"已写入: {history_path}")
 
     print("=" * 60)
     return 0

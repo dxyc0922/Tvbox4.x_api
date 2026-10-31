@@ -153,6 +153,9 @@ def request(
 
 FFPROBE = shutil.which("ffprobe")
 
+# 已知广告/贴片域名片段（由 config filters.ad_hosts 注入，functional_check 启动时设置）。
+AD_HOSTS: tuple[str, ...] = ()
+
 
 def probe_media(url: str, referer: str | None, timeout: float = 8.0) -> dict[str, Any]:
     """用 ffprobe 读取视频流的分辨率和码率。
@@ -502,6 +505,15 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
     if ad_keyword_segments and (minority_hosts or cue or daterange):
         ad_score += 1
         reasons.append(f"分片路径含广告关键词 {ad_keyword_segments} 个")
+    # 已知广告域名：域名命中即算，不看占比（个别源会插 1–2 个广告分片）。
+    ad_host_segments = 0
+    if AD_HOSTS:
+        for host in hosts:
+            if any(bad in host for bad in AD_HOSTS):
+                ad_host_segments += hosts[host]
+        if ad_host_segments > 0:
+            ad_score += 2
+            reasons.append(f"分片来自广告域名 {ad_host_segments} 个")
 
     return {
         "kind": "hls",

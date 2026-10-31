@@ -291,6 +291,10 @@ def analyze_streams(
     """
     import stream_check
 
+    stream_check.AD_HOSTS = tuple(
+        str(h) for h in ((config.get("filters") or {}).get("ad_hosts") or []) if str(h).strip()
+    )
+
     by_name = {path.name: path for path in scripts}
     request_cfg = config.get("request") or {}
     max_hosts = int(request_cfg.get("max_hosts_per_script") or 8)

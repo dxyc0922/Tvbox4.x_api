@@ -20,7 +20,8 @@
         "exclude_adult": true,
         "adult_keywords": [],
         "adult_title_keywords": [],
-        "adult_allow": []
+        "adult_allow": [],
+        "ad_hosts": []
     },
     "functional": {
         "enabled": true,

@@ -5,6 +5,9 @@
 
 Github加速地址：https://gh-proxy.com/https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/refs/heads/main/接口.json
 
+远程直链版（生成站点用 gh-proxy 绝对链接，不带 `脚本/` 目录也能用）：
+https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/refs/heads/main/接口-remote.json
+
 说明:由于盒子是安卓4.x会导致加载一些新的接口会崩溃,无法加载,无法播放等异常情况,况且有些线路含18禁内容不适合在电视上展示,以及一些线路含赌博广告,播放卡顿等问题都需要清除
 
 1.符合下面要求的接口会添加进接口给电视用
@@ -33,6 +36,10 @@ GitHub Actions 只保留手动触发作为备用通道。
   - 生成站点的 `api` 指向本地文件 `./脚本/<脚本名>.py`，不再依赖 gh-proxy 存活。
 - 线路级裁减：给每个脚本注入一段过滤代码，把**不通的线路**（HTTP 4xx/5xx、token 过期）
   和**明显低质量的线路**（码率低于分辨率档，且同源另有达标线路）从播放列表里去掉。
+  剔除要走「两振出局」：源/线路连续两轮被判为同一剔除候选才真剔除，单集 token 过期、
+  CDN 抖动不再让名单每周漂移（见「两振出局」）。
+- 同时生成 `接口-remote.json`：生成站点的 `api` 用 gh-proxy 绝对链接，兼容只发布单个
+  JSON 文件、不带 `脚本/` 目录的托管方式。
 - `wallpaper`、`lives`、`doh`、`rules`、`ads` 等其他顶层字段保持不变。
 - 可用站点骤降保护：本次生成数少于上次的一半、或下载失败率超过 20% 时不写入，直接报错退出。
 
@@ -104,7 +111,8 @@ GitHub Actions 里这一步跑在 Docker 容器中：不注入任何密钥、`/w
 | **U 未取得播放地址** | 没解析出播放地址（地区限制/超时/本地代理） | 不参与过滤 |
 
 另外会记录 `ad_score`：`#EXT-X-CUE-OUT` / `#EXT-X-DATERANGE` / `SCTE35` 广告标记各 +3，
-分片来自多个域名（少数域名占比 ≤20%）+2。命中即判 C。
+分片来自多个域名（少数域名占比 ≤20%）+2；`filters.ad_hosts` 里配置的已知广告域名片段
+命中即 +2（个别源只插 1–2 个广告分片，不看占比）。命中即判 C。
 
 ```bash
 # 单独看某个播放地址
@@ -127,10 +135,13 @@ U 有 136 个，全删会误伤大量可用站点。本仓库现在显式设为 
 等级按**所有采样线路里最好的一条**算：只要有一条线路正常（比如华谊影视第一条线路连接失败、
 K蓝光正常），就按那条线路的等级计，不会因为第一条失败被判成 U。
 
-当前仓库的配置是 `min_grade = "B"` + `drop_unverified = true`，即**只保留验证过的 A/B 源**：
-220 个脚本里可用 52 个（A 6 + B 46），其余是等级不足/U 105 个、成人内容 6 个、
-低码率 13 个、加载慢 5 个、host 不可达 29 个、无 host 7 个、跳过 3 个。
-最终 `接口.json` 是 54 个站点（52 自动 + 2 本地）。想放宽就关掉 `drop_unverified`。
+当前仓库的配置是 `min_grade = "B"` + `drop_unverified = true`，即**只保留验证过的 A/B 源**。
+220 个脚本里本轮可用 51 个（A 6 + B 45），其余是等级不足/U、成人内容、低码率、加载慢、
+host 不可达、无 host、跳过。最终 `接口.json` 是 53 个站点（51 自动 + 2 本地）。
+想放宽就关掉 `drop_unverified`。
+
+> 数量会随两振出局波动：源被判「剔除候选」后**连续两轮**才真剔除，所以某一轮可能比上一轮
+> 略多（首轮全保留或新源进来），下一轮稳定后又回到基准。见「两振出局」。
 
 ### 本地运行
 
@@ -141,6 +152,15 @@ python scripts/update_api.py
 # 用已经下载好的 py 目录调试，不访问 GitHub
 python scripts/update_api.py --source-dir /path/to/py --dry-run
 ```
+
+输出两个接口文件：
+
+- `接口.json`：生成站点的 `api` 指向本地 `./脚本/<脚本名>.py`（随仓库一起发布，带 `脚本/` 目录）。
+- `接口-remote.json`：生成站点的 `api` 是 gh-proxy 绝对链接，只发布这个 JSON 单文件也能用
+  （但 `脚本/` 里的源就不带本地副本了，适合纯 CDN 托管）。
+
+生成站点按**质量排序**：等级（A>B>C>D）→ 功能评分 → 最高线路码率 → 最快速度比 → 名称，
+打开接口第一个就是最好的源。手动保留的本地站点（豆瓣/哔哩）仍排在最前。
 
 ### 成人内容过滤
 
@@ -265,17 +285,48 @@ bpp 0.017，会被剔除。设 `quality.min_bpp = 0` 可关闭这一层。
 `./脚本/<脚本名>.py`，不再走 gh-proxy。同步时给每个脚本末尾注入一段 `detailContent`
 包装代码，按线路名过滤：
 
-1. **手动黑名单**：`quality.line_prune.blacklist` 指定的线路无条件剔除。
+1. **手动黑名单**：`quality.line_prune.blacklist` 指定的线路无条件剔除，立即生效。
    华谊影视的 `F蓝光`（token 过期，HTTP 400）、`QQ蓝光`（404 页面）就是这样去掉的。
 2. **低质量线路**：线路实测码率低于对应分辨率档阈值（含 bpp 下限），且同源**另有至少一条
-   达标线路**时才剔除——不会把源删空。本轮去掉 13 条：99短剧网·小橙子官3、AI搜剧·豪华HD、
-   动漫巴士·暴风/无尽、大马猴影视·极速/暴风、搜剧AI·红牛/新浪/极速、猎手/电影猎手·非凡线路、
-   短剧巴士·量子、第七影院·暴风、豆花电影网·暴风资源。
+   达标线路**时才剔除——不会把源删空。剔除要走两振：连续两轮低质量才删（见「两振出局」）。
+3. **疑似不通线路**：HTTP 4xx/5xx 只作为提示打印（"疑似不通线路"），单集 token 过期是误报
+   （华谊影视的 K蓝光某集返回 403、换集就 200），不自动剔除；连续两轮 4xx 才删。
+   `line_prune.dead_status_min` 默认 `0`（禁用「单次 4xx 立即判死」）。
 
 **为什么不用 HTTP 状态码自动判死**：线路 URL 是逐集带 token 的，某集的 403/404 只代表
 那一集过期，不代表整条线路都坏。实测华谊影视的 K蓝光某集返回 403，但换一集或换时间段就正常，
-按状态码剔除会误伤。所以 4xx/5xx 只作为提示打印（"疑似不通线路"），确认死掉再加进
-`line_prune.blacklist`。B超高清同理：单次慢不代表坏，按「有一条快就保留」留在源里。
+按状态码剔除会误伤。确认死掉再加进 `line_prune.blacklist`。B超高清同理：单次慢不代表坏，
+按「有一条快就保留」留在源里。
+
+### 两振出局（稳定性）
+
+单集采样 + CDN 抖动会让源/线路频繁进出名单。**两振出局**把「单轮判定」改成「连续两轮判定」：
+
+- **源级**：本轮被判 `low_quality` / `low_bitrate` / `slow_stream` 的源，若上一轮也处于
+  「剔除候选」，本轮才真剔除；否则保留一振（`strike1`），下一轮仍差才删。
+- **线路级**：低质量/疑似不通线路同样连续两轮才裁减。
+- 历史存 `reports/history.json`（每轮状态 + 连击数，保留最近 8 轮）。
+
+**首轮基线**：`history.json` 不存在时，以上一轮已提交的 `接口.json` 为第 0 轮——上一轮已排除的
+源视为已有第 1 振，本轮仍为候选则直接第 2 振剔除，避免首轮把上轮已过滤的源全部加回
+（54→172 站）。这也意味着**第一轮不会出现 172 站的膨胀**，接口数量与上一轮基本持平。
+
+**CI 每次全新**：`reports/` 被 gitignore，GitHub Actions 无历史 → 只保守保留，不删源。
+两振的稳定裁减依赖本机跑 `run_local.py`（历史只存本机）。想在两振里看某源的判定，
+看 `reports/validation-report.json` 的 `scripts[].status`，或手动跑完看输出的
+「两振出局: ...」行。
+
+```bash
+# 查看/维护黑名单与豁免
+python scripts/ban_line.py 华谊影视.py --line F蓝光 --line QQ蓝光      # 加黑名单
+python scripts/ban_line.py 华谊影视.py --line F蓝光 --unban          # 取消
+python scripts/ban_line.py 低端影视.py --bitrate                    # 码率豁免
+python scripts/ban_line.py 麒麟影视.py --speed                      # 速度豁免
+python scripts/ban_line.py 华谊影视.py --line K蓝光 --run            # 改完直接重跑
+```
+
+> `ban_line.py` 只改 `scripts/config.json`，不直接动脚本文件；线路裁减仍由 `update_api.py`
+> 注入。你实际看片发现某源卡/某线路坏时，一行命令就能加进黑名单并重跑。
 
 ### 耗时与并发
 
@@ -299,6 +350,14 @@ bpp 0.017，会被剔除。设 `quality.min_bpp = 0` 可关闭这一层。
 `functional.stream_workers`（播放地址分析）、`request.workers`（host 校验）、
 `request.download_workers`（下载）。
 
+### 后续方向（未实现）
+
+- **增量功能校验**：播放地址（线路 URL）逐集带 token、一周就失效，不能整行缓存 `run_one`
+  结果。计划改为「缓存功能字段 + 只重取 detail 换新 URL」，上游没改的脚本跳过全量校验，
+  把 11 分钟压到 3–5 分钟。
+- **临界线路二次确认**：对码率/速度落在阈值 ±10% 的线路加测第 2 个视频（电影+剧集），
+  避免单集波动误判；已并入两振出局（跨轮二次采样），单轮内复测未做。
+
 ### 自定义
 
 编辑 `scripts/config.json`：
@@ -310,6 +369,8 @@ bpp 0.017，会被剔除。设 `quality.min_bpp = 0` 可关闭这一层。
 - `filters.exclude_adult`：剔除成人内容源，默认 `true`。
 - `filters.adult_keywords` / `adult_title_keywords`：自定义分类/标题关键词，留空用内置词表。
 - `filters.adult_allow`：误判豁免的文件名列表，例如 `["ZIP0影视.py"]`。
+- `filters.ad_hosts`：已知广告/贴片域名片段列表（如 `["adcdn", "ads.example.com"]`），
+  命中即记广告分；默认空列表表示不启用，无行为变化。
 - `functional.adult_probe_keywords`：成人内容探针关键词，默认「麻豆传媒」「被家长调教的女教师」。
 - `functional.enabled` / `functional.report`：是否自动读取功能校验报告。
 - `functional.min_score`：最低功能评分（0–3），默认 `0` 表示只评分不删源。
@@ -325,11 +386,13 @@ bpp 0.017，会被剔除。设 `quality.min_bpp = 0` 可关闭这一层。
 - `quality.bitrate_allow`：码率误判豁免的文件名列表，例如 `["低端影视.py"]`。
 - `quality.speed_allow`：加载速度误判豁免的文件名列表。
 - `quality.line_prune.enabled`：是否做线路级裁减（默认 `false`，本仓库 `true`）。
-- `quality.line_prune.dead_status_min`：HTTP 状态码 ≥ 此值视为线路不可用，默认 `400`。
+- `quality.line_prune.dead_status_min`：HTTP 状态码 ≥ 此值视为线路不可用，默认 `0`（禁用
+  单次 4xx 立即判死，改走两振：连续两轮 4xx 才删）。
 - `quality.line_prune.blacklist`：手动剔除线路名，键是脚本文件名，例如
   `{"华谊影视.py": ["F蓝光", "QQ蓝光"]}`。
 - `local_spider_dir`：非空时把校验通过的脚本同步到该目录，并让 `接口.json` 的 `api`
-  指向 `./<目录>/<脚本名>.py`；空字符串则仍用 gh-proxy 远程链接。
+  指向 `./<目录>/<脚本名>.py`；空字符串则仍用 gh-proxy 远程链接。同步会额外生成
+  `接口-remote.json`（生成站点用绝对 gh-proxy 链接）。
 - `request.accept_4xx`：是否把 403/404 等算作可达，默认 `true`。
 - `request.timeout` / `request.workers`：请求超时和并发数。
 

@@ -912,44 +912,4 @@ class Spider(Spider):
         self.destroy()
 
 
-
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["小橙子官3"]
-
-def _tvbox_filter_lines(result, drop):
-    if not isinstance(result, dict):
-        return result
-    items = result.get('list')
-    if isinstance(items, list):
-        for item in items:
-            _tvbox_filter_item(item, drop)
-    else:
-        _tvbox_filter_item(result, drop)
-    return result
-
-def _tvbox_filter_item(item, drop):
-    froms = item.get('vod_play_from') or ''
-    urls = item.get('vod_play_url') or ''
-    if not isinstance(froms, str) or not isinstance(urls, str):
-        return
-    if '$$$' not in froms:
-        return
-    parts_from = [f.strip() for f in froms.split('$$$')]
-    parts_url = urls.split('$$$')
-    if len(parts_from) != len(parts_url):
-        return
-    keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]
-    if not keep or len(keep) == len(parts_from):
-        return
-    item['vod_play_from'] = '$$$'.join(f for f, _ in keep)
-    item['vod_play_url'] = '$$$'.join(u for _, u in keep)
-
-def _tvbox_apply(cls):
-    fn = getattr(cls, 'detailContent', None)
-    if fn is None:
-        return
-    def wrapper(self, *a, _fn=fn, **k):
-        return _tvbox_filter_lines(_fn(self, *a, **k), _TVBOX_DROP_LINES)
-    setattr(cls, 'detailContent', wrapper)
-
-_tvbox_apply(Spider)
