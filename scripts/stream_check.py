@@ -171,7 +171,7 @@ def probe_media(url: str, referer: str | None, timeout: float = 8.0) -> dict[str
         FFPROBE,
         "-v", "error",
         "-select_streams", "v:0",
-        "-show_entries", "stream=bit_rate,height,width",
+        "-show_entries", "stream=bit_rate,height,width,avg_frame_rate",
         "-of", "json",
         "-probesize", "1000000",
         "-analyzeduration", "2000000",
@@ -212,6 +212,15 @@ def probe_media(url: str, referer: str | None, timeout: float = 8.0) -> dict[str
         result["height"] = int(height)
     if str(width).isdigit() and int(width) > 0:
         result["width"] = int(width)
+    rate = str(stream.get("avg_frame_rate") or "")
+    if "/" in rate:
+        num, den = rate.split("/", 1)
+        try:
+            fps = float(num) / float(den)
+        except (ValueError, ZeroDivisionError):
+            fps = 0.0
+        if 0 < fps <= 120:
+            result["fps"] = round(fps, 2)
     return result
 
 
@@ -365,10 +374,12 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
     # 分辨率直接决定码率分档，所以优先用 ffprobe 读真实值；ffprobe 不可用/失败时退回 master。
     width = 0
     height = 0
+    fps = 0.0
     probed = probe_media(final_url, referer, min(timeout, 12.0))
     if probed.get("width") and probed.get("height"):
         width = int(probed["width"])
         height = int(probed["height"])
+        fps = float(probed.get("fps") or 0)
         resolution = f"{width}x{height}"
     elif resolution and "x" in resolution.lower():
         try:
@@ -426,6 +437,7 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
         "resolution": resolution,
         "width": width,
         "height": height,
+        "fps": fps,
         "bandwidth": bandwidth,
         "bitrate_kbps": bitrate,
         "bitrate_source": bitrate_source,
@@ -464,6 +476,7 @@ def analyze_stream(
         "bitrate_kbps": 0,
         "width": 0,
         "height": 0,
+        "fps": 0.0,
     }
     if not url:
         result["error"] = "没有播放地址"

@@ -39,6 +39,7 @@
         "min_grade": "B",
         "drop_unverified": true,
         "min_bitrate_kbps": 800,
+        "min_bpp": 0.035,
         "bitrate_thresholds": {
             "2160": 6000,
             "1440": 3500,

@@ -54,6 +54,12 @@ DEFAULT_BITRATE_THRESHOLDS: dict[str, int] = {
     "360": 400,
 }
 
+# 每像素每帧最低码率（bits per pixel）。分辨率分档只能挡住「低分辨率高码率」，
+# 挡不住「1080p 但码率只有 1.6–1.8 Mbps」的廉价转码，所以再加一层 bpp 下限：
+#   最低码率 = max(分辨率档阈值, min_bpp × 宽 × 高 × fps / 1000)
+# 0.035 落在实测 1080p 的 1802 → 1860 kbps 空档里。
+DEFAULT_MIN_BPP = 0.035
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "upstream": {
         "owner": "wzxxcz",
@@ -89,6 +95,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "min_grade": "",
         "drop_unverified": False,
         "min_bitrate_kbps": 800,
+        "min_bpp": DEFAULT_MIN_BPP,
         "bitrate_thresholds": dict(DEFAULT_BITRATE_THRESHOLDS),
         "max_lines": 4,
         "bitrate_allow": [],
@@ -1077,16 +1084,42 @@ def resolution_threshold(
         return float(default_kbps)
 
 
+def stream_fps(stream: dict[str, Any]) -> float:
+    """取 ffprobe 读到的帧率；取不到或异常时按 25 算。
+
+    实测绝大多数源是 25fps，少数 24/30 对阈值影响 <20%。
+    """
+    try:
+        fps = float(stream.get("fps") or 0)
+    except (TypeError, ValueError):
+        fps = 0.0
+    return fps if 0 < fps <= 120 else 25.0
+
+
+def stream_bpp(stream: dict[str, Any], bitrate: int | None = None) -> float:
+    """算实际 bpp（每像素每帧的比特数），用于和 min_bpp 比较。"""
+    width = int(stream.get("width") or 0)
+    height = int(stream.get("height") or 0)
+    kbps = int(bitrate if bitrate is not None else (stream.get("bitrate_kbps") or 0))
+    if not (width and height and kbps):
+        return 0.0
+    return kbps * 1000.0 / (width * height * stream_fps(stream))
+
+
 def bitrate_verdict(
     quality: dict[str, Any] | None,
     min_kbps: float,
     thresholds: dict[str, Any] | None = None,
+    min_bpp: float = 0.0,
 ) -> dict[str, Any]:
     """判断一个源的所有采样线路是否都低于对应分辨率的最低码率。
 
     只有「每条视频线路都测到了码率，且都低于阈值」才算低码率源。
     有任何一条线路测不出来（解析线路、页面、超时）就保留——没测到不等于低。
     音频源（听书/音乐）不参与码率判定。
+
+    min_bpp > 0 时，阈值取 max(分辨率档阈值, min_bpp × 宽 × 高 × fps / 1000)，
+    用来挡住「1080p 但码率只有 1.6–1.8 Mbps」的低端转码源。
     """
     verdict: dict[str, Any] = {
         "lines": [],
@@ -1113,9 +1146,20 @@ def bitrate_verdict(
         if kind in VIDEO_KINDS and bitrate > 0:
             measured += 1
             limit = resolution_threshold(stream, min_kbps, thresholds)
+            actual_bpp = stream_bpp(stream, bitrate)
+            if min_bpp > 0 and stream.get("width") and stream.get("height"):
+                limit = max(
+                    limit,
+                    min_bpp
+                    * int(stream["width"])
+                    * int(stream["height"])
+                    * stream_fps(stream)
+                    / 1000.0,
+                )
             low = bitrate < limit
         else:
             limit = 0.0
+            actual_bpp = 0.0
             unknown += 1
             low = False
         verdict["lines"].append(
@@ -1124,6 +1168,8 @@ def bitrate_verdict(
                 "kind": kind,
                 "bitrate_kbps": bitrate,
                 "min_kbps": round(limit),
+                "bpp": round(actual_bpp, 4),
+                "fps": float(stream.get("fps") or 0),
                 "width": int(stream.get("width") or 0),
                 "height": int(stream.get("height") or 0),
                 "low": low,
@@ -1465,6 +1511,7 @@ def main(argv: list[str] | None = None) -> int:
         min_grade = str(quality_cfg.get("min_grade") or "").strip().upper()
         drop_unverified = bool(quality_cfg.get("drop_unverified"))
         min_bitrate = float(quality_cfg.get("min_bitrate_kbps") or 0)
+        min_bpp = float(quality_cfg.get("min_bpp") or 0)
         bitrate_thresholds = dict(DEFAULT_BITRATE_THRESHOLDS)
         bitrate_thresholds.update(quality_cfg.get("bitrate_thresholds") or {})
         bitrate_allow = {
@@ -1508,7 +1555,9 @@ def main(argv: list[str] | None = None) -> int:
                 and result.status == "valid"
                 and result.filename not in bitrate_allow
             ):
-                verdict = bitrate_verdict(quality, min_bitrate, bitrate_thresholds)
+                verdict = bitrate_verdict(
+                    quality, min_bitrate, bitrate_thresholds, min_bpp
+                )
                 quality["bitrate"] = verdict
                 if verdict["all_low"]:
                     result.status = "low_bitrate"
@@ -1516,9 +1565,10 @@ def main(argv: list[str] | None = None) -> int:
                         f"{item['bitrate_kbps']}kbps@"
                         f"{min(item['width'], item['height']) if item['width'] and item['height'] else item['height']}p"
                         f"<{item['min_kbps']}"
+                        + (f" bpp={item['bpp']:.3f}" if min_bpp > 0 else "")
                         for item in verdict["lines"]
                     )
-                    result.error = f"所有线路码率低于分辨率阈值（{detail}）"
+                    result.error = f"所有线路码率低于阈值（{detail}）"
         scores = Counter(
             int(result.quality.get("score") or 0)
             for result in results
