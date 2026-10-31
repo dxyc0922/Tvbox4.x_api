@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 LOG_DIR = ROOT / "logs"
 OUTPUT = ROOT / "接口.json"
+SPIDER_DIR = ROOT / "脚本"
 FUNCTIONAL_REPORT = ROOT / "reports" / "functional-report.json"
 # 功能校验下载好的脚本缓存，生成阶段直接复用，避免重复下载 200+ 个文件。
 SCRIPT_CACHE = Path(tempfile.gettempdir()) / "tvbox-py-cache"
@@ -144,11 +145,11 @@ def pull(logger: Logger) -> None:
 
 def commit_and_push(logger: Logger, message: str, retries: int) -> bool:
     logger.write("\n提交并推送...\n")
-    if git("add", "--", OUTPUT.name) != 0:
+    if git("add", "--", OUTPUT.name, SPIDER_DIR.name) != 0:
         logger.write("git add 失败\n")
         return False
     if git("diff", "--cached", "--quiet") == 0:
-        logger.write("接口.json 没有变化，跳过提交\n")
+        logger.write("接口.json 与本地脚本没有变化，跳过提交\n")
         return True
     if git("commit", "-m", message) != 0:
         logger.write("git commit 失败\n")

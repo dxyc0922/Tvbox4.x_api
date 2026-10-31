@@ -552,6 +552,7 @@ def analyze_stream(
         "ad_reasons": [],
         "grade": "D",
         "host": "",
+        "status": 0,
         "bitrate_kbps": 0,
         "width": 0,
         "height": 0,
@@ -577,6 +578,7 @@ def analyze_stream(
     final_url = ""
     try:
         resp = request(url, referer, timeout, stream=True)
+        result["status"] = int(resp.status_code or 0)
         content_type = (resp.headers.get("Content-Type") or "").lower()
         final_url = resp.url
         body = b""
@@ -645,6 +647,10 @@ def analyze_stream(
             else:
                 result["relation"] = site_relation(url, site_hosts, final_url)
     else:
+        # 非 m3u8 / 非 HTML（JSON 错误、403/404 等）：4xx 以上明确记为页面错误，
+        # 线路裁减按 status>=400 判定为不可用。
+        if result.get("status", 0) >= 400:
+            result.update(kind="page", error=f"HTTP {result['status']}")
         result["relation"] = site_relation(url, site_hosts, final_url)
 
     result["grade"] = grade_of(result)

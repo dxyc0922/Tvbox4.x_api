@@ -52,8 +52,16 @@
         },
         "max_lines": 4,
         "bitrate_allow": [],
-        "speed_allow": []
+        "speed_allow": [],
+        "line_prune": {
+            "enabled": true,
+            "dead_status_min": 0,
+            "blacklist": {
+                "华谊影视.py": ["F蓝光", "QQ蓝光"]
+            }
+        }
     },
+    "local_spider_dir": "脚本",
     "safety": {
         "min_previous_ratio": 0.5,
         "max_download_failure_ratio": 0.2

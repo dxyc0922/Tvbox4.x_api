@@ -110,7 +110,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_lines": 4,
         "bitrate_allow": [],
         "speed_allow": [],
+        # 线路级裁减：把脚本里「不通 / 明显低于质量线」的线路从播放列表里去掉。
+        "line_prune": {
+            "enabled": False,
+            # HTTP 状态码 >= 此值算不可用（400 token 过期、404 失效等）。
+            "dead_status_min": 400,
+            # 手动指定要剔除的线路名，键是脚本文件名。
+            "blacklist": {},
+        },
     },
+    "local_spider_dir": "",
     "safety": {
         "min_previous_ratio": 0.5,
         "max_download_failure_ratio": 0.2,
@@ -237,6 +246,7 @@ class ScriptResult:
     entry: dict[str, Any] | None = None
     fingerprint: str = ""
     quality: dict[str, Any] | None = None
+    source: str = ""
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -731,11 +741,17 @@ def sanitize_name(filename: str) -> str:
 def build_entry(config: dict[str, Any], filename: str) -> dict[str, Any]:
     prefix = str(config.get("auto_key_prefix") or "")
     digest = hashlib.sha1(filename.encode("utf-8")).hexdigest()[:12]
+    local_dir = str(config.get("local_spider_dir") or "").strip().strip("/")
+    if local_dir:
+        # 同步到本地脚本目录，接口指向本地文件；不依赖 gh-proxy 存活。
+        api = f"./{local_dir}/{filename}"
+    else:
+        api = upstream_api_url(config, filename)
     return {
         "key": f"{prefix}{digest}",
         "name": sanitize_name(filename),
         "type": 3,
-        "api": upstream_api_url(config, filename),
+        "api": api,
     }
 
 
@@ -1294,6 +1310,238 @@ def speed_verdict(
     return verdict
 
 
+# ---------------------------------------------------------------------------
+# 线路级裁减：把脚本里「不通 / 明显低于质量线」的线路从播放列表里去掉。
+# 采用运行时注入：在脚本末尾包一层 detailContent，按线路名过滤。
+# ---------------------------------------------------------------------------
+
+# 标记注入代码块，用于识别「本仓库生成过、可安全清理」的本地脚本。
+LINE_FILTER_MARKER = "# ---- TVBox 本地线路过滤（自动生成，勿改） ----"
+
+
+def line_prune_drops(
+    quality: dict[str, Any] | None,
+    line_prune_cfg: dict[str, Any] | None,
+    min_kbps: float,
+    thresholds: dict[str, Any] | None,
+    min_bpp: float,
+    skip_quality: bool = False,
+) -> dict[str, str]:
+    """返回 {线路名: 剔除原因}。
+
+    两类剔除：
+    1. **不可用**：HTTP 状态码 >= dead_status_min（token 过期、404 失效等）。
+       这类不看有没有替代线路——它本身就是坏的。
+    2. **低质量**：线路实测码率低于对应分辨率阈值，且该源至少有另一条线路达标。
+       （只有一条线路或者全都不达标时不动，避免把源删空；全都不达标会在
+       码率过滤阶段整源剔除。）
+    """
+    drops: dict[str, str] = {}
+    if not quality:
+        return drops
+    dead_min = int((line_prune_cfg or {}).get("dead_status_min") or 0)
+    entries = list(quality.get("line_streams") or [])
+
+    # 1) 不可用线路（无论有没有替代都删；但若全都不通，留给整源过滤，避免删空）。
+    playable: set[str] = set()
+    for entry in entries:
+        stream = entry.get("stream") or {}
+        flag = str(entry.get("flag") or "").strip()
+        if not flag:
+            continue
+        status = int(stream.get("status") or 0)
+        if not (dead_min and status >= dead_min):
+            playable.add(flag)
+    dead_flags: dict[str, str] = {}
+    if playable:
+        for entry in entries:
+            stream = entry.get("stream") or {}
+            flag = str(entry.get("flag") or "").strip()
+            if not flag:
+                continue
+            status = int(stream.get("status") or 0)
+            if dead_min and status >= dead_min:
+                dead_flags.setdefault(flag, f"HTTP {status}")
+    drops.update(dead_flags)
+
+    # 2) 低质量线路：仅当同源存在至少一条达标线路时，删掉不达标的。
+    if not skip_quality:
+        passing: list[str] = []
+        failing: list[tuple[str, int, float]] = []
+        for entry in entries:
+            stream = entry.get("stream") or {}
+            kind = str(stream.get("kind") or "")
+            if kind not in VIDEO_KINDS:
+                continue
+            bitrate = int(stream.get("bitrate_kbps") or 0)
+            if bitrate <= 0:
+                continue  # 没测到码率，未知，不动。
+            flag = str(entry.get("flag") or "").strip()
+            if not flag:
+                continue
+            limit = resolution_threshold(stream, min_kbps, thresholds)
+            if min_bpp > 0 and stream.get("width") and stream.get("height"):
+                limit = max(
+                    limit,
+                    min_bpp
+                    * int(stream["width"])
+                    * int(stream["height"])
+                    * stream_fps(stream)
+                    / 1000.0,
+                )
+            if bitrate >= limit:
+                passing.append(flag)
+            else:
+                failing.append((flag, bitrate, limit))
+        if passing and failing:
+            for flag, bitrate, limit in failing:
+                drops.setdefault(flag, f"{bitrate}kbps<{round(limit)}kbps")
+    return drops
+
+
+def inject_line_filter(source: str, drop_flags: list[str]) -> str:
+    """在脚本末尾注入线路过滤代码；不带 drop 时只打标记，方便后续清理。"""
+    marker = LINE_FILTER_MARKER
+    if marker in source:
+        source = source.split(marker)[0].rstrip("\n")
+    header = f"\n\n{marker}\n"
+    if not drop_flags:
+        return source + header
+    block = "\n".join(
+        [
+            header.rstrip("\n"),
+            f"_TVBOX_DROP_LINES = {json.dumps(sorted(drop_flags), ensure_ascii=False)}",
+            "",
+            "def _tvbox_filter_lines(result, drop):",
+            "    if not isinstance(result, dict):",
+            "        return result",
+            "    items = result.get('list')",
+            "    if isinstance(items, list):",
+            "        for item in items:",
+            "            _tvbox_filter_item(item, drop)",
+            "    else:",
+            "        _tvbox_filter_item(result, drop)",
+            "    return result",
+            "",
+            "def _tvbox_filter_item(item, drop):",
+            "    froms = item.get('vod_play_from') or ''",
+            "    urls = item.get('vod_play_url') or ''",
+            "    if not isinstance(froms, str) or not isinstance(urls, str):",
+            "        return",
+            "    if '$$$' not in froms:",
+            "        return",
+            "    parts_from = [f.strip() for f in froms.split('$$$')]",
+            "    parts_url = urls.split('$$$')",
+            "    if len(parts_from) != len(parts_url):",
+            "        return",
+            "    keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]",
+            "    if not keep or len(keep) == len(parts_from):",
+            "        return",
+            "    item['vod_play_from'] = '$$$'.join(f for f, _ in keep)",
+            "    item['vod_play_url'] = '$$$'.join(u for _, u in keep)",
+            "",
+            "def _tvbox_apply(cls):",
+            "    fn = getattr(cls, 'detailContent', None)",
+            "    if fn is None:",
+            "        return",
+            "    def wrapper(self, *a, _fn=fn, **k):",
+            "        return _tvbox_filter_lines(_fn(self, *a, **k), _TVBOX_DROP_LINES)",
+            "    setattr(cls, 'detailContent', wrapper)",
+            "",
+            "_tvbox_apply(Spider)",
+            "",
+        ]
+    )
+    return source + "\n" + block
+
+
+def write_local_spiders(
+    kept: list[ScriptResult],
+    config: dict[str, Any],
+    quality_map: dict[str, dict[str, Any]],
+    script_out: Path,
+    write: bool = True,
+) -> dict[str, dict[str, str]]:
+    """把保留的源脚本写入本地目录并注入线路过滤，返回 {filename: {flag: reason}}。
+
+    write=False 时只计算不落盘（dry-run），也不清理旧文件。
+    """
+    script_out.mkdir(parents=True, exist_ok=True)
+    quality_cfg = config.get("quality") or {}
+    line_prune_cfg = quality_cfg.get("line_prune") or {}
+    enabled = bool(line_prune_cfg.get("enabled"))
+    dead_min = int(line_prune_cfg.get("dead_status_min") or 0)
+    blacklist = {
+        str(k): {str(v).strip() for v in (val or [])}
+        for k, val in (line_prune_cfg.get("blacklist") or {}).items()
+    }
+    min_kbps = float(quality_cfg.get("min_bitrate_kbps") or 0)
+    min_bpp = float(quality_cfg.get("min_bpp") or 0)
+    thresholds = dict(DEFAULT_BITRATE_THRESHOLDS)
+    thresholds.update(quality_cfg.get("bitrate_thresholds") or {})
+    bitrate_allow = {str(n) for n in (quality_cfg.get("bitrate_allow") or [])}
+
+    kept_files: set[str] = set()
+    pruned: dict[str, dict[str, str]] = {}
+    for result in kept:
+        if not result.source:
+            continue
+        filename = result.filename
+        kept_files.add(filename)
+        drops: dict[str, str] = {}
+        if enabled:
+            # 手动黑名单优先；码率豁免的源不做质量自动剔除。
+            for flag in blacklist.get(filename, ()):
+                drops.setdefault(flag, "手动配置")
+            skip_quality = filename in bitrate_allow
+            auto = line_prune_drops(
+                quality_map.get(filename),
+                line_prune_cfg,
+                min_kbps,
+                thresholds,
+                min_bpp,
+                skip_quality=skip_quality,
+            )
+            for flag, reason in auto.items():
+                drops.setdefault(flag, reason)
+        pruned[filename] = drops
+        # 检测到 4xx/5xx 但未自动剔除的线路（单集 token 可能过期，不代表整条线路死），
+        # 列出来提示用户确认；确认死了再加进 line_prune.blacklist。
+        dead_candidates: list[str] = []
+        for entry in (quality_map.get(filename) or {}).get("line_streams") or []:
+            stream = entry.get("stream") or {}
+            flag = str(entry.get("flag") or "").strip()
+            status = int(stream.get("status") or 0)
+            if flag and status >= 400 and flag not in drops:
+                dead_candidates.append(f"{flag}(HTTP {status})")
+        if dead_candidates:
+            print(
+                f"    {filename}: 疑似不通线路（未自动剔除）: "
+                + "、".join(dead_candidates)
+            )
+        if write:
+            text = inject_line_filter(result.source, sorted(drops))
+            (script_out / filename).write_text(text, encoding="utf-8", newline="")
+
+    if not write:
+        return pruned
+
+    # 清理上一轮生成、这轮已不再保留的本地脚本（只动带标记的）。
+    for old in script_out.glob("*.py"):
+        if old.name in kept_files:
+            continue
+        try:
+            content = old.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if LINE_FILTER_MARKER in content:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    return pruned
+
+
 def write_json(path: Path, data: Any, newline: str = "\n") -> None:
     text = json.dumps(data, ensure_ascii=False, indent=4) + "\n"
     if newline == "\r\n":
@@ -1536,6 +1784,7 @@ def main(argv: list[str] | None = None) -> int:
             hosts=hosts,
             tier=tier,
             fingerprint=fingerprint,
+            source=source,
         )
 
     action = "读取" if args.source_dir else "下载"
@@ -1749,6 +1998,40 @@ def main(argv: list[str] | None = None) -> int:
             for result in slow_stream[:10]:
                 print(f"  - {result.filename}: {result.error}")
 
+    # 本地托管脚本由本流程重新生成，不能当作「保留的本地站点」，否则会和生成结果同名冲突。
+    # 判断依据：api 落在 local_spider_dir 下，且文件名是本轮生成的脚本，或文件带托管标记
+    # （上一轮生成、这轮掉出名单的也要清掉）。
+    local_spider_dir = str(config.get("local_spider_dir") or "").strip().strip("/")
+    if local_spider_dir:
+        managed_files = {result.filename for result in results if result.status == "valid"}
+
+        def _is_managed(site: Any) -> bool:
+            if not isinstance(site, dict):
+                return False
+            api = str(site.get("api") or "")
+            if not api.startswith("./"):
+                return False
+            parts = api[2:].strip("/").split("/")
+            if len(parts) < 2 or parts[0] != local_spider_dir:
+                return False
+            basename = parts[-1]
+            if basename in managed_files:
+                return True
+            path = output.parent / local_spider_dir / basename
+            try:
+                return LINE_FILTER_MARKER in path.read_text(
+                    encoding="utf-8", errors="replace"
+                )
+            except OSError:
+                return False
+
+        preserved = [site for site in preserved if not _is_managed(site)]
+        preserved_names = {
+            str(site.get("name"))
+            for site in preserved
+            if isinstance(site, dict) and site.get("name")
+        }
+
     entries, skipped = dedupe_entries(results, preserved_names, config)
     counts = Counter(result.status for result in results)
 
@@ -1829,6 +2112,29 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+
+    # 同步脚本到本地目录并注入线路过滤（接口指向本地文件）。
+    local_spider_dir = str(config.get("local_spider_dir") or "").strip().strip("/")
+    pruned: dict[str, dict[str, str]] = {}
+    if local_spider_dir:
+        entry_ids = {id(entry) for entry in entries}
+        kept = [
+            result
+            for result in results
+            if result.status == "valid"
+            and result.entry is not None
+            and id(result.entry) in entry_ids
+        ]
+        script_out = output.parent / local_spider_dir
+        pruned = write_local_spiders(
+            kept, config, quality_map, script_out, write=not args.dry_run
+        )
+        pruned_flags = {f for drops in pruned.values() for f in drops}
+        print(f"本地脚本: {len(kept)} 个 -> {script_out}，线路裁减 {len(pruned_flags)} 条")
+        for filename, drops in sorted(pruned.items()):
+            if drops:
+                detail = "、".join(f"{flag}({reason})" for flag, reason in drops.items())
+                print(f"  - {filename}: {detail}")
 
     new_data = dict(existing)
     new_data["sites"] = preserved + entries
