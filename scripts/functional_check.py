@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -45,6 +46,7 @@ import update_api  # noqa: E402
 RUNNER = Path(__file__).resolve().with_name("_spider_runner.py")
 SHIM = Path(__file__).resolve().with_name("spider_shim")
 DEFAULT_OUTPUT = ROOT / "reports" / "functional-report.json"
+DEFAULT_CACHE = ROOT / "reports" / "functional-cache.json"
 
 
 def clean_env(workdir: Path) -> dict[str, str]:
@@ -121,6 +123,101 @@ def read_result(path: Path) -> dict[str, Any] | None:
             return json.load(handle)
     except (OSError, json.JSONDecodeError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# P1 增量缓存：上游脚本没变（sha256 一致）且上次结果「干净」的源，复用上次的
+# 功能字段 + 线路分析，跳过子进程和逐线路重测。每 2 轮强制重测一次，避免
+# 服务端悄悄劣化而永远被旧结果掩盖。线路 URL 逐集带 token 会过期，但 update_api
+# 只用 line_streams 的 stream 判定、lines 只取长度，复用过期的 URL 字符串无害。
+# ---------------------------------------------------------------------------
+
+# 复用的结果必须干净：连续 2 轮（跨一复用）强制重测，防止坏源靠旧结果一直留存。
+REUSE_MAX_AGE_ROUNDS = 2
+
+
+def load_cache(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"round": 0, "entries": {}}
+    if not isinstance(data, dict):
+        return {"round": 0, "entries": {}}
+    data.setdefault("round", 0)
+    data.setdefault("entries", {})
+    return data
+
+
+def save_cache(path: Path, cache: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    update_api.write_json(path, cache, "\n")
+
+
+def source_hash(script: Path) -> str:
+    try:
+        data = script.read_bytes()
+    except OSError:
+        return ""
+    return hashlib.sha256(data).hexdigest()
+
+
+def line_clean(stream: dict[str, Any], config: dict[str, Any]) -> bool:
+    """一条线路采样是否干净：没有 4xx、广告、低码率、慢速（未知的按干净处理）。"""
+    status = int(stream.get("status") or 0)
+    if status >= 400:
+        return False
+    if int(stream.get("ad_score") or 0) >= 3:
+        return False
+    kind = str(stream.get("kind") or "")
+    if kind not in update_api.VIDEO_KINDS:
+        return True  # 非视频（解析/页面/未知）不参与码率判定
+    bitrate = int(stream.get("bitrate_kbps") or 0)
+    if bitrate <= 0:
+        return True  # 没测到码率，未知，不动
+    quality_cfg = config.get("quality") or {}
+    min_kbps = float(quality_cfg.get("min_bitrate_kbps") or 0)
+    min_bpp = float(quality_cfg.get("min_bpp") or 0)
+    thresholds = dict(update_api.DEFAULT_BITRATE_THRESHOLDS)
+    thresholds.update(quality_cfg.get("bitrate_thresholds") or {})
+    limit = update_api.resolution_threshold(stream, min_kbps, thresholds)
+    if min_bpp > 0 and stream.get("width") and stream.get("height"):
+        limit = max(
+            limit,
+            min_bpp
+            * int(stream["width"])
+            * int(stream["height"])
+            * update_api.stream_fps(stream)
+            / 1000.0,
+        )
+    if bitrate < limit:
+        return False
+    min_speed = float(quality_cfg.get("min_speed_ratio") or 0)
+    speed = float(stream.get("speed_ratio") or 0)
+    if min_speed > 0 and speed > 0 and speed < min_speed:
+        return False
+    return True
+
+
+def result_clean(row: dict[str, Any], config: dict[str, Any]) -> bool:
+    """整个结果是否干净：至少有一条线路分析结果，且每条都达标。"""
+    streams = row.get("line_streams") or []
+    if not streams:
+        return False  # 没有分析结果的不缓存（便宜，且避免漏检）
+    return all(line_clean((entry.get("stream") or {}), config) for entry in streams)
+
+
+def reusable_from_cache(
+    script: Path, entry: dict[str, Any], config: dict[str, Any], round_num: int
+) -> bool:
+    """缓存结果是否可复用：脚本没变、上次分析干净、且未超过强制重测周期。"""
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("sha256") != source_hash(script):
+        return False
+    last = int(entry.get("last_analyzed_round") or 0)
+    if last <= 0 or round_num - last >= REUSE_MAX_AGE_ROUNDS:
+        return False
+    return result_clean(entry.get("result") or {}, config)
 
 
 def run_one(
@@ -283,11 +380,13 @@ def analyze_streams(
     scripts: list[Path],
     config: dict[str, Any],
     workers: int,
+    skip: set[str] | None = None,
 ) -> dict[str, int]:
     """对拿到播放地址的脚本做二次分析：源类型 + 广告特征 + 码率。
 
     每条线路各取第一集分析（上限 quality.max_lines），结果写进 line_streams；
     stream 仍保留第一条线路的结果，兼容旧报告和等级判定。
+    skip 里的文件名跳过（复用缓存结果，已有 line_streams/stream）。
     """
     import stream_check
 
@@ -295,6 +394,7 @@ def analyze_streams(
         str(h) for h in ((config.get("filters") or {}).get("ad_hosts") or []) if str(h).strip()
     )
 
+    skip = skip or set()
     by_name = {path.name: path for path in scripts}
     request_cfg = config.get("request") or {}
     max_hosts = int(request_cfg.get("max_hosts_per_script") or 8)
@@ -314,6 +414,8 @@ def analyze_streams(
 
     jobs: list[tuple[dict[str, Any], int, str, str, list[str]]] = []
     for row in rows:
+        if str(row.get("file") or "") in skip:
+            continue
         picked: list[tuple[int, str, str]] = []
         for index, line in enumerate((row.get("lines") or [])[:max_lines]):
             url = str(line.get("url") or "")
@@ -399,6 +501,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--workers", type=int, help="并发数")
     parser.add_argument("--stream-workers", type=int, help="播放地址分析并发数")
     parser.add_argument("--no-stream", action="store_true", help="不分析播放地址（跳过广告/源类型判断）")
+    parser.add_argument("--cache", help="增量缓存路径（默认 reports/functional-cache.json）")
+    parser.add_argument("--no-cache", action="store_true", help="禁用增量缓存，全量重测")
     parser.add_argument("--limit", type=int, default=0, help="只测前 N 个脚本")
     return parser.parse_args(argv)
 
@@ -427,22 +531,63 @@ def main(argv: list[str] | None = None) -> int:
     rows: list[dict[str, Any]] = []
     probes = [str(k) for k in (settings.get("adult_probe_keywords") or []) if str(k).strip()]
     max_lines = int((config.get("quality") or {}).get("max_lines") or 4)
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {
-            executor.submit(
-                run_one, script, workdir, index, keyword, timeout, probes, max_lines
-            ): script
-            for index, script in enumerate(scripts)
-        }
-        for done, future in enumerate(as_completed(futures), 1):
-            script = futures[future]
-            try:
-                row = future.result()
-            except Exception as exc:  # noqa: BLE001
-                row = {"file": script.name, "score": 0, "error": repr(exc)}
+
+    # P1 增量缓存：脚本没变且上次结果干净的源复用，跳过子进程与逐线路重测。
+    use_cache = not args.no_cache and not args.no_stream
+    cache: dict[str, Any] = {"round": 0, "entries": {}}
+    reuse: set[str] = set()
+    if use_cache:
+        cache_path = (
+            Path(args.cache).resolve()
+            if args.cache
+            else DEFAULT_CACHE
+        )
+        cache = load_cache(cache_path)
+        cache["round"] = int(cache.get("round") or 0) + 1
+        round_num = int(cache["round"])
+        entries = cache.setdefault("entries", {})
+        for script in scripts:
+            if reusable_from_cache(script, entries.get(script.name), config, round_num):
+                reuse.add(script.name)
+        if reuse:
+            print(f"增量缓存: 复用 {len(reuse)} 个未变化且结果干净的源（每 {REUSE_MAX_AGE_ROUNDS} 轮强制重测）")
+    else:
+        cache_path = None
+        round_num = 0
+
+    to_run = [script for script in scripts if script.name not in reuse]
+    print(f"功能校验: {len(scripts)} 个脚本（重测 {len(to_run)} + 复用 {len(reuse)}），并发 {workers}，单脚本超时 {timeout}s")
+    workdir = Path(os.environ.get("TEMP", "/tmp")) / f"tvbox-func-{os.getpid()}"
+    (workdir / "jobs").mkdir(parents=True, exist_ok=True)
+    (workdir / "results").mkdir(parents=True, exist_ok=True)
+
+    fresh: dict[str, dict[str, Any]] = {}
+    if to_run:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(
+                    run_one, script, workdir, index, keyword, timeout, probes, max_lines
+                ): script
+                for index, script in enumerate(to_run)
+            }
+            for done, future in enumerate(as_completed(futures), 1):
+                script = futures[future]
+                try:
+                    row = future.result()
+                except Exception as exc:  # noqa: BLE001
+                    row = {"file": script.name, "score": 0, "error": repr(exc)}
+                fresh[script.name] = row
+                if done % 20 == 0 or done == len(futures):
+                    print(f"  已测试 {done}/{len(futures)}")
+
+    for script in scripts:
+        if script.name in reuse:
+            entry = cache["entries"][script.name]
+            row = dict(entry.get("result") or {})
+            row["file"] = script.name
             rows.append(row)
-            if done % 20 == 0 or done == len(futures):
-                print(f"  已测试 {done}/{len(futures)}")
+        else:
+            rows.append(fresh[script.name])
 
     rows.sort(key=lambda row: str(row.get("file")))
 
@@ -451,7 +596,34 @@ def main(argv: list[str] | None = None) -> int:
         stream_workers = int(
             args.stream_workers or settings.get("stream_workers") or 12
         )
-        stream_summary = analyze_streams(rows, scripts, config, stream_workers)
+        stream_summary = analyze_streams(rows, scripts, config, stream_workers, skip=reuse)
+
+    # 保存增量缓存：本轮重测的源写入结果并记录分析轮次；复用的源不更新（保持强制重测周期）。
+    if use_cache:
+        entries = cache.setdefault("entries", {})
+        wanted = {script.name for script in scripts}
+        for name in list(entries):
+            if name not in wanted:
+                del entries[name]
+        for row in rows:
+            name = str(row.get("file") or "")
+            if not name or name in reuse:
+                continue
+            try:
+                script = next(s for s in scripts if s.name == name)
+                hash_value = source_hash(script)
+            except StopIteration:
+                hash_value = ""
+            entries[name] = {
+                "sha256": hash_value,
+                "last_analyzed_round": round_num,
+                "result": row,
+            }
+        try:
+            save_cache(cache_path, cache)
+            print(f"增量缓存已更新: {cache_path}（{len(entries)} 个源）")
+        except OSError as exc:  # 只读挂载（CI 的 /work:ro）等场景写不了就跳过
+            print(f"增量缓存写入失败（跳过，不影响结果）: {exc}", file=sys.stderr)
 
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

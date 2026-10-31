@@ -88,6 +88,8 @@ python scripts/functional_check.py --source-dir /path/to/py --limit 20
 python scripts/update_api.py --functional-report reports/functional-report.json
 ```
 
+增量缓存默认开启（`--no-cache` 关闭，`--cache <路径>` 改缓存位置），见「增量校验（P1）」。
+
 GitHub Actions 里这一步跑在 Docker 容器中：不注入任何密钥、`/work` 只读、限制内存/CPU/进程数、
 禁止访问内网和回环地址。**本机运行（`--functional`）没有容器隔离**，等于在自己的机器上执行
 221 个陌生脚本，只做了超时杀进程和「禁止访问内网地址」两道防护；除非装了 Docker/WSL2，
@@ -350,13 +352,26 @@ python scripts/ban_line.py 华谊影视.py --line K蓝光 --run            # 改
 `functional.stream_workers`（播放地址分析）、`request.workers`（host 校验）、
 `request.download_workers`（下载）。
 
+### 增量校验（P1）
+
+功能校验会按脚本源码 sha256 缓存结果：**脚本没变且上次结果干净**的源，直接复用上次的
+功能字段 + 线路分析，跳过子进程和逐线路重测；脚本变了、结果不干净、或离上次重测超过
+`REUSE_MAX_AGE_ROUNDS`（默认 2 轮）的源仍全量重测。
+
+- 缓存在 `reports/functional-cache.json`（gitignored，仅本机）。
+- **只复用「干净」的结果**：所有采样线路都达标（无 4xx、无广告、码率和速度都过线）。
+  有任一线路疑似低质/慢速/4xx 的源不缓存，每轮重测——确保两振出局拿到的「剔除候选」
+  永远是本轮实测，不会拿旧结果凑数。
+- **每 2 轮强制重测一次**：上游代码没变不代表服务端没变（CDN 限速、换源都会让
+  「干净」的源悄悄变差），所以复用一次后就强制重测，最多 1 轮延迟。
+- 线路 URL 逐集带 token 会过期，但 update_api 只取 `line_streams[].stream` 判定、
+  `lines` 只取长度，复用旧结果里的 URL 字符串无害（不拿它发请求）。
+
 ### 后续方向（未实现）
 
-- **增量功能校验**：播放地址（线路 URL）逐集带 token、一周就失效，不能整行缓存 `run_one`
-  结果。计划改为「缓存功能字段 + 只重取 detail 换新 URL」，上游没改的脚本跳过全量校验，
-  把 11 分钟压到 3–5 分钟。
 - **临界线路二次确认**：对码率/速度落在阈值 ±10% 的线路加测第 2 个视频（电影+剧集），
-  避免单集波动误判；已并入两振出局（跨轮二次采样），单轮内复测未做。
+  避免单集波动误判。已并入两振出局（跨轮二次采样）；单轮内复测未做——两振已经做到
+  「连续两轮才裁」，再加单轮复测会多 1–2 分钟，且 `ban_line.py` 已能手动即时处理。
 
 ### 自定义
 
