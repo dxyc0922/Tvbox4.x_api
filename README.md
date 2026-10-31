@@ -18,8 +18,9 @@
 
 ## 自动更新
 
-`scripts/update_api.py` 从上游 `wzxxcz/wzxxcz` 拉取脚本，校验后同步到 `脚本/` 目录、
-重建 `接口.json`，定时在**本机**运行（Windows 任务计划程序）。
+`scripts/update_api.py` 从**多个上游仓库**（`config.json` 的 `upstream` 列表，默认
+`wzxxcz/wzxxcz` + `zzq1234567890/tvbox1` + `jak0099/dr`）拉取 py 脚本，按文件名去重，
+校验后同步到 `脚本/` 目录、重建 `接口.json`，定时在**本机**运行（Windows 任务计划程序）。
 
 ```powershell
 # 先手动跑一次，确认能生成、能推送
@@ -59,6 +60,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
+| `upstream` | 3 个仓库 | 上游 py 脚本仓库列表（`owner/repo/branch/path`），按文件名去重合并 |
 | `quality.min_grade` | `"B"` | 最低源质量等级（A/B/C/D），设 `""` 不过滤 |
 | `quality.drop_unverified` | `true` | 连「拿不到播放地址（U）」的源一起剔除 |
 | `quality.min_bpp` | `0.05` | 每像素每帧最低比特数，设 `0` 关闭 |
