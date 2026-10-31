@@ -24,6 +24,7 @@ import re
 import shutil
 import statistics
 import subprocess
+import time
 import urllib.parse
 from typing import Any
 
@@ -345,8 +346,75 @@ def estimate_bitrate(
     return round(total_bytes * 8 / total_seconds / 1000)
 
 
+def measure_speed(
+    entries: list[dict[str, Any]],
+    referer: str | None,
+    timeout: float,
+    samples: int = 2,
+    max_bytes: int = 2 * 1024 * 1024,
+    max_seconds: float = 6.0,
+) -> dict[str, Any]:
+    """测前几个分片的 TTFB 和等效吞吐，判断线路能不能跟上实时播放。
+
+    每个分片最多下载 2MB（从发出请求开始计时）：
+    - `ttfb_ms`：收到首字节的时间，对应播放器「点开要转圈」的时长；
+    - `speed_kbps`：含 TTFB 的等效吞吐，和码率相除得到 `speed_ratio`；
+    - `speed_ratio < 1` 表示下载速度追不上播放速度，会反复缓冲。
+
+    为什么是 2MB：只取 256KB 会被 TCP 慢启动严重低估——实测大白鲨 10 秒分片
+    用 256KB 测出 0.33x，下满 2MB 后是 1.2–1.5x；独播库同样从 0.48x 回到 1.3x。
+    短分片（1–2 秒）本身不足 2MB，会整段下完，不受影响。
+    测不到（超时/4xx/空响应）返回空字典，调用方按「未知」保留。
+    """
+    picks = list(entries)[:samples]
+    rows: list[dict[str, float]] = []
+    for entry in picks:
+        started = time.perf_counter()
+        try:
+            resp = request(
+                str(entry["url"]),
+                referer,
+                timeout,
+                stream=True,
+                headers={"Range": f"bytes=0-{max_bytes - 1}"},
+            )
+        except Exception:  # noqa: BLE001
+            continue
+        ttfb = time.perf_counter() - started
+        size = 0
+        try:
+            if resp.status_code >= 400:
+                continue
+            for chunk in resp.iter_content(65536):
+                size += len(chunk)
+                if size >= max_bytes or time.perf_counter() - started >= max_seconds:
+                    break
+        except Exception:  # noqa: BLE001
+            continue
+        finally:
+            resp.close()
+        elapsed = time.perf_counter() - started
+        if size <= 0 or elapsed <= 0:
+            continue
+        rows.append(
+            {
+                "ttfb_ms": ttfb * 1000,
+                "kbps": size * 8 / elapsed / 1000,
+            }
+        )
+    if not rows:
+        return {}
+    return {
+        "ttfb_ms": round(statistics.median(row["ttfb_ms"] for row in rows)),
+        "speed_kbps": round(statistics.median(row["kbps"] for row in rows)),
+        "speed_samples": len(rows),
+    }
+
+
 def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]:
+    started = time.perf_counter()
     resp = request(url, referer, timeout)
+    playlist_ms = (time.perf_counter() - started) * 1000
     text = resp.text
     if "#EXTM3U" not in text:
         return {"kind": "unknown", "status": resp.status_code, "url": resp.url}
@@ -358,7 +426,9 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
     if variants:
         best = max(variants, key=lambda v: (v["resolution"], v["bandwidth"]))
         resolution, bandwidth = best["resolution"], best["bandwidth"]
+        started = time.perf_counter()
         media_resp = request(best["url"], resp.url, timeout)
+        playlist_ms += (time.perf_counter() - started) * 1000
         if "#EXTM3U" in media_resp.text:
             text = media_resp.text
             final_url = media_resp.url
@@ -398,6 +468,10 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
     if not bitrate and bandwidth:
         bitrate = round(bandwidth / 1000)
         bitrate_source = "master"
+
+    # 测下载速度：码率达标但 CDN 吐得慢的线路照样没法看（实测 1080p 1566kbps 的线路
+    # 只能跑到 628kbps，播放 1 秒要下 3–5 秒）。测前 2 个分片，各最多 2MB / 6 秒。
+    speed = measure_speed(media["entries"], final_url, min(timeout, 15.0))
 
     # 广告分片：占比很小但确实存在的第二个域名
     segments = media["segments"] or 1
@@ -441,6 +515,11 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
         "bandwidth": bandwidth,
         "bitrate_kbps": bitrate,
         "bitrate_source": bitrate_source,
+        "playlist_ms": round(playlist_ms),
+        "ttfb_ms": int(speed.get("ttfb_ms") or 0),
+        "speed_kbps": int(speed.get("speed_kbps") or 0),
+        "speed_ratio": round(speed.get("speed_kbps", 0) / bitrate, 2) if bitrate else 0.0,
+        "speed_samples": int(speed.get("speed_samples") or 0),
         "variants": len(variants),
         "segments": media["segments"],
         "duration": round(total, 1),
@@ -477,6 +556,11 @@ def analyze_stream(
         "width": 0,
         "height": 0,
         "fps": 0.0,
+        "playlist_ms": 0,
+        "ttfb_ms": 0,
+        "speed_kbps": 0,
+        "speed_ratio": 0.0,
+        "speed_samples": 0,
     }
     if not url:
         result["error"] = "没有播放地址"
@@ -510,6 +594,20 @@ def analyze_stream(
             resp.close()
             # mp4 没有分片可估，只能让 ffprobe 读一下 moov 里的码率。
             result.update(probe_media(final_url or url, referer, min(timeout, 8.0)))
+            speed = measure_speed(
+                [{"url": final_url or url}], referer, min(timeout, 15.0), samples=1
+            )
+            if speed:
+                result.update(
+                    ttfb_ms=int(speed.get("ttfb_ms") or 0),
+                    speed_kbps=int(speed.get("speed_kbps") or 0),
+                    speed_ratio=round(
+                        speed.get("speed_kbps", 0) / result["bitrate_kbps"], 2
+                    )
+                    if result.get("bitrate_kbps")
+                    else 0.0,
+                    speed_samples=int(speed.get("speed_samples") or 0),
+                )
             result["relation"] = site_relation(url, site_hosts, final_url)
             result["grade"] = grade_of(result)
             return result

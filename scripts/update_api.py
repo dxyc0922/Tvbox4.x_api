@@ -60,6 +60,14 @@ DEFAULT_BITRATE_THRESHOLDS: dict[str, int] = {
 # 0.035 落在实测 1080p 的 1802 → 1860 kbps 空档里。
 DEFAULT_MIN_BPP = 0.035
 
+# 加载速度：线路实测下载速度 / 码率。低于这个倍数说明 CDN 吐得比播放快不了多少，
+# 播放器会反复缓冲；0.7 留了约 40% 的余量。所有采样线路都低于它才剔除源。
+DEFAULT_MIN_SPEED_RATIO = 0.7
+# 播放列表 + 首个分片首字节的总耗时上限（毫秒）。超过说明「点开要等太久」，
+# 即使后续吞吐正常也算慢线路。取 12 秒：实测同一条线路的启动耗时能波动 2 倍
+# （麒麟/独播库一次 4 秒、一次 9 秒），阈值太低会按瞬时网络抖动误删。
+DEFAULT_MAX_STARTUP_MS = 12000
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "upstream": {
         "owner": "wzxxcz",
@@ -96,9 +104,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "drop_unverified": False,
         "min_bitrate_kbps": 800,
         "min_bpp": DEFAULT_MIN_BPP,
+        "min_speed_ratio": DEFAULT_MIN_SPEED_RATIO,
+        "max_startup_ms": DEFAULT_MAX_STARTUP_MS,
         "bitrate_thresholds": dict(DEFAULT_BITRATE_THRESHOLDS),
         "max_lines": 4,
         "bitrate_allow": [],
+        "speed_allow": [],
     },
     "safety": {
         "min_previous_ratio": 0.5,
@@ -217,7 +228,7 @@ class ProbeResult:
 class ScriptResult:
     filename: str
     name: str
-    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / low_quality / low_bitrate
+    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / low_quality / low_bitrate / slow_stream
     hosts: list[str] = field(default_factory=list)
     tier: str = ""
     checked_host: str | None = None
@@ -1039,13 +1050,30 @@ def effective_grade(quality: dict[str, Any] | None) -> str:
 
     U 包括：没拿到播放地址、请求失败、本地代理（127.0.0.1）。
     这些是「测不出来」，不代表源差，默认不参与等级过滤。
+
+    优先看所有采样线路（line_streams），取其中最好的等级：实测华谊影视的
+    第一条线路经常连接失败，但 K蓝光线路正常，只看第一条会误判成 U。
+    没有 line_streams 时退回单条 stream。
     """
-    stream = (quality or {}).get("stream") or {}
-    grade = str(stream.get("grade") or "").upper()
-    kind = str(stream.get("kind") or "")
-    if not grade or not kind or kind in ("local", "unknown"):
+    streams: list[dict[str, Any]] = []
+    for entry in (quality or {}).get("line_streams") or []:
+        stream = entry.get("stream") or {}
+        if stream:
+            streams.append(stream)
+    if not streams:
+        stream = (quality or {}).get("stream") or {}
+        if stream:
+            streams.append(stream)
+    grades: list[str] = []
+    for stream in streams:
+        grade = str(stream.get("grade") or "").upper()
+        kind = str(stream.get("kind") or "")
+        if grade and kind and kind not in ("local", "unknown"):
+            grades.append(grade)
+    if not grades:
         return "U"
-    return grade
+    rank = {"A": 0, "B": 1, "C": 2, "D": 3}
+    return min(grades, key=lambda grade: rank.get(grade, 9))
 
 
 VIDEO_KINDS = ("hls", "mp4", "video")
@@ -1190,6 +1218,82 @@ def bitrate_verdict(
     return verdict
 
 
+def speed_verdict(
+    quality: dict[str, Any] | None,
+    min_ratio: float,
+    max_startup_ms: int,
+) -> dict[str, Any]:
+    """判断一个源的所有采样线路是不是都加载慢。
+
+    每条线路看两个指标，任一不达标就算慢：
+    - `speed_ratio`（实测吞吐 / 码率）低于 min_ratio；
+    - `playlist_ms + ttfb_ms` 超过 max_startup_ms（点开要等太久）。
+
+    和码率过滤一样：只有「每条视频线路都测到了速度，且都慢」才剔除。
+    有任何一条线路测不出来（解析线路、页面、超时）就保留——没测到不等于慢。
+    音频源不参与判定。
+    """
+    verdict: dict[str, Any] = {
+        "lines": [],
+        "measured": 0,
+        "unknown": 0,
+        "untested": 0,
+        "all_slow": False,
+    }
+    if not quality:
+        return verdict
+    entries = list(quality.get("line_streams") or [])
+    if not entries:
+        stream = quality.get("stream") or {}
+        if stream:
+            entries = [{"flag": "", "stream": stream}]
+    measured = 0
+    unknown = 0
+    for entry in entries:
+        stream = entry.get("stream") or {}
+        kind = str(stream.get("kind") or "")
+        if kind == "audio":
+            continue
+        ratio = float(stream.get("speed_ratio") or 0)
+        if kind in VIDEO_KINDS and ratio > 0:
+            measured += 1
+            playlist_ms = int(stream.get("playlist_ms") or 0)
+            ttfb_ms = int(stream.get("ttfb_ms") or 0)
+            startup_ms = playlist_ms + ttfb_ms
+            slow = ratio < min_ratio or startup_ms > max_startup_ms
+        else:
+            ratio = 0.0
+            playlist_ms = 0
+            ttfb_ms = 0
+            startup_ms = 0
+            unknown += 1
+            slow = False
+        verdict["lines"].append(
+            {
+                "flag": str(entry.get("flag") or ""),
+                "kind": kind,
+                "speed_kbps": int(stream.get("speed_kbps") or 0),
+                "speed_ratio": round(ratio, 2),
+                "playlist_ms": playlist_ms,
+                "ttfb_ms": ttfb_ms,
+                "startup_ms": startup_ms,
+                "slow": slow,
+            }
+        )
+    verdict["measured"] = measured
+    raw_lines = list(quality.get("lines") or [])
+    untested = max(0, len(raw_lines) - len(entries))
+    declared = int(quality.get("play_from") or 0)
+    if declared > len(raw_lines):
+        untested += declared - len(raw_lines)
+    verdict["untested"] = untested
+    verdict["unknown"] = unknown + untested
+    verdict["all_slow"] = bool(measured) and verdict["unknown"] == 0 and all(
+        item["slow"] for item in verdict["lines"]
+    )
+    return verdict
+
+
 def write_json(path: Path, data: Any, newline: str = "\n") -> None:
     text = json.dumps(data, ensure_ascii=False, indent=4) + "\n"
     if newline == "\r\n":
@@ -1288,6 +1392,7 @@ def build_report(
             "excluded_adult": counts.get("excluded_adult", 0),
             "low_quality": counts.get("low_quality", 0),
             "low_bitrate": counts.get("low_bitrate", 0),
+            "slow_stream": counts.get("slow_stream", 0),
             "with_quality": sum(1 for result in results if result.quality),
             "grade_a": grades.get("A", 0),
             "grade_b": grades.get("B", 0),
@@ -1517,6 +1622,11 @@ def main(argv: list[str] | None = None) -> int:
         bitrate_allow = {
             str(name) for name in (quality_cfg.get("bitrate_allow") or [])
         }
+        min_speed_ratio = float(quality_cfg.get("min_speed_ratio") or 0)
+        max_startup_ms = int(quality_cfg.get("max_startup_ms") or 0)
+        speed_allow = {
+            str(name) for name in (quality_cfg.get("speed_allow") or [])
+        }
         grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
         adult_hits: list[tuple[str, list[str]]] = []
         for result in results:
@@ -1569,6 +1679,26 @@ def main(argv: list[str] | None = None) -> int:
                         for item in verdict["lines"]
                     )
                     result.error = f"所有线路码率低于阈值（{detail}）"
+            if (
+                min_speed_ratio > 0
+                and result.status == "valid"
+                and result.filename not in speed_allow
+            ):
+                verdict = speed_verdict(quality, min_speed_ratio, max_startup_ms)
+                quality["speed"] = verdict
+                if verdict["all_slow"]:
+                    result.status = "slow_stream"
+                    detail = "、".join(
+                        f"{item['flag'] or '线路'} {item['speed_kbps']}kbps"
+                        f"={item['speed_ratio']:.2f}x"
+                        + (
+                            f"/{item['startup_ms'] / 1000:.1f}s"
+                            if item["startup_ms"]
+                            else ""
+                        )
+                        for item in verdict["lines"]
+                    )
+                    result.error = f"所有线路加载慢（{detail}）"
         scores = Counter(
             int(result.quality.get("score") or 0)
             for result in results
@@ -1607,6 +1737,17 @@ def main(argv: list[str] | None = None) -> int:
             )
             for result in low_bitrate[:10]:
                 print(f"  - {result.filename}: {result.error}")
+        if min_speed_ratio > 0:
+            slow_stream = [
+                result for result in results if result.status == "slow_stream"
+            ]
+            print(
+                f"加载速度过滤: 剔除 {len(slow_stream)} 个"
+                f"（所有采样线路都低于 {min_speed_ratio:g}x 码率或启动超过 "
+                f"{max_startup_ms / 1000:g}s）"
+            )
+            for result in slow_stream[:10]:
+                print(f"  - {result.filename}: {result.error}")
 
     entries, skipped = dedupe_entries(results, preserved_names, config)
     counts = Counter(result.status for result in results)
@@ -1620,7 +1761,8 @@ def main(argv: list[str] | None = None) -> int:
         f"下载失败 {counts.get('download_failed', 0)}，"
         f"跳过 {counts.get('skipped', 0)}，"
         f"成人剔除 {counts.get('excluded_adult', 0)}，"
-        f"码率剔除 {counts.get('low_bitrate', 0)}"
+        f"码率剔除 {counts.get('low_bitrate', 0)}，"
+        f"慢速剔除 {counts.get('slow_stream', 0)}"
     )
     print(
         f"生成站点: {len(entries)}（同名/排除跳过 {len(skipped)}），"
@@ -1672,7 +1814,11 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
         # 质量过滤是我们主动删源，不算「上游异常」，回加后再比较。
-        intentional = counts.get("low_quality", 0) + counts.get("low_bitrate", 0)
+        intentional = (
+            counts.get("low_quality", 0)
+            + counts.get("low_bitrate", 0)
+            + counts.get("slow_stream", 0)
+        )
         if (
             len(removed) >= 10
             and len(entries) + intentional < len(removed) * min_previous_ratio

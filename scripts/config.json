@@ -40,6 +40,8 @@
         "drop_unverified": true,
         "min_bitrate_kbps": 800,
         "min_bpp": 0.035,
+        "min_speed_ratio": 0.7,
+        "max_startup_ms": 12000,
         "bitrate_thresholds": {
             "2160": 6000,
             "1440": 3500,
@@ -49,7 +51,8 @@
             "360": 400
         },
         "max_lines": 4,
-        "bitrate_allow": []
+        "bitrate_allow": [],
+        "speed_allow": []
     },
     "safety": {
         "min_previous_ratio": 0.5,
