@@ -135,3 +135,9 @@ class Spider:
 
     def removeHtmlTags(self, text: str) -> str:
         return self.cleanText(text)
+
+
+# 兼容层：部分上游脚本 `from base.spider import BaseSpider`（或回退 `from t4.base.spider import
+# BaseSpider`）。TVBox 运行时 t4 框架里 BaseSpider 是基础类，本 shim 的 Spider 已实现宿主
+# API，直接用别名即可，无需真实 t4。
+BaseSpider = Spider
