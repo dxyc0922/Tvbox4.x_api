@@ -1,10 +1,24 @@
 {
-    "upstream": {
-        "owner": "wzxxcz",
-        "repo": "wzxxcz",
-        "branch": "maing",
-        "path": "py"
-    },
+    "upstream": [
+        {
+            "owner": "wzxxcz",
+            "repo": "wzxxcz",
+            "branch": "maing",
+            "path": "py"
+        },
+        {
+            "owner": "zzq1234567890",
+            "repo": "tvbox1",
+            "branch": "main",
+            "path": "py"
+        },
+        {
+            "owner": "jak0099",
+            "repo": "dr",
+            "branch": "master",
+            "path": "py"
+        }
+    ],
     "output": "接口.json",
     "accelerator": "https://gh-proxy.com/",
     "self_repo": {

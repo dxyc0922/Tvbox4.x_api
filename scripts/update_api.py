@@ -340,8 +340,21 @@ def decode_python(data: bytes) -> str:
         return data.decode("utf-8", errors="replace")
 
 
-def upstream_raw_url(config: dict[str, Any], filename: str) -> str:
-    up = config["upstream"]
+def upstream_list(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """返回上游配置列表（兼容单个 dict 或 list）。"""
+    up = config.get("upstream")
+    if isinstance(up, list):
+        return [u for u in up if isinstance(u, dict)]
+    if isinstance(up, dict):
+        return [up]
+    return []
+
+
+def upstream_raw_url(config: dict[str, Any], filename: str, src: int = 0) -> str:
+    ups = upstream_list(config)
+    if not ups:
+        raise RuntimeError("upstream 配置为空")
+    up = ups[src] if src < len(ups) else ups[0]
     quoted = urllib.parse.quote(filename, safe="/")
     return (
         f"https://raw.githubusercontent.com/{up['owner']}/{up['repo']}/"
@@ -349,9 +362,9 @@ def upstream_raw_url(config: dict[str, Any], filename: str) -> str:
     )
 
 
-def upstream_api_url(config: dict[str, Any], filename: str) -> str:
+def upstream_api_url(config: dict[str, Any], filename: str, src: int = 0) -> str:
     accelerator = str(config.get("accelerator") or "").strip()
-    raw = upstream_raw_url(config, filename)
+    raw = upstream_raw_url(config, filename, src)
     if not accelerator:
         return raw
     return accelerator.rstrip("/") + "/" + raw
@@ -390,8 +403,9 @@ def github_headers(token: str | None) -> dict[str, str]:
     return headers
 
 
-def upstream_files_from_github_tree(config: dict[str, Any], token: str | None) -> list[str]:
-    up = config["upstream"]
+def upstream_files_from_github_tree(
+    config: dict[str, Any], token: str | None, up: dict[str, Any]
+) -> list[str]:
     url = (
         f"https://api.github.com/repos/{up['owner']}/{up['repo']}/"
         f"git/trees/{up['branch']}?recursive=1"
@@ -410,8 +424,9 @@ def upstream_files_from_github_tree(config: dict[str, Any], token: str | None) -
     return sorted(files)
 
 
-def upstream_files_from_github_contents(config: dict[str, Any], token: str | None) -> list[str]:
-    up = config["upstream"]
+def upstream_files_from_github_contents(
+    config: dict[str, Any], token: str | None, up: dict[str, Any]
+) -> list[str]:
     url = (
         f"https://api.github.com/repos/{up['owner']}/{up['repo']}/"
         f"contents/{up['path']}?ref={up['branch']}"
@@ -426,8 +441,9 @@ def upstream_files_from_github_contents(config: dict[str, Any], token: str | Non
     )
 
 
-def upstream_files_from_jsdelivr(config: dict[str, Any]) -> list[str]:
-    up = config["upstream"]
+def upstream_files_from_jsdelivr(
+    config: dict[str, Any], up: dict[str, Any]
+) -> list[str]:
     url = (
         f"https://data.jsdelivr.com/v1/packages/gh/{up['owner']}/{up['repo']}"
         f"@{up['branch']}?structure=flat"
@@ -444,40 +460,73 @@ def upstream_files_from_jsdelivr(config: dict[str, Any]) -> list[str]:
 
 def get_upstream_filenames(
     config: dict[str, Any], source_dir: Path | None, token: str | None
-) -> list[str]:
+) -> dict[str, int]:
+    """返回 {上游脚本相对路径: 来源序号}，多上游按文件名去重（保留首个来源）。
+
+    返回 dict 以记录每个文件来自哪个上游（download_script 用它拼对 URL）。
+    """
     if source_dir is not None:
         if not source_dir.is_dir():
             raise RuntimeError(f"本地 py 目录不存在: {source_dir}")
-        return sorted(
+        files = sorted(
             path.relative_to(source_dir).as_posix()
             for path in source_dir.rglob("*.py")
         )
+        return {f: 0 for f in files}
+
+    ups = upstream_list(config)
+    if not ups:
+        raise RuntimeError("upstream 配置为空")
 
     errors: list[str] = []
-    for label, loader in (
-        ("GitHub tree", lambda: upstream_files_from_github_tree(config, token)),
-        ("GitHub contents", lambda: upstream_files_from_github_contents(config, token)),
-        ("jsDelivr", lambda: upstream_files_from_jsdelivr(config)),
-    ):
-        try:
-            files = loader()
-            if files:
-                print(f"上游文件列表来源: {label} ({len(files)} 个 .py)")
-                return files
-            errors.append(f"{label}: 没有找到 .py")
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"{label}: {type(exc).__name__}: {exc}")
-    raise RuntimeError("无法获取上游 py 文件列表:\n  " + "\n  ".join(errors))
+    seen: dict[str, tuple[str, int]] = {}
+    for src, up in enumerate(ups):
+        got = False
+        label_ok = ""
+        for label, loader in (
+            ("GitHub tree", lambda: upstream_files_from_github_tree(config, token, up)),
+            ("GitHub contents", lambda: upstream_files_from_github_contents(config, token, up)),
+            ("jsDelivr", lambda: upstream_files_from_jsdelivr(config, up)),
+        ):
+            try:
+                files = loader()
+                if files:
+                    print(
+                        f"上游[{src}] {up['owner']}/{up['repo']}@{up['branch']}: "
+                        f"{label} ({len(files)} 个 .py)"
+                    )
+                    got = True
+                    label_ok = label
+                    break
+                errors.append(f"上游[{src}] {up['owner']}/{up['repo']} {label}: 没有找到 .py")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(
+                    f"上游[{src}] {up['owner']}/{up['repo']} {label}: {type(exc).__name__}: {exc}"
+                )
+        if not got:
+            print(
+                f"警告: 上游[{src}] {up['owner']}/{up['repo']} 获取文件列表失败，跳过",
+                file=sys.stderr,
+            )
+            continue
+        for f in files:
+            base = f.rsplit("/", 1)[-1]
+            if base not in seen:
+                seen[base] = (f, src)
+    if not seen:
+        raise RuntimeError("无法获取上游 py 文件列表:\n  " + "\n  ".join(errors))
+    return {f: src for f, src in seen.values()}
 
 
 def download_script(
-    config: dict[str, Any], filename: str, source_dir: Path | None
+    config: dict[str, Any], filename: str, source_dir: Path | None, src: int = 0
 ) -> tuple[str, str]:
     if source_dir is not None:
         path = source_dir / filename
         return decode_python(path.read_bytes()), str(path)
 
-    up = config["upstream"]
+    ups = upstream_list(config)
+    up = ups[src] if src < len(ups) else ups[0]
     quoted = urllib.parse.quote(filename, safe="/")
     raw = (
         f"https://raw.githubusercontent.com/{up['owner']}/{up['repo']}/"
@@ -786,7 +835,7 @@ def sanitize_name(filename: str) -> str:
     return name or "未命名"
 
 
-def build_entry(config: dict[str, Any], filename: str) -> dict[str, Any]:
+def build_entry(config: dict[str, Any], filename: str, src: int = 0) -> dict[str, Any]:
     prefix = str(config.get("auto_key_prefix") or "")
     digest = hashlib.sha1(filename.encode("utf-8")).hexdigest()[:12]
     local_dir = str(config.get("local_spider_dir") or "").strip().strip("/")
@@ -794,7 +843,7 @@ def build_entry(config: dict[str, Any], filename: str) -> dict[str, Any]:
         # 同步到本地脚本目录，接口指向本地文件；不依赖 gh-proxy 存活。
         api = f"./{local_dir}/{filename}"
     else:
-        api = upstream_api_url(config, filename)
+        api = upstream_api_url(config, filename, src)
     return {
         "key": f"{prefix}{digest}",
         "name": sanitize_name(filename),
@@ -1897,7 +1946,7 @@ def build_report(
     )
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "upstream": dict(config["upstream"]),
+        "upstream": upstream_list(config),
         "output": str(output),
         "summary": {
             "upstream_scripts": len(filenames),
@@ -2026,7 +2075,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"获取上游文件列表失败: {exc}", file=sys.stderr)
         return 1
     if args.limit > 0:
-        filenames = filenames[: args.limit]
+        filenames = dict(list(filenames.items())[: args.limit])
     if not filenames:
         print("上游没有找到 .py 文件，保留原 接口.json", file=sys.stderr)
         return 1
@@ -2042,8 +2091,9 @@ def main(argv: list[str] | None = None) -> int:
 
     def process(filename: str) -> ScriptResult:
         name = sanitize_name(filename)
+        src = filenames.get(filename, 0)
         try:
-            source, source_url = download_script(config, filename, source_dir)
+            source, source_url = download_script(config, filename, source_dir, src)
         except Exception as exc:  # noqa: BLE001
             return ScriptResult(
                 filename, name, "download_failed", error=f"{type(exc).__name__}: {exc}"
@@ -2106,7 +2156,7 @@ def main(argv: list[str] | None = None) -> int:
         if hits:
             result.status = "valid"
             result.checked_host, result.http_status = hits[0][0], hits[0][1].status
-            result.entry = build_entry(config, result.filename)
+            result.entry = build_entry(config, result.filename, filenames.get(result.filename, 0))
         else:
             result.status = "invalid"
             reasons = []
@@ -2285,7 +2335,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # 两振出局：本轮判「要剔除」的源，若上一轮也处于剔除候选，才真剔除；否则保留一振。
     if not args.dry_run:
-        seed_two_strike_history(history, existing, filenames)
+        seed_two_strike_history(history, existing, list(filenames))
         history_streaks, history_statuses = apply_two_strike(results, history)
         pending = [result for result in results if getattr(result, "strike", 0)]
         if pending:
@@ -2476,7 +2526,12 @@ def main(argv: list[str] | None = None) -> int:
                 result = result_by_entry.get(id(entry))
                 if result is not None:
                     remote_entries.append(
-                        dict(entry, api=upstream_api_url(config, result.filename))
+                        dict(
+                            entry,
+                            api=upstream_api_url(
+                                config, result.filename, filenames.get(result.filename, 0)
+                            ),
+                        )
                     )
                 else:
                     remote_entries.append(entry)

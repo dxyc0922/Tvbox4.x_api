@@ -347,7 +347,7 @@ def collect_scripts(
     filenames = update_api.get_upstream_filenames(config, source_dir, None)
     all_names = list(filenames)
     if limit > 0:
-        filenames = filenames[:limit]
+        filenames = dict(list(filenames.items())[:limit])
     if source_dir is not None:
         return [source_dir / name for name in filenames]
 
@@ -371,7 +371,9 @@ def collect_scripts(
         print(f"下载脚本到缓存 {target}（{len(missing)} 个）...")
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
-                executor.submit(update_api.download_script, config, name, None): name
+                executor.submit(
+                    update_api.download_script, config, name, None, filenames.get(name, 0)
+                ): name
                 for name in missing
             }
             done = 0
