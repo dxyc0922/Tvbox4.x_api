@@ -77,6 +77,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "output": "接口.json",
     "accelerator": "https://gh-proxy.com/",
+    "self_repo": {
+        "owner": "dxyc0922",
+        "repo": "Tvbox4.x_api",
+        "branch": "main"
+    },
     "auto_key_prefix": "wzxxcz_",
     "preserve_api_prefixes": ["./"],
     "preserve_non_http": True,
@@ -135,6 +140,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "accept_5xx": False,
         "max_hosts_per_script": 8,
         "max_fallback_hosts": 3,
+    },
+    # 运行结果通知：webhook 是任意 POST 地址（如 Discord/企业微信机器人），
+    # telegram 用 bot_token + chat_id 发 Bot API 消息。留空则只写日志，无行为变化。
+    "notify": {
+        "webhook": "",
+        "telegram": {"bot_token": "", "chat_id": ""},
     },
 }
 
@@ -331,6 +342,29 @@ def upstream_raw_url(config: dict[str, Any], filename: str) -> str:
 def upstream_api_url(config: dict[str, Any], filename: str) -> str:
     accelerator = str(config.get("accelerator") or "").strip()
     raw = upstream_raw_url(config, filename)
+    if not accelerator:
+        return raw
+    return accelerator.rstrip("/") + "/" + raw
+
+
+def local_api_to_remote(config: dict[str, Any], api: str) -> str:
+    """把本地 `./脚本/x.py` 链接转成仓库自身的绝对直链（用于 接口-remote.json）。
+
+    手动保留的自定义站点（豆瓣/哔哩）不在上游仓库里，无法用 upstream_api_url；
+    但脚本提交在本仓库 脚本/ 下，可用 self_repo 配置拼 raw 地址。没配 self_repo
+    时原样返回（保持相对路径，仍可随仓库一起托管）。
+    """
+    if not api.startswith("./"):
+        return api
+    self_repo = config.get("self_repo") or {}
+    owner = str(self_repo.get("owner") or "").strip()
+    repo = str(self_repo.get("repo") or "").strip()
+    branch = str(self_repo.get("branch") or "main").strip()
+    if not owner or not repo:
+        return api
+    rel = urllib.parse.quote(api[2:].strip("/"), safe="/")
+    raw = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{rel}"
+    accelerator = str(config.get("accelerator") or "").strip()
     if not accelerator:
         return raw
     return accelerator.rstrip("/") + "/" + raw
@@ -1430,13 +1464,17 @@ def line_prune_drops(
     prev_low: set[str] | None = None,
     prev_dead: set[str] | None = None,
     skip_quality: bool = False,
+    min_speed_ratio: float = 0.0,
+    max_startup_ms: int = 0,
+    skip_speed: bool = False,
 ) -> tuple[dict[str, str], set[str], set[str]]:
     """计算线路裁减，返回 (要剔除的 {线路名: 原因}, 本轮低质量集合, 本轮疑似不通集合)。
 
     剔除规则（两振出局）：
     - **不可用**：HTTP >= 400，且**上一轮同样是 4xx/5xx**（连续两轮）才剔除。
       单集 token 过期是 403/404 误报（华谊 K蓝光某集 403、换集就 200），一振不删。
-    - **低质量**：码率低于阈值且同源另有达标线路，且**连续两轮**低质量才剔除。
+    - **低质量**：码率低于阈值、或加载速度低于阈值（且同源另有达标/快速线路），
+      且**连续两轮**低质量才剔除。
     - 手动黑名单在调用方直接加入，不经过两振。
     """
     drops: dict[str, str] = {}
@@ -1510,6 +1548,41 @@ def line_prune_drops(
                 current_low.add(flag)
                 if key(flag) in prev_low and flag not in drops:
                     drops[flag] = f"{bitrate}kbps<{round(limit)}kbps（连续两轮）"
+
+        # 2b) 慢速线路：与码率同逻辑——同源另有快速线路才删；连续两轮慢速才删。
+        # 只对测到速度的线路判定；没测到的按未知处理，不删也不会被当作「快速」。
+        if not skip_speed and (min_speed_ratio > 0 or max_startup_ms > 0):
+            fast: list[str] = []
+            slow_lines: list[tuple[str, float, int]] = []
+            for entry in entries:
+                stream = entry.get("stream") or {}
+                kind = str(stream.get("kind") or "")
+                if kind not in VIDEO_KINDS:
+                    continue
+                flag = str(entry.get("flag") or "").strip()
+                if not flag:
+                    continue
+                speed_ratio = float(stream.get("speed_ratio") or 0)
+                startup = int(stream.get("playlist_ms") or 0) + int(
+                    stream.get("ttfb_ms") or 0
+                )
+                if speed_ratio <= 0 and startup <= 0:
+                    continue  # 没测到速度，未知，不动。
+                is_slow = (
+                    min_speed_ratio > 0 and speed_ratio > 0 and speed_ratio < min_speed_ratio
+                ) or (max_startup_ms > 0 and startup > max_startup_ms)
+                if is_slow:
+                    slow_lines.append((flag, speed_ratio, startup))
+                else:
+                    fast.append(flag)
+            if fast and slow_lines:
+                for flag, speed_ratio, startup in slow_lines:
+                    current_low.add(flag)
+                    if key(flag) in prev_low and flag not in drops:
+                        reason = f"speed {speed_ratio:g}x"
+                        if startup > max_startup_ms:
+                            reason += f"/{startup}ms"
+                        drops[flag] = f"{reason}（连续两轮）"
     return drops, current_low, current_dead
 
 
@@ -1593,9 +1666,12 @@ def write_local_spiders(
     }
     min_kbps = float(quality_cfg.get("min_bitrate_kbps") or 0)
     min_bpp = float(quality_cfg.get("min_bpp") or 0)
+    min_speed_ratio = float(quality_cfg.get("min_speed_ratio") or 0)
+    max_startup_ms = int(quality_cfg.get("max_startup_ms") or 0)
     thresholds = dict(DEFAULT_BITRATE_THRESHOLDS)
     thresholds.update(quality_cfg.get("bitrate_thresholds") or {})
     bitrate_allow = {str(n) for n in (quality_cfg.get("bitrate_allow") or [])}
+    speed_allow = {str(n) for n in (quality_cfg.get("speed_allow") or [])}
     prev_low = prev_low or set()
     prev_dead = prev_dead or set()
 
@@ -1614,6 +1690,7 @@ def write_local_spiders(
             for flag in blacklist.get(filename, ()):
                 drops.setdefault(flag, "手动配置")
             skip_quality = filename in bitrate_allow
+            skip_speed = filename in speed_allow
             auto, low_flags, dead_flags = line_prune_drops(
                 quality_map.get(filename),
                 line_prune_cfg,
@@ -1624,6 +1701,9 @@ def write_local_spiders(
                 prev_low=prev_low,
                 prev_dead=prev_dead,
                 skip_quality=skip_quality,
+                min_speed_ratio=min_speed_ratio,
+                max_startup_ms=max_startup_ms,
+                skip_speed=skip_speed,
             )
             new_low |= {f"{filename}::{f}" for f in low_flags}
             new_dead |= {f"{filename}::{f}" for f in dead_flags}
@@ -1646,6 +1726,14 @@ def write_local_spiders(
             )
         if write:
             text = inject_line_filter(result.source, sorted(drops))
+            # 冒烟检查：注入后必须是合法 Python（线路过滤是运行时包装，不应破坏语法）。
+            try:
+                compile(text, filename, "exec")
+            except SyntaxError as exc:  # noqa: PERF203
+                print(
+                    f"    !! {filename}: 注入线路过滤后语法错误（脚本已写入，请人工检查）: {exc}",
+                    file=sys.stderr,
+                )
             (script_out / filename).write_text(text, encoding="utf-8", newline="")
 
     if not write:
@@ -2329,8 +2417,15 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 else:
                     remote_entries.append(entry)
+            # 手动保留站点（豆瓣/哔哩等自定义）也用仓库自身绝对直链，单文件 CDN 发布才不失效。
+            remote_preserved = [
+                dict(site, api=local_api_to_remote(config, str(site.get("api") or "")))
+                if isinstance(site, dict)
+                else site
+                for site in preserved
+            ]
             remote_data = dict(existing)
-            remote_data["sites"] = preserved + remote_entries
+            remote_data["sites"] = remote_preserved + remote_entries
             remote_path = output.with_name(
                 output.stem + "-remote" + output.suffix
             )

@@ -165,7 +165,11 @@ def play_stats(vod: dict[str, Any]) -> tuple[int, int, str, str]:
 
 
 def line_samples(vod: dict[str, Any], limit: int) -> list[dict[str, Any]]:
-    """每条线路取第一集的播放地址，最多取 limit 条。
+    """每条线路取播放地址样本，最多取 limit 条。
+
+    每条线路收集前两个不同集的播放地址：`url` 是第 1 集、`alt_url` 是第 2 集。
+    alt_url 用于「临界线路二次确认」——单集波动（某集恰好是低码率转码）会让
+    一次采样误判成低质，加测第 2 集能区分「线路真的差」和「只是这一集差」。
 
     vod_play_url 用 `$$$` 分隔线路、`#` 分隔集数、`$` 分隔名称和地址，
     vod_play_from 用 `$$$` 分隔线路名，两者顺序一一对应。
@@ -178,20 +182,24 @@ def line_samples(vod: dict[str, Any], limit: int) -> list[dict[str, Any]]:
     flags = [part for part in str(froms).split("$$$")] if froms else []
     samples: list[dict[str, Any]] = []
     for index, line in enumerate(lines):
-        first = ""
+        urls: list[str] = []
         for item in line.split("#"):
             if "$" in item:
-                first = item.split("$", 1)[1]
-                break
-        if not first:
+                value = item.split("$", 1)[1]
+                if value and value not in urls:
+                    urls.append(value)
+                if len(urls) >= 2:
+                    break
+        if not urls:
             continue
-        samples.append(
-            {
-                "flag": flags[index] if index < len(flags) else "",
-                "url": first,
-                "index": index,
-            }
-        )
+        sample: dict[str, Any] = {
+            "flag": flags[index] if index < len(flags) else "",
+            "url": urls[0],
+            "index": index,
+        }
+        if len(urls) >= 2:
+            sample["alt_url"] = urls[1]
+        samples.append(sample)
         if len(samples) >= max(limit, 1):
             break
     return samples
@@ -425,6 +433,17 @@ def main() -> int:
                             row["error"] = f"{type(exc).__name__}: {exc}"[:200]
                     else:
                         row["error"] = "没有 playerContent"
+                    # 第 2 集样本也解析成真实播放地址，供临界线路二次确认。
+                    if sample.get("alt_url"):
+                        alt_url = sample["alt_url"]
+                        if callable(player) and not row.get("error"):
+                            try:
+                                alt = call(player, [sample["flag"], alt_url, []])
+                                if isinstance(alt, dict) and alt.get("url"):
+                                    alt_url = str(alt["url"])
+                            except Exception:  # noqa: BLE001
+                                pass
+                        row["alt_url"] = alt_url[:600]
                     rows.append(row)
                     if row.get("url") and row.get("parse") == 0 and not reporter.data.get("stream_url"):
                         reporter.set(

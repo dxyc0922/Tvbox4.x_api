@@ -174,6 +174,18 @@ def line_clean(stream: dict[str, Any], config: dict[str, Any]) -> bool:
     bitrate = int(stream.get("bitrate_kbps") or 0)
     if bitrate <= 0:
         return True  # 没测到码率，未知，不动
+    limit = stream_bitrate_limit(stream, config)
+    if bitrate < limit:
+        return False
+    min_speed = float((config.get("quality") or {}).get("min_speed_ratio") or 0)
+    speed = float(stream.get("speed_ratio") or 0)
+    if min_speed > 0 and speed > 0 and speed < min_speed:
+        return False
+    return True
+
+
+def stream_bitrate_limit(stream: dict[str, Any], config: dict[str, Any]) -> float:
+    """按配置计算一条采样的有效码率下限（含 bpp 校正）。"""
     quality_cfg = config.get("quality") or {}
     min_kbps = float(quality_cfg.get("min_bitrate_kbps") or 0)
     min_bpp = float(quality_cfg.get("min_bpp") or 0)
@@ -189,13 +201,33 @@ def line_clean(stream: dict[str, Any], config: dict[str, Any]) -> bool:
             * update_api.stream_fps(stream)
             / 1000.0,
         )
-    if bitrate < limit:
+    return limit
+
+
+def line_critical(stream: dict[str, Any], config: dict[str, Any]) -> bool:
+    """线路采样是否落在「临界区」，需要第 2 集二次确认。
+
+    两种情况需要复测：
+    - **4xx/5xx**：单集 token 过期是 403/404 误报（华谊 K蓝光某集 403、换集就 200），
+      一次采样判死会误伤，用第 2 集确认线路是否真的不通。
+    - **码率/速度落在阈值 ±10%**：单集波动（某集恰好是低码率转码）会让一次采样
+      误判成低质，用第 2 集区分「线路真的差」和「只是这一集差」。
+    """
+    if int(stream.get("status") or 0) >= 400:
+        return True
+    kind = str(stream.get("kind") or "")
+    if kind not in update_api.VIDEO_KINDS:
         return False
-    min_speed = float(quality_cfg.get("min_speed_ratio") or 0)
+    bitrate = int(stream.get("bitrate_kbps") or 0)
+    if bitrate > 0:
+        limit = stream_bitrate_limit(stream, config)
+        if limit > 0 and abs(bitrate - limit) / limit <= 0.10:
+            return True
+    min_speed = float((config.get("quality") or {}).get("min_speed_ratio") or 0)
     speed = float(stream.get("speed_ratio") or 0)
-    if min_speed > 0 and speed > 0 and speed < min_speed:
-        return False
-    return True
+    if min_speed > 0 and speed > 0 and abs(speed - min_speed) / min_speed <= 0.10:
+        return True
+    return False
 
 
 def result_clean(row: dict[str, Any], config: dict[str, Any]) -> bool:
@@ -375,6 +407,38 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return summary
 
 
+def better_stream(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any] | None:
+    """两样本取更好的一条作判定流，避免单集波动把好线路误判成低质。
+
+    优先看码率（更高更好），再比速度比，最后比等级；未知（0/空）按不参与比较。
+    返回更优的样本 dict；两者等价（或都不可比）时返回 None 表示维持原样。
+    """
+    def rank(stream: dict[str, Any]) -> tuple[float, float, int]:
+        bitrate = float(stream.get("bitrate_kbps") or 0)
+        speed = float(stream.get("speed_ratio") or 0)
+        grade = str(stream.get("grade") or "").upper()
+        return (bitrate, speed, {"A": 3, "B": 2, "C": 1, "D": 0}.get(grade, -1))
+
+    ra = rank(a)
+    rb = rank(b)
+    if ra == rb:
+        return None
+    # 有码率数据的那方优先：码率更高的更好；都没码率时比速度。
+    if ra[0] > 0 or rb[0] > 0:
+        if ra[0] > rb[0]:
+            return a
+        if rb[0] > ra[0]:
+            return b
+    if ra[1] > 0 or rb[1] > 0:
+        if ra[1] > rb[1]:
+            return a
+        if rb[1] > ra[1]:
+            return b
+    if ra[2] != rb[2]:
+        return a if ra[2] > rb[2] else b
+    return None
+
+
 def analyze_streams(
     rows: list[dict[str, Any]],
     scripts: list[Path],
@@ -412,11 +476,11 @@ def analyze_streams(
         except OSError:
             return []
 
-    jobs: list[tuple[dict[str, Any], int, str, str, list[str]]] = []
+    jobs: list[tuple[dict[str, Any], int, str, str, str, list[str]]] = []
     for row in rows:
         if str(row.get("file") or "") in skip:
             continue
-        picked: list[tuple[int, str, str]] = []
+        picked: list[tuple[int, str, str, str]] = []
         for index, line in enumerate((row.get("lines") or [])[:max_lines]):
             url = str(line.get("url") or "")
             if not url:
@@ -427,17 +491,19 @@ def analyze_streams(
                 parse = -1
             if parse != 0:
                 continue
-            picked.append((index, str(line.get("flag") or ""), url))
+            picked.append(
+                (index, str(line.get("flag") or ""), url, str(line.get("alt_url") or ""))
+            )
         if not picked:
             url = str(row.get("stream_url") or "")
             if url and int(row.get("stream_parse") or 0) == 0:
-                picked = [(0, str(row.get("play_flag") or ""), url)]
+                picked = [(0, str(row.get("play_flag") or ""), url, "")]
         if not picked:
             continue
         hosts = site_hosts(str(row.get("file") or ""))
         row["line_streams"] = []
-        for index, flag, url in picked:
-            jobs.append((row, index, flag, url, hosts))
+        for index, flag, url, alt_url in picked:
+            jobs.append((row, index, flag, url, alt_url, hosts))
 
     if not jobs:
         return {}
@@ -454,7 +520,7 @@ def analyze_streams(
                 None,
                 12.0,
             ): (row, index, flag, url)
-            for row, index, flag, url, hosts in jobs
+            for row, index, flag, url, alt_url, hosts in jobs
         }
         for future in as_completed(futures):
             row, index, flag, url = futures[future]
@@ -476,6 +542,62 @@ def analyze_streams(
             done += 1
             if done % 20 == 0 or done == len(futures):
                 print(f"  已分析 {done}/{len(futures)}")
+
+    # N2 单轮临界线路复测：码率/速度落在阈值 ±10% 的线路，用第 2 集再测一次。
+    # 单集波动（某集恰好是低码率转码）会让一次采样误判成低质；二次采样能区分
+    # 「线路真的差」（两集都差）和「只是这一集差」（另一集达标）。取两样本中
+    # 更好的作为判定流，避免误删好线路。
+    retest_jobs: list[tuple[dict[str, Any], int, str, str, list[str]]] = []
+    for row in rows:
+        if str(row.get("file") or "") in skip:
+            continue
+        for entry in row.get("line_streams") or []:
+            index = int(entry.get("index") or -1)
+            lines = row.get("lines") or []
+            if index < 0 or index >= len(lines):
+                continue
+            alt_url = str(lines[index].get("alt_url") or "")
+            if not alt_url:
+                continue
+            stream = entry.get("stream") or {}
+            if not line_critical(stream, config):
+                continue
+            hosts = site_hosts(str(row.get("file") or ""))
+            retest_jobs.append((row, index, str(entry.get("flag") or ""), alt_url, hosts))
+
+    if retest_jobs:
+        print(f"  临界线路复测: {len(retest_jobs)} 条（阈值 ±10% 内，用第 2 集确认）")
+        retest_done = 0
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(
+                    stream_check.analyze_stream,
+                    url,
+                    hosts,
+                    None,
+                    12.0,
+                ): (row, index, flag)
+                for row, index, flag, url, hosts in retest_jobs
+            }
+            for future in as_completed(futures):
+                row, index, flag = futures[future]
+                try:
+                    alt_stream = future.result()
+                except Exception as exc:  # noqa: BLE001
+                    alt_stream = {"grade": "D", "error": f"{type(exc).__name__}: {exc}"}
+                for entry in row.get("line_streams") or []:
+                    if int(entry.get("index") or -1) == index:
+                        entry["alt_url"] = (row.get("lines") or [])[index].get("alt_url", "")[:300]
+                        entry["alt_stream"] = alt_stream
+                        # 取两样本中更好的一条作判定：任一集达标，线路就不算差。
+                        better = better_stream(entry.get("stream") or {}, alt_stream)
+                        if better is not None:
+                            entry["stream"] = better
+                        entry["retested"] = True
+                        break
+                retest_done += 1
+                if retest_done % 20 == 0 or retest_done == len(futures):
+                    print(f"    已复测 {retest_done}/{len(futures)}")
 
     for row in rows:
         lines = row.get("line_streams")

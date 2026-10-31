@@ -34,13 +34,17 @@ GitHub Actions 只保留手动触发作为备用通道。
   - `api` 以 `./` 开头（本地脚本）或其他非 http 站点原样保留；
   - 所有 http/https 站点删除后，用校验通过的上游脚本重新生成；
   - 生成站点的 `api` 指向本地文件 `./脚本/<脚本名>.py`，不再依赖 gh-proxy 存活。
-- 线路级裁减：给每个脚本注入一段过滤代码，把**不通的线路**（HTTP 4xx/5xx、token 过期）
-  和**明显低质量的线路**（码率低于分辨率档，且同源另有达标线路）从播放列表里去掉。
+- 线路级裁减：给每个脚本注入一段过滤代码，把**不通的线路**（HTTP 4xx/5xx、token 过期）、
+  **明显低质量的线路**（码率低于分辨率档，且同源另有达标线路）、**慢速线路**（实测吞吐/启动
+  耗时低于阈值，且同源另有快速线路）从播放列表里去掉。
   剔除要走「两振出局」：源/线路连续两轮被判为同一剔除候选才真剔除，单集 token 过期、
   CDN 抖动不再让名单每周漂移（见「两振出局」）。
+- 生成脚本时做**冒烟检查**：注入线路过滤后 `compile()` 一遍，语法错误只告警不中断
+  （线路过滤是运行时包装，不应破坏语法）。
 - 同时生成 `接口-remote.json`：生成站点的 `api` 用 gh-proxy 绝对链接，兼容只发布单个
-  JSON 文件、不带 `脚本/` 目录的托管方式。
-- `wallpaper`、`lives`、`doh`、`rules`、`ads` 等其他顶层字段保持不变。
+  JSON 文件、不带 `脚本/` 目录的托管方式。手动保留的自定义站点（豆瓣/哔哩等）也用
+  `self_repo` 配置拼成仓库自身 raw 直链，不再留 `./脚本/` 相对路径。
+- `wallpaper`、`lives`、`doh`、`rules`、`ads` 等其他顶层字段保持不变（见「顶层字段」）。
 - 可用站点骤降保护：本次生成数少于上次的一半、或下载失败率超过 20% 时不写入，直接报错退出。
 
 ### 本机定时运行（推荐）
@@ -56,6 +60,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1
 # 可选参数
 #   -Day Sunday -Time 03:30        改时间
 #   -Functional                    顺带跑功能校验
+#   -Notify                        结束/失败时推送通知（需先配 config.json 的 notify 段）
 #   -RunWhenLoggedOff              未登录也运行（会提示输入该用户密码）
 #   -Unregister                    删除任务
 ```
@@ -65,7 +70,8 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1
 1. `git pull --rebase --autostash`（失败忽略，不影响生成）；
 2. 可选跑 `functional_check.py`（`--functional`，默认关闭）；
 3. 调用 `update_api.py` 重建 `接口.json`；
-4. 有变化才提交，推送失败会重试 3 次；仍失败则保留本地提交，下次运行自动带上。
+4. 有变化才提交，推送失败会重试 3 次；仍失败则保留本地提交，下次运行自动带上；
+5. 加 `--notify` 时在结束/失败时推送通知（见「运行通知」）。
 
 日志写在 `logs/local-run-<时间>.log`，任务计划程序里也能看到上次运行结果。
 
@@ -367,11 +373,68 @@ python scripts/ban_line.py 华谊影视.py --line K蓝光 --run            # 改
 - 线路 URL 逐集带 token 会过期，但 update_api 只取 `line_streams[].stream` 判定、
   `lines` 只取长度，复用旧结果里的 URL 字符串无害（不拿它发请求）。
 
+### 临界线路二次确认（N2）
+
+单集采样会随剧集波动：某条线路的第一集恰好是低码率转码，会被误判成低质；单集 token
+过期还会让 4xx 误报（华谊 K蓝光某集 403、换集就 200）。功能校验对**落在临界区的线路**，
+用第 2 集（`line_samples` 会额外取一集 `alt_url`，经 `playerContent` 解析）再测一次：
+
+- **临界区 = 4xx/5xx**（可能只是单集过期，不是线路死了）+ **码率/速度落在阈值 ±10%**
+  （单集波动可能误判）。
+- 两样本取**更好的一条**作判定流（`better_stream`，优先码率、再速度、再等级）——任一集达标，
+  线路就不算差，避免单集波动把好线路误判成低质/不通。
+- 复测结果写进 `line_streams[].alt_stream`，并标 `retested: true`，方便排查。
+- 只对临界线路复测，正常/明显差的线路不重复测，整轮只多 1–2 分钟。
+
+与「两振出局」的关系：两振是**跨轮**二次采样（这一轮差、下一轮还差才裁），N2 是**单轮内**
+二次采样（这一轮就确认）。两振仍然保留，N2 让临界线路更快确认，减少一周的等待。
+
 ### 后续方向（未实现）
 
-- **临界线路二次确认**：对码率/速度落在阈值 ±10% 的线路加测第 2 个视频（电影+剧集），
-  避免单集波动误判。已并入两振出局（跨轮二次采样）；单轮内复测未做——两振已经做到
-  「连续两轮才裁」，再加单轮复测会多 1–2 分钟，且 `ban_line.py` 已能手动即时处理。
+- **广告检测标定（N5）**：见「广告检测标定」——当前 `filters.ad_hosts` 为空、内置启发式
+  （CUE/DATERANGE/SCTE35、少数域名分片）在本轮 200 条线路样本里全为 0，**没有真实广告源
+  可标定**，所以不自动删、不自动加域名。详见该节。
+
+### 广告检测标定（N5）
+
+广告检测的现状与建议（只分析，不自动删）：
+
+- 内置启发式：`#EXT-X-CUE-OUT` / `#EXT-X-DATERANGE` / `SCTE35` 各 +3，分片来自多个域名
+  （少数域名占比 ≤20%）+2，`filters.ad_hosts` 命中 +2。
+- 本轮 `reports/functional-report.json` 的 **200 条线路样本 `ad_score` 全为 0**：没有任何一条
+  触发 CUE/DATERANGE/SCTE35、多域名分片或广告关键词。没有真实广告源，无法标定阈值。
+- `接口.json` 的 `ads`（118 个域名字符串）绝大多数是**页面统计/埋点**（`cnzz.com`、
+  `google-analytics.com`、`hm.baidu.com`、`cnzz.mmstat.com` 等），不是流内视频广告；且与
+  当前 106 个真实源主机的**子串碰撞为 0**（安全，但也没命中目标）。
+- **建议**：保持 `filters.ad_hosts = []`（默认），不要把这 118 个统计域名加进去——它们只证明
+  「页面有埋点」，不证明「播放流里有广告」，子串匹配还可能误伤（如某个合法 CDN 域名恰好
+  包含 `ads` 片段）。等实际看到某源播放时弹广告、或某线路 `ad_score>0` 的真实样本出现，
+  再针对性标定。
+
+### 恢复回加（N6）
+
+两振出局的恢复是**自动**的：`apply_two_strike` 里任何本轮判为 `valid` 的源，其 streak 直接归零
+（`new_streaks[name] = "0"`），下一轮就重新进入 `接口.json`。已用脚本验证：
+
+- Round1 低质 → strike1 保留；Round2 仍低质 → 真剔除；Round3 恢复 → `valid` 重新回加。
+
+即：源只会在「连续两轮都差」时被剔除，只要有一轮恢复正常就自动回加，无需手动干预。
+
+### 运行通知（N6）
+
+`run_local.py` 加 `--notify` 会在结束时推送结果（成功 / 失败 / 推送失败 / 异常），配置在
+`config.json` 的 `notify` 段：
+
+```json
+"notify": {
+    "webhook": "https://...",                    // 任意 POST JSON {"title":..,"body":..}（Discord/企业微信等）
+    "telegram": {"bot_token": "", "chat_id": ""}  // 或 Telegram Bot API
+}
+```
+
+- 两个渠道都留空（默认）则**只写日志**，无网络请求、无行为变化。
+- 通知失败（网络/配置错）只写日志，不中断主流程。
+- 计划任务里可加 `-ArgumentList '--notify'`，或注册任务时在脚本命令后追加 `--notify`。
 
 ### 自定义
 
@@ -410,6 +473,9 @@ python scripts/ban_line.py 华谊影视.py --line K蓝光 --run            # 改
   `接口-remote.json`（生成站点用绝对 gh-proxy 链接）。
 - `request.accept_4xx`：是否把 403/404 等算作可达，默认 `true`。
 - `request.timeout` / `request.workers`：请求超时和并发数。
+- `self_repo`：本仓库的 owner/repo/branch，用于把手动保留的本地站点（`./脚本/x.py`）
+  拼成 raw 直链写进 `接口-remote.json`；缺省只保留相对路径。
+- `notify`：运行结果通知（webhook / Telegram），见「运行通知」。
 
 ### 保留自己的首页
 
@@ -425,3 +491,20 @@ python scripts/ban_line.py 华谊影视.py --line K蓝光 --run            # 改
 ```
 
 每次自动更新都会保留它，只替换 http/https 开头的网络站点。
+
+### 顶层字段分析
+
+`接口.json` 的顶层字段（除 `sites` 外）逐一分析过，结论如下——**全部保留，不删**：
+
+| 字段 | 内容 | 结论 |
+|---|---|---|
+| `sites` | 自动生成 + 手动保留的站点 | 核心，自动重建 |
+| `wallpaper` | `https://深色壁纸.xxooo.cf/`（非 ASCII IDN 域名） | 可能加载不出，但无害；保留 |
+| `lives` | `广东IPTV组播.txt`（本仓库）+ EPG 地址 | 自定义直播源，`广东IPTV组播.txt` 在仓库根目录；保留 |
+| `doh` | 5 个 DoH 解析器（Google/Cloudflare/AdGuard/DNSWatch/Quad9） | 播放器用 DoH 解析域名时有用；保留 |
+| `rules` | 19 条重写/广告过滤规则（proxy、磁力廣告、各源广告嗅探等） | 多数是特定源特有，保留不碍事 |
+| `ads` | 118 个广告/统计域名字符串 | 多数是页面埋点（cnzz/baidu/google），非流内广告；保留但**不要**喂给 `filters.ad_hosts`（见「广告检测标定」） |
+| `ijk` | 无 | `sites` 里只有 `api/ext/key/name/type`，没有任何 ijk 播放参数，无需处理 |
+
+`update_api.py` 只重建 `sites`，其余顶层字段原样保留（读入 `existing` 后浅拷贝，再替换
+`sites`），所以 `wallpaper`/`lives`/`doh`/`rules`/`ads` 不会因自动更新丢失。

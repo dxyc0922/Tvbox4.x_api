@@ -15,6 +15,7 @@ param(
     [string]$Day = "Monday",
     [string]$Python = "",
     [switch]$Functional,
+    [switch]$Notify,
     [switch]$RunWhenLoggedOff,
     [switch]$Unregister
 )
@@ -49,6 +50,7 @@ if (-not (Test-Path $Python)) { throw "Python 不存在: $Python" }
 
 $arguments = "`"$runner`""
 if ($Functional) { $arguments += " --functional" }
+if ($Notify) { $arguments += " --notify" }
 
 $action = New-ScheduledTaskAction -Execute $Python -Argument $arguments -WorkingDirectory $repo
 

@@ -18,12 +18,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
 import tempfile
 import time
 import traceback
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -37,6 +40,8 @@ SPIDER_DIR = ROOT / "脚本"
 FUNCTIONAL_REPORT = ROOT / "reports" / "functional-report.json"
 # 功能校验下载好的脚本缓存，生成阶段直接复用，避免重复下载 200+ 个文件。
 SCRIPT_CACHE = Path(tempfile.gettempdir()) / "tvbox-py-cache"
+# 本机定时任务的通知配置（config.json 的 notify 段；留空只写日志）。
+NOTIFY_CONFIG = SCRIPTS / "config.json"
 
 
 def configure_stdio() -> None:
@@ -184,6 +189,61 @@ def prune_logs(keep: int = 30) -> None:
             pass
 
 
+def load_notify_config() -> dict[str, object]:
+    """读取 config.json 的 notify 段；缺失或非法时返回空（只写日志，不通知）。"""
+    try:
+        data = json.loads(NOTIFY_CONFIG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    notify = data.get("notify") if isinstance(data, dict) else None
+    return notify if isinstance(notify, dict) else {}
+
+
+def send_notification(logger: Logger, title: str, body: str) -> None:
+    """把运行结果推送到配置的 webhook / Telegram。配置为空则只写日志。
+
+    webhook：POST JSON `{"title": ..., "body": ...}`（适合 Discord 嵌入 / 企业微信 / 自建）。
+    telegram：`https://api.telegram.org/bot<token>/sendMessage` 发纯文本。
+    任何失败都只写日志，不中断主流程。
+    """
+    cfg = load_notify_config()
+    webhook = str(cfg.get("webhook") or "").strip()
+    tg = cfg.get("telegram") if isinstance(cfg.get("telegram"), dict) else {}
+    token = str(tg.get("bot_token") or "").strip()
+    chat_id = str(tg.get("chat_id") or "").strip()
+    if not webhook and not (token and chat_id):
+        logger.write(f"\n[通知] {title}：{body}\n")
+        logger.write("[通知] 未配置通知渠道（config.json notify），只写日志\n")
+        return
+
+    text = f"{title}\n{body}"
+    for attempt in (1, 2):
+        try:
+            if webhook:
+                payload = json.dumps({"title": title, "body": body}).encode("utf-8")
+                req = urllib.request.Request(
+                    webhook, data=payload, headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    status = int(resp.status or 0)
+                logger.write(f"[通知] webhook 已发送（HTTP {status}）\n")
+            if token and chat_id:
+                payload = urllib.parse.urlencode(
+                    {"chat_id": chat_id, "text": text[:4000]}
+                ).encode("utf-8")
+                url = f"https://api.telegram.org/bot{token}/sendMessage"
+                req = urllib.request.Request(url, data=payload)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    status = int(resp.status or 0)
+                logger.write(f"[通知] Telegram 已发送（HTTP {status}）\n")
+            return
+        except Exception as exc:  # noqa: BLE001
+            if attempt == 2:
+                logger.write(f"[通知] 发送失败（已重试）: {type(exc).__name__}: {exc}\n")
+            else:
+                time.sleep(2)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="本机定时更新 接口.json")
     parser.add_argument("--functional", action="store_true", help="先跑功能校验（会执行第三方代码）")
@@ -194,6 +254,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0, help="只处理前 N 个脚本")
     parser.add_argument("--retries", type=int, default=3, help="推送失败重试次数")
     parser.add_argument("--config", default=str(SCRIPTS / "config.json"))
+    parser.add_argument(
+        "--notify",
+        action="store_true",
+        help="发送成功/失败通知（读取 config.json 的 notify 段；未配置则只写日志）",
+    )
     return parser.parse_args(argv)
 
 
@@ -204,6 +269,10 @@ def main(argv: list[str] | None = None) -> int:
     logger = Logger(LOG_DIR / f"local-run-{stamp}.log")
     logger.write(f"===== 本机更新开始 {datetime.now():%Y-%m-%d %H:%M:%S} =====\n")
     logger.write(f"仓库: {ROOT}\n")
+
+    def notify(title: str, body: str) -> None:
+        if args.notify:
+            send_notification(logger, title, body)
 
     try:
         if not args.dry_run and not args.no_push:
@@ -241,20 +310,41 @@ def main(argv: list[str] | None = None) -> int:
 
         if run_step(logger, "更新接口.json", command) != 0:
             logger.write("更新失败，本次不提交\n")
+            notify(
+                "❌ TVBox 接口更新失败",
+                f"仓库: {ROOT}\nupdate_api 退出码非 0，本次不提交。\n请查看最近日志: {LOG_DIR}",
+            )
             return 1
 
         if args.dry_run:
             logger.write("\ndry-run: 不提交、不推送\n")
+            notify("🖥️ TVBox 接口 dry-run 完成", f"仓库: {ROOT}")
             return 0
         if args.no_push:
             logger.write("\n--no-push: 不提交、不推送\n")
+            notify("🖥️ TVBox 接口生成完成（未推送）", f"仓库: {ROOT}")
             return 0
 
         message = f"chore: 自动更新接口.json ({datetime.now():%Y-%m-%d})"
         ok = commit_and_push(logger, message, args.retries)
-        return 0 if ok else 2
+        if ok:
+            notify(
+                "✅ TVBox 接口更新完成",
+                f"仓库: {ROOT}\n已提交并推送: {message}",
+            )
+            return 0
+        notify(
+            "⚠️ TVBox 接口已生成但推送失败",
+            f"仓库: {ROOT}\n提交保存在本地，下次运行会自动带上。\n"
+            f"手动: git push origin HEAD:main\n最近日志: {LOG_DIR}",
+        )
+        return 2
     except Exception:  # noqa: BLE001
         logger.write("\n未捕获异常:\n" + traceback.format_exc())
+        notify(
+            "❌ TVBox 接口更新异常",
+            f"仓库: {ROOT}\n{traceback.format_exc()[-800:]}\n最近日志: {LOG_DIR}",
+        )
         return 1
     finally:
         logger.write(f"===== 结束 {datetime.now():%Y-%m-%d %H:%M:%S} =====\n")
