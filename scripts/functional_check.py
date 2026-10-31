@@ -384,7 +384,9 @@ def collect_scripts(
                 except Exception as exc:  # noqa: BLE001
                     print(f"  下载失败 {name}: {exc}")
                     continue
-                (target / name).write_text(source, encoding="utf-8")
+                dest = target / name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(source, encoding="utf-8")
                 done += 1
             print(f"  下载完成 {done}/{len(missing)}")
     return [target / name for name in filenames if (target / name).is_file()]

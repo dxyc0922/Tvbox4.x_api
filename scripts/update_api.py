@@ -1508,10 +1508,11 @@ def save_history(path: Path, data: dict[str, Any]) -> None:
 def apply_two_strike(
     results: list[ScriptResult], history: dict[str, Any]
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """源级两振出局。
+    """源级质量剔除：立即生效（不走两振）。
 
-    本轮判定为 low_quality/low_bitrate/slow_stream 的源：若上一轮（含更早）已连续
-    在「要剔除」状态，则本轮真剔除；否则保留（strike1，status 回退为 valid）。
+    min_grade/drop_unverified/码率/速度过滤判定的 low_quality/low_bitrate/slow_stream
+    源直接剔除，不再首轮保留——项目定位是「只留高质量」，C/D/U 级源首轮就应筛掉。
+    两振历史仅记录连续剔除轮数（供统计/将来恢复判断），不影响本轮结果。
     返回 (本轮最终 streaks, 本轮最终 statuses)。
     """
     streaks = {str(k): int(v) for k, v in (history.get("streaks") or {}).items()}
@@ -1520,48 +1521,15 @@ def apply_two_strike(
     for result in results:
         name = result.filename
         if result.status in HISTORY_REMOVE_STATUSES:
+            # 立即剔除：保持剔除状态（status 不回退 valid），只累积 streak 历史。
             streak = streaks.get(name, 0) + 1
-            if streak < 2:
-                result.strike = 1
-                result.pending = result.status
-                result.status = "valid"
+            result.strike = streak
+            result.pending = result.status
             new_streaks[name] = str(streak)
         else:
             new_streaks[name] = "0"
         statuses[name] = result.status
     return new_streaks, statuses
-
-
-def seed_two_strike_history(
-    history: dict[str, Any], existing: dict[str, Any], filenames: list[str]
-) -> None:
-    """两振首轮（无历史）基线：以上一轮已提交的接口为准。
-
-    上一轮不在接口里的上游源 = 上一轮已被排除 → 视为已有第 1 振；本轮若仍是
-    「剔除候选」，第 2 振直接剔除，避免首轮把上轮已过滤的源全部加回（54→172）。
-    """
-    if history.get("rounds"):
-        return
-    prev_basenames: set[str] = set()
-    for site in existing.get("sites") or []:
-        if not isinstance(site, dict):
-            continue
-        api = str(site.get("api") or "").strip()
-        if not api:
-            continue
-        base = urllib.parse.unquote(api.rstrip("/").rsplit("/", 1)[-1])
-        if base.endswith(".py"):
-            prev_basenames.add(base)
-    streaks = {str(k): int(v) for k, v in (history.get("streaks") or {}).items()}
-    seeded = 0
-    for filename in filenames:
-        base = Path(filename).name
-        if base not in prev_basenames and streaks.get(filename, 0) < 1:
-            streaks[filename] = 1
-            seeded += 1
-    history["streaks"] = {k: str(v) for k, v in streaks.items()}
-    if seeded:
-        print(f"两振基线: 上轮已排除 {seeded} 个上游源视为第 1 振（本轮仍为候选则第 2 振剔除）")
 
 
 def line_prune_drops(
@@ -1760,6 +1728,7 @@ def write_local_spiders(
     write: bool = True,
     prev_low: set[str] | None = None,
     prev_dead: set[str] | None = None,
+    managed_scripts: set[str] | None = None,
 ) -> tuple[dict[str, dict[str, str]], set[str], set[str]]:
     """把保留的源脚本写入本地目录并注入线路过滤。
 
@@ -1844,20 +1813,24 @@ def write_local_spiders(
                     f"    !! {filename}: 注入线路过滤后语法错误（脚本已写入，请人工检查）: {exc}",
                     file=sys.stderr,
                 )
+            (script_out / filename).parent.mkdir(parents=True, exist_ok=True)
             (script_out / filename).write_text(text, encoding="utf-8", newline="")
 
     if not write:
         return pruned, new_low, new_dead
 
-    # 清理上一轮生成、这轮已不再保留的本地脚本（只动带标记的）。
-    for old in script_out.glob("*.py"):
-        if old.name in kept_files:
+    # 清理上一轮生成、这轮已不再保留的本地脚本。删两类：
+    # ① 上游脚本（managed_scripts，无论是否带标记——被质量剔的源要清掉）
+    # ② 带托管标记的旧文件（上游已下线但本地遗留、带标记的）
+    for old in script_out.rglob("*.py"):
+        rel = old.relative_to(script_out).as_posix()
+        if rel in kept_files:
             continue
         try:
             content = old.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if LINE_FILTER_MARKER in content:
+        if rel in (managed_scripts or set()) or LINE_FILTER_MARKER in content:
             try:
                 old.unlink()
             except OSError:
@@ -2216,6 +2189,10 @@ def main(argv: list[str] | None = None) -> int:
         for result in results:
             quality = quality_map.get(result.filename)
             if quality is None:
+                # functional_report 的 file 是 basename（script.name），子目录源
+                # （如 app/xxx.py）用完整路径匹配不到，按 basename 兜底。
+                quality = quality_map.get(Path(result.filename).name)
+            if quality is None:
                 continue
             result.quality = quality
             hits = detect_adult(
@@ -2333,18 +2310,16 @@ def main(argv: list[str] | None = None) -> int:
             for result in slow_stream[:10]:
                 print(f"  - {result.filename}: {result.error}")
 
-    # 两振出局：本轮判「要剔除」的源，若上一轮也处于剔除候选，才真剔除；否则保留一振。
+    # 质量剔除：min_grade/drop_unverified/码率/速度过滤立即生效，不留两振缓冲。
     if not args.dry_run:
-        seed_two_strike_history(history, existing, list(filenames))
         history_streaks, history_statuses = apply_two_strike(results, history)
-        pending = [result for result in results if getattr(result, "strike", 0)]
-        if pending:
+        removed = [result for result in results if getattr(result, "strike", 0)]
+        if removed:
             print(
-                "两振出局: "
+                "质量剔除（立即生效）: "
                 + "、".join(
-                    f"{result.filename}({result.pending} 第1振)" for result in pending
+                    f"{result.filename}({result.pending})" for result in removed
                 )
-                + " —— 本轮保留，下一轮仍如此才剔除"
             )
 
     # 本地托管脚本由本流程重新生成，不能当作「保留的本地站点」，否则会和生成结果同名冲突。
@@ -2353,6 +2328,7 @@ def main(argv: list[str] | None = None) -> int:
     local_spider_dir = str(config.get("local_spider_dir") or "").strip().strip("/")
     if local_spider_dir:
         managed_files = {result.filename for result in results if result.status == "valid"}
+        managed_scripts = set(filenames)  # 所有上游脚本（含被剔的），都是本流程托管
 
         def _is_managed(site: Any) -> bool:
             if not isinstance(site, dict):
@@ -2363,10 +2339,10 @@ def main(argv: list[str] | None = None) -> int:
             parts = api[2:].strip("/").split("/")
             if len(parts) < 2 or parts[0] != local_spider_dir:
                 return False
-            basename = parts[-1]
-            if basename in managed_files:
+            rel = "/".join(parts[1:])  # 完整相对路径（含子目录，如 综/1905.py）
+            if rel in managed_files or rel in managed_scripts:
                 return True
-            path = output.parent / local_spider_dir / basename
+            path = output.parent / local_spider_dir / rel
             try:
                 return LINE_FILTER_MARKER in path.read_text(
                     encoding="utf-8", errors="replace"
@@ -2500,6 +2476,7 @@ def main(argv: list[str] | None = None) -> int:
             write=not args.dry_run,
             prev_low=prev_line_low,
             prev_dead=prev_line_dead,
+            managed_scripts=set(filenames),
         )
         pruned_flags = {f for drops in pruned.values() for f in drops}
         print(f"本地脚本: {len(kept)} 个 -> {script_out}，线路裁减 {len(pruned_flags)} 条")

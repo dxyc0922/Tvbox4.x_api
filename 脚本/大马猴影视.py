@@ -996,7 +996,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["ACE", "暴风"]
+_TVBOX_DROP_LINES = ["ACE", "暴风", "极速"]
 
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):
