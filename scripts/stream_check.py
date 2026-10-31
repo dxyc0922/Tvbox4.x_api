@@ -156,8 +156,9 @@ FFPROBE = shutil.which("ffprobe")
 def probe_media(url: str, referer: str | None, timeout: float = 8.0) -> dict[str, Any]:
     """用 ffprobe 读取视频流的分辨率和码率。
 
-    mp4/直链视频直接读；HLS 媒体列表没有 RESOLUTION 时也用它补分辨率
-    （ffprobe 会把 dimensions 放在 programs[0].streams 里）。
+    mp4/直链视频直接读；HLS 也用它复核真实分辨率——master 里的 `RESOLUTION`
+    经常是 `1080x608` 这种模板占位值（ffprobe 会把 dimensions 放在
+    `programs[0].streams` 里）。
     没装 ffprobe、超时、流不可解析都返回空字典，调用方按「未知」处理。
     """
     if not FFPROBE:
@@ -307,14 +308,15 @@ def estimate_bitrate(
     entries: list[dict[str, Any]],
     referer: str | None,
     timeout: float,
-    samples: int = 6,
+    samples: int = 24,
 ) -> int:
     """媒体列表没有 BANDWIDTH 时，用分片大小和 EXTINF 时长估算码率。
 
     实测这类源的 EXTINF 是 VFR 的（同一条线路里 0.2–10 秒的分片混排），
     单个分片的瞬时码率能从 249 kbps 跳到 6 Mbps，所以：
     - 按「总字节 / 总时长」算平均码率，不用中位数（会被静态画面拉低）；
-    - 均匀取 6 个分片，样本太少时误差能到 2 倍。
+    - 均匀取 24 个分片：实测 6 个样本个别源能偏 16%，12 个仍会受周期性内容影响，
+      24 个基本能压到 ±6%，足够卡在阈值空档里。
     """
     usable = [entry for entry in entries if float(entry.get("duration") or 0) > 0]
     if not usable:
@@ -358,9 +360,17 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
     total = sum(media["durations"])
     median = statistics.median(media["durations"]) if media["durations"] else 0
 
+    # master 的 RESOLUTION 不可信：实测大量源写的是 1080x608 这种模板占位值
+    # （26 条标 1080x608 的线路里 17 条真实分辨率不是它，含 720x1280、1080x1920 竖屏）。
+    # 分辨率直接决定码率分档，所以优先用 ffprobe 读真实值；ffprobe 不可用/失败时退回 master。
     width = 0
     height = 0
-    if resolution and "x" in resolution.lower():
+    probed = probe_media(final_url, referer, min(timeout, 12.0))
+    if probed.get("width") and probed.get("height"):
+        width = int(probed["width"])
+        height = int(probed["height"])
+        resolution = f"{width}x{height}"
+    elif resolution and "x" in resolution.lower():
         try:
             raw_width, raw_height = resolution.lower().split("x", 1)
             width, height = int(raw_width), int(raw_height)
@@ -377,14 +387,6 @@ def analyze_hls(url: str, referer: str | None, timeout: float) -> dict[str, Any]
     if not bitrate and bandwidth:
         bitrate = round(bandwidth / 1000)
         bitrate_source = "master"
-    # 媒体列表没有 master，拿不到 RESOLUTION；用 ffprobe 读一下真实分辨率，
-    # 否则低码率判断只能退回「按绝对码率」的粗口径。
-    if bitrate and not height:
-        probed = probe_media(final_url, referer, min(timeout, 10.0))
-        if probed.get("height"):
-            height = int(probed["height"])
-            width = int(probed.get("width") or 0)
-            resolution = f"{width}x{height}" if width else f"{height}p"
 
     # 广告分片：占比很小但确实存在的第二个域名
     segments = media["segments"] or 1

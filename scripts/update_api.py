@@ -43,13 +43,13 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = ROOT / "scripts" / "config.json"
 
 # 按分辨率（短边）定最低码率，单位 kbps。阈值取在实测数据的空档里：
-# 1080p 1600（1536 档算低、1647+ 保留）、720p 900（822 档算低、936+ 保留）、
-# 480p 600（481 档算低、691+ 保留）。分辨率未知时用 quality.min_bitrate_kbps。
+# 1080p 1600（1569/1583 档算低、1609+ 保留）、720p 920（893 档算低、947+ 保留）、
+# 480p 600（481 档算低、752+ 保留）。分辨率未知时用 quality.min_bitrate_kbps。
 DEFAULT_BITRATE_THRESHOLDS: dict[str, int] = {
     "2160": 6000,
     "1440": 3500,
     "1080": 1600,
-    "720": 900,
+    "720": 920,
     "480": 600,
     "360": 400,
 }
