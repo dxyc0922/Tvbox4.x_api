@@ -294,18 +294,17 @@ bpp 0.05 下限把「1080p 但码率 1.8–2.3 Mbps」的低质第三方源判�
 `./脚本/<脚本名>.py`，不再走 gh-proxy。同步时给每个脚本末尾注入一段 `detailContent`
 包装代码，按线路名过滤：
 
-1. **手动黑名单**：`quality.line_prune.blacklist` 指定的线路无条件剔除，立即生效。
-   华谊影视的 `F蓝光`（token 过期，HTTP 400）、`QQ蓝光`（404 页面）就是这样去掉的。
-2. **低质量线路**：线路实测码率低于对应分辨率档阈值（含 bpp 下限），且同源**另有至少一条
+1. **低质量线路**：线路实测码率低于对应分辨率档阈值（含 bpp 下限），且同源**另有至少一条
    达标线路**时才剔除——不会把源删空。剔除要走两振：连续两轮低质量才删（见「两振出局」）。
-3. **疑似不通线路**：HTTP 4xx/5xx 只作为提示打印（"疑似不通线路"），单集 token 过期是误报
+2. **疑似不通线路**：HTTP 4xx/5xx 只作为提示打印（"疑似不通线路"），单集 token 过期是误报
    （华谊影视的 K蓝光某集返回 403、换集就 200），不自动剔除；连续两轮 4xx 才删。
-   `line_prune.dead_status_min` 默认 `0`（禁用「单次 4xx 立即判死」）。
+   `line_prune.dead_status_min` 默认 `0`（禁用「单次 4xx 立即判死」），死线路只能走两振。
 
 **为什么不用 HTTP 状态码自动判死**：线路 URL 是逐集带 token 的，某集的 403/404 只代表
 那一集过期，不代表整条线路都坏。实测华谊影视的 K蓝光某集返回 403，但换一集或换时间段就正常，
-按状态码剔除会误伤。确认死掉再加进 `line_prune.blacklist`。B超高清同理：单次慢不代表坏，
-按「有一条快就保留」留在源里。
+按状态码剔除会误伤。B超高清同理：单次慢不代表坏，按「有一条快就保留」留在源里。
+因此 `line_prune.blacklist` 保持**空**——华谊影视的 `F蓝光`（400）/`QQ蓝光`（404）这类死线路
+交给「疑似不通」规则自动走两振处理，不手动点名。
 
 ### 两振出局（稳定性）
 
@@ -326,16 +325,17 @@ bpp 0.05 下限把「1080p 但码率 1.8–2.3 Mbps」的低质第三方源判�
 「两振出局: ...」行。
 
 ```bash
-# 查看/维护黑名单与豁免
-python scripts/ban_line.py 华谊影视.py --line F蓝光 --line QQ蓝光      # 加黑名单
-python scripts/ban_line.py 华谊影视.py --line F蓝光 --unban          # 取消
+# 查看/维护黑名单与豁免（黑名单默认空，死线路由「疑似不通」规则自动走两振）
+python scripts/ban_line.py 某源.py --line 某线路                    # 加黑名单（手动剔线路）
+python scripts/ban_line.py 某源.py --line 某线路 --unban            # 取消
 python scripts/ban_line.py 低端影视.py --bitrate                    # 码率豁免
 python scripts/ban_line.py 麒麟影视.py --speed                      # 速度豁免
-python scripts/ban_line.py 华谊影视.py --line K蓝光 --run            # 改完直接重跑
+python scripts/ban_line.py 某源.py --line 某线路 --run              # 改完直接重跑
 ```
 
 > `ban_line.py` 只改 `scripts/config.json`，不直接动脚本文件；线路裁减仍由 `update_api.py`
-> 注入。你实际看片发现某源卡/某线路坏时，一行命令就能加进黑名单并重跑。
+> 注入。黑名单**默认空**——400/404 死线路、低质线路交给规则自动走两振（连续两轮才剔）；
+> 你实际看片发现某源卡/某线路确实坏了，才用一行命令手动点名并重跑。
 
 ### 耗时与并发
 
@@ -466,9 +466,9 @@ python scripts/ban_line.py 华谊影视.py --line K蓝光 --run            # 改
 - `quality.speed_allow`：加载速度误判豁免的文件名列表。
 - `quality.line_prune.enabled`：是否做线路级裁减（默认 `false`，本仓库 `true`）。
 - `quality.line_prune.dead_status_min`：HTTP 状态码 ≥ 此值视为线路不可用，默认 `0`（禁用
-  单次 4xx 立即判死，改走两振：连续两轮 4xx 才删）。
-- `quality.line_prune.blacklist`：手动剔除线路名，键是脚本文件名，例如
-  `{"华谊影视.py": ["F蓝光", "QQ蓝光"]}`。
+  单次 4xx 立即判死，改走两振：连续两轮 4xx 才删）。本仓库保持 `0`（两振保守，死线路不立即剔）。
+- `quality.line_prune.blacklist`：手动剔除线路名，键是脚本文件名。默认 `{}`（不使用）——
+  死线路由「疑似不通」规则自动走两振处理，不手动点名。
 - `local_spider_dir`：非空时把校验通过的脚本同步到该目录，并让 `接口.json` 的 `api`
   指向 `./<目录>/<脚本名>.py`；空字符串则仍用 gh-proxy 远程链接。同步会额外生成
   `接口-remote.json`（生成站点用绝对 gh-proxy 链接）。

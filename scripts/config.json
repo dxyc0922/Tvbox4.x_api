@@ -72,9 +72,7 @@
         "line_prune": {
             "enabled": true,
             "dead_status_min": 0,
-            "blacklist": {
-                "华谊影视.py": ["F蓝光", "QQ蓝光"]
-            }
+            "blacklist": {}
         }
     },
     "local_spider_dir": "脚本",
