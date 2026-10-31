@@ -260,6 +260,7 @@ def run_one(
     timeout: int,
     adult_probe: list[str] | None = None,
     max_lines: int = 4,
+    keywords: list[str] | None = None,
 ) -> dict[str, Any]:
     job_path = workdir / "jobs" / f"{index}.json"
     result_path = workdir / "results" / f"{index}.json"
@@ -269,6 +270,7 @@ def run_one(
         "shim": str(SHIM),
         "result": str(result_path),
         "keyword": keyword,
+        "keywords": keywords,
         "timeout": timeout,
         "adult_probe": adult_probe or [],
         "max_lines": max_lines,
@@ -631,7 +633,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--source-dir", help="使用本地 py 目录，不下载")
     parser.add_argument("--cache-dir", help="脚本缓存目录，默认系统临时目录")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
-    parser.add_argument("--keyword", help="搜索关键词，默认取配置")
+    parser.add_argument("--keyword", help="搜索关键词（逗号分隔多词，默认取配置）")
     parser.add_argument("--timeout", type=int, help="单个脚本超时秒数")
     parser.add_argument("--workers", type=int, help="并发数")
     parser.add_argument("--stream-workers", type=int, help="播放地址分析并发数")
@@ -646,7 +648,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     config = update_api.load_config(Path(args.config))
     settings = config.get("functional") or {}
-    keyword = args.keyword or str(settings.get("keyword") or "庆余年")
+    # 多关键词：优先 --keyword（逗号分隔），其次 config.functional.keywords（列表），
+    # 最后回退单 keyword（默认庆余年）。
+    if args.keyword:
+        keywords = [k.strip() for k in args.keyword.split(",") if k.strip()]
+    else:
+        kw_cfg = settings.get("keywords")
+        if isinstance(kw_cfg, list) and kw_cfg:
+            keywords = [str(k).strip() for k in kw_cfg if str(k).strip()]
+        else:
+            keywords = [str(settings.get("keyword") or "庆余年")]
+    keyword = keywords[0] if keywords else "庆余年"
     timeout = int(args.timeout or settings.get("timeout") or 30)
     workers = int(args.workers or settings.get("workers") or 6)
     output = Path(args.output).resolve()
@@ -701,7 +713,8 @@ def main(argv: list[str] | None = None) -> int:
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
                 executor.submit(
-                    run_one, script, workdir, index, keyword, timeout, probes, max_lines
+                    run_one, script, workdir, index, keyword, timeout, probes, max_lines,
+                    keywords,
                 ): script
                 for index, script in enumerate(to_run)
             }

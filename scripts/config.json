@@ -57,6 +57,7 @@
         "report": "reports/functional-report.json",
         "min_score": 0,
         "keyword": "庆余年",
+        "keywords": ["庆余年", "斗罗大陆", "流浪地球"],
         "adult_probe_keywords": [
             "麻豆传媒",
             "被家长调教的女教师"

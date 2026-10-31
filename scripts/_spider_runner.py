@@ -323,8 +323,26 @@ def main() -> int:
         try:
             search = getattr(spider, "searchContent", None)
             if callable(search):
-                search_items = video_list(call(search, [job["keyword"], False, "1"]))
-            reporter.set(search_items=len(search_items), search_ok=bool(search_items))
+                # 多关键词：任一关键词搜到结果即算通过（源可能专精特定类型）。
+                # 关键词来自 job["keywords"]（配置 functional.keywords，默认单 keyword 兼容）。
+                keywords = [str(k) for k in (job.get("keywords") or [job.get("keyword")]) if str(k).strip()]
+                search_hits: dict[str, int] = {}
+                for kw in keywords:
+                    try:
+                        items = video_list(call(search, [kw, False, "1"]))
+                    except Exception:  # noqa: BLE001
+                        items = []
+                    if items:
+                        search_items = items  # 用最后一个命中的结果挑 vod_id
+                        search_hits[kw] = len(items)
+                        break  # 任一命中即可，不再搜后续（省时间）
+                reporter.set(
+                    search_items=len(search_items),
+                    search_ok=bool(search_items),
+                    search_keywords=search_hits,
+                )
+            else:
+                reporter.set(search_items=0, search_ok=False, search_keywords={})
         except Exception as exc:  # noqa: BLE001
             current = reporter.data.get("error")
             reporter.set(error=f"{current}; search: {type(exc).__name__}: {exc}" if current else f"search: {type(exc).__name__}: {exc}")
