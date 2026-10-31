@@ -17,6 +17,12 @@
             "repo": "dr",
             "branch": "master",
             "path": "py"
+        },
+        {
+            "owner": "maoystv",
+            "repo": "6",
+            "branch": "main",
+            "path": "PY"
         }
     ],
     "output": "接口.json",
