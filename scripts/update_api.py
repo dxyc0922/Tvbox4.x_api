@@ -82,6 +82,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "repo": "Tvbox4.x_api",
         "branch": "main"
     },
+    # 从 jsm.json 同步顶层字段。只同步用户明确要的 hosts/doh/rules/ads；
+    # lives/wallpaper 是用户自定义（广东IPTV组播.txt、深色壁纸），保留 existing 原值，
+    # 不从 jsm 覆盖。拉取失败时回退 existing，不中断。url 为空或 enabled=false 跳过。
+    "jsm_sync": {
+        "enabled": True,
+        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/qist/tvbox/master/jsm.json",
+        "fields": ["hosts", "doh", "rules", "ads"],
+    },
     "auto_key_prefix": "wzxxcz_",
     "preserve_api_prefixes": ["./"],
     "preserve_non_http": True,
@@ -997,6 +1005,52 @@ def load_functional_report(path: Path) -> dict[str, dict[str, Any]]:
         if isinstance(row, dict) and row.get("file"):
             quality[str(row["file"])] = row
     return quality
+
+
+def sync_jsm_fields(
+    config: dict[str, Any],
+    output: dict[str, Any],
+    existing: dict[str, Any],
+) -> dict[str, Any]:
+    """把 jsm.json（qist/tvbox）的顶层字段同步进输出数据。
+
+    同步 `hosts`/`doh`/`rules`/`ads`/`wallpaper`/`lives` 等字段，让它们始终跟上游
+    jsm.json 保持一致，而不是只靠 `existing`（上一次接口）原样保留。拉取失败、字段
+    缺失或非法时回退到 `existing` 里的原值，不中断生成。
+
+    返回更新后的 output（原地修改并返回）。
+    """
+    cfg = config.get("jsm_sync") or {}
+    if not cfg.get("enabled"):
+        return output
+    url = str(cfg.get("url") or "").strip()
+    if not url:
+        return output
+    fields = [str(f) for f in (cfg.get("fields") or []) if str(f).strip()]
+
+    try:
+        raw = fetch_bytes(url, timeout=float(config.get("request", {}).get("timeout") or 15), retries=1)
+        data = json.loads(raw.decode("utf-8-sig"))
+    except Exception as exc:  # noqa: BLE001 - 网络/解析失败都回退
+        print(f"  jsm_sync: 拉取 {url} 失败（回退 existing 保留）: {type(exc).__name__}: {exc}")
+        return output
+    if not isinstance(data, dict):
+        print("  jsm_sync: jsm.json 不是 JSON 对象，跳过")
+        return output
+
+    got = 0
+    for field in fields:
+        if field in data:
+            output[field] = data[field]
+            got += 1
+        elif field in existing:
+            # jsm 这次没有这个字段，但上次接口里有——保留原值，别丢掉。
+            output[field] = existing[field]
+    if got:
+        print(f"  jsm_sync: 同步 {got} 个字段（{', '.join(f for f in fields if f in data)}）")
+    else:
+        print("  jsm_sync: jsm.json 没有可同步的字段，保持 existing")
+    return output
 
 
 # 分类名精确匹配：这些词单独出现就是成人分类。
@@ -2399,6 +2453,8 @@ def main(argv: list[str] | None = None) -> int:
 
     new_data = dict(existing)
     new_data["sites"] = preserved + entries
+    # 从 jsm.json 同步 hosts/doh/rules/ads/wallpaper/lives 等顶层字段。
+    sync_jsm_fields(config, new_data, existing)
 
     if args.dry_run:
         print("dry-run: 未写入 接口.json")
@@ -2426,6 +2482,7 @@ def main(argv: list[str] | None = None) -> int:
             ]
             remote_data = dict(existing)
             remote_data["sites"] = remote_preserved + remote_entries
+            sync_jsm_fields(config, remote_data, existing)
             remote_path = output.with_name(
                 output.stem + "-remote" + output.suffix
             )

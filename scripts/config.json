@@ -12,6 +12,16 @@
         "repo": "Tvbox4.x_api",
         "branch": "main"
     },
+    "jsm_sync": {
+        "enabled": true,
+        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/qist/tvbox/master/jsm.json",
+        "fields": [
+            "hosts",
+            "doh",
+            "rules",
+            "ads"
+        ]
+    },
     "auto_key_prefix": "wzxxcz_",
     "preserve_api_prefixes": [
         "./"

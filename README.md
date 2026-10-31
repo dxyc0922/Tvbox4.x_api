@@ -476,6 +476,8 @@ python scripts/ban_line.py 华谊影视.py --line K蓝光 --run            # 改
 - `self_repo`：本仓库的 owner/repo/branch，用于把手动保留的本地站点（`./脚本/x.py`）
   拼成 raw 直链写进 `接口-remote.json`；缺省只保留相对路径。
 - `notify`：运行结果通知（webhook / Telegram），见「运行通知」。
+- `jsm_sync`：从 `qist/tvbox` 的 `jsm.json` 同步顶层字段（`hosts`/`doh`/`rules`/`ads`），
+  见「jsm 字段同步」；`enabled=false` 或 `url` 为空则完全跳过。
 
 ### 保留自己的首页
 
@@ -504,7 +506,28 @@ python scripts/ban_line.py 华谊影视.py --line K蓝光 --run            # 改
 | `doh` | 5 个 DoH 解析器（Google/Cloudflare/AdGuard/DNSWatch/Quad9） | 播放器用 DoH 解析域名时有用；保留 |
 | `rules` | 19 条重写/广告过滤规则（proxy、磁力廣告、各源广告嗅探等） | 多数是特定源特有，保留不碍事 |
 | `ads` | 118 个广告/统计域名字符串 | 多数是页面埋点（cnzz/baidu/google），非流内广告；保留但**不要**喂给 `filters.ad_hosts`（见「广告检测标定」） |
+| `hosts` | 5 条 CMCC 直播 CDN 域名映射 | 同步自 `qist/tvbox` 的 `jsm.json`（见「jsm 字段同步」） |
 | `ijk` | 无 | `sites` 里只有 `api/ext/key/name/type`，没有任何 ijk 播放参数，无需处理 |
 
-`update_api.py` 只重建 `sites`，其余顶层字段原样保留（读入 `existing` 后浅拷贝，再替换
-`sites`），所以 `wallpaper`/`lives`/`doh`/`rules`/`ads` 不会因自动更新丢失。
+`update_api.py` 只重建 `sites`，其余顶层字段**从 `jsm.json`（qist/tvbox）同步**（`jsm_sync`
+配置段），拉取失败时回退到 `existing` 原值保留。所以 `hosts`/`doh`/`rules`/`ads` 始终跟随
+上游 jsm.json，`wallpaper`/`lives` 是用户自定义，不从 jsm 覆盖。
+
+### jsm 字段同步
+
+`scripts/update_api.py` 生成时从 `https://github.com/qist/tvbox/blob/master/jsm.json` 同步
+顶层字段，配置在 `config.json` 的 `jsm_sync` 段：
+
+```json
+"jsm_sync": {
+    "enabled": true,
+    "url": "https://gh-proxy.com/https://raw.githubusercontent.com/qist/tvbox/master/jsm.json",
+    "fields": ["hosts", "doh", "rules", "ads"]
+}
+```
+
+- `fields`：要同步的字段，默认 `hosts`/`doh`/`rules`/`ads`（`doh`/`rules`/`ads` 与上游一致，
+  `hosts` 是新增的 CMCC 直播 CDN 映射）。
+- **不覆盖 `lives`/`wallpaper`**：这俩是用户自定义（广东IPTV组播.txt、深色壁纸），保留
+  `existing` 原值。
+- 拉取失败（网络/解析）只打印告警并回退到 `existing` 保留，不中断生成。
