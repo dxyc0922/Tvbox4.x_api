@@ -55,7 +55,7 @@
         "min_grade": "B",
         "drop_unverified": true,
         "min_bitrate_kbps": 800,
-        "min_bpp": 0.035,
+        "min_bpp": 0.05,
         "min_speed_ratio": 0.7,
         "max_startup_ms": 12000,
         "bitrate_thresholds": {
