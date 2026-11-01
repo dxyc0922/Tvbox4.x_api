@@ -50,7 +50,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -TaskName TVB
 
 | 机制 | 说明 |
 |---|---|
-| 功能校验 | 真正调用 `homeContent`/`searchContent`/`detailContent`，每项 1 分（满分 3） |
+| 功能校验 | **硬门槛**：真正调用 `searchContent`/`detailContent`/`playerContent`，任一失败=源废（不评分）；homeContent/分类不重要（豆瓣.py `categoryContent` 提供）。搜索词用**最新**动漫/剧集（豆瓣非凡分类），带**降级链**兼容同名不同源 |
 | 源质量分级 | A 自营 / B 第三方直连 / C 搬运解析 / U 未验证；只留 A/B（`min_grade=B`、`drop_unverified=true`） |
 | 低码率过滤 | 按分辨率分档 + bpp 下限（`min_bpp=0.05`），只留真正高码率源 |
 | 加载速度过滤 | 实测吞吐/启动耗时，只留流畅源 |
@@ -58,7 +58,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -TaskName TVB
 | 成人内容过滤 | 分类名 + 探针搜索，自动剔除 |
 | 源级质量 | 低质（C/D/U）/低码率/慢速源**立即剔除**（不走两振），只留 A/B |
 
-站点按**质量排序**：等级 → 功能评分 → 最高 bpp（画质密度）→ 速度比 → 名称，接口第一个就是最好的源。
+站点按**质量排序**：等级 → 最高 bpp（画质密度）→ 速度比 → 名称（功能 score 不参与评分，只作门槛），接口第一个就是最好的源。
 
 详细规则、阈值、判定逻辑见 [docs/技术说明.md](docs/技术说明.md)。
 
