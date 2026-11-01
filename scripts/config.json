@@ -75,6 +75,7 @@
     "quality": {
         "min_grade": "B",
         "drop_unverified": true,
+        "dynamic_grade_thresholds": false,
         "min_bitrate_kbps": 800,
         "min_bpp": 0.05,
         "min_speed_ratio": 0.7,

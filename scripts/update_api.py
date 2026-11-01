@@ -1225,11 +1225,14 @@ def detect_adult(
     return hits
 
 
-def effective_grade(quality: dict[str, Any] | None) -> str:
+def effective_grade(
+    quality: dict[str, Any] | None, thresholds: dict[str, float] | None = None
+) -> str:
     """把功能校验结果换算成 A/B/C/D，无法验证画质的返回 U。
 
     质量等级**只按画质（码率/分辨率/bpp）+ 速度**，不看链接类型（直链/解析/page）。
     用 stream_check.grade_of 对每个 stream 重算（不依赖旧 stream.grade 链接类型值）。
+    thresholds 可覆盖分级阈值（方向4动态阈值，默认 GRADE_THRESHOLDS）。
 
     优先看所有采样线路（line_streams），取其中最好的等级：实测华谊影视的
     第一条线路经常连接失败，但 K蓝光线路正常，只看第一条会误判成 U。
@@ -1246,7 +1249,7 @@ def effective_grade(quality: dict[str, Any] | None) -> str:
             streams.append(stream)
     grades: list[str] = []
     for stream in streams:
-        grade = stream_check.grade_of(stream)
+        grade = stream_check.grade_of(stream, thresholds)
         kind = str(stream.get("kind") or "")
         if grade and kind and kind not in ("local", "unknown"):
             grades.append(grade)
@@ -1259,7 +1262,9 @@ def effective_grade(quality: dict[str, Any] | None) -> str:
 VIDEO_KINDS = ("hls", "mp4", "video")
 
 
-def quality_sort_key(result: ScriptResult) -> tuple:
+def quality_sort_key(
+    result: ScriptResult, thresholds: dict[str, float] | None = None
+) -> tuple:
     """站点排序：等级（A>B>C>D>U）→ 最高 bpp（画质密度）→ 最快速度比 → 名称。
 
     用户标准：三方法（search/detail/player）是硬门槛（任一失败=源废，不进评分），
@@ -1271,7 +1276,7 @@ def quality_sort_key(result: ScriptResult) -> tuple:
     高分辨率低码率源（如 1080p 但 2309kbps 的采集聚合）。
     """
     quality = result.quality or {}
-    grade = effective_grade(quality)
+    grade = effective_grade(quality, thresholds)
     grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3, "U": 4, "": 4}.get(grade, 4)
     best_bpp = 0.0
     best_speed = 0.0
@@ -1280,6 +1285,56 @@ def quality_sort_key(result: ScriptResult) -> tuple:
         best_bpp = max(best_bpp, stream_bpp(stream))
         best_speed = max(best_speed, float(stream.get("speed_ratio") or 0))
     return (grade_rank, -best_bpp, -best_speed, result.name)
+
+
+def dynamic_grade_thresholds(
+    quality_map: dict[str, dict[str, Any]],
+    base: dict[str, float] | None = None,
+) -> dict[str, float]:
+    """按源池实际分布算动态分级阈值（bpp/speed 分位数）。
+
+    方向4：固定阈值（bpp 0.10/0.05）可能不适合源池变化。按高质量线路的
+    bpp/speed 分布取分位数自适应：bpp_a=P75、bpp_b=P50、speed_a=P75、
+    speed_b=P50。取 max(分位数, 默认) 只收紧不放宽（保证「只留高质量」），
+    且限制在默认值的 2 倍内（避免某周源池异常导致阈值过激）。
+
+    只统计视频线路（音频无分辨率、local/unknown 无法验证）。
+    """
+    base = {**stream_check.GRADE_THRESHOLDS, **(base or {})}
+    bpps: list[float] = []
+    speeds: list[float] = []
+    for quality in quality_map.values():
+        for entry in quality.get("line_streams") or []:
+            stream = entry.get("stream") or {}
+            kind = str(stream.get("kind") or "")
+            if kind in ("audio", "local", "unknown"):
+                continue
+            if not stream.get("bitrate_kbps") or not stream.get("width") or not stream.get("height"):
+                continue
+            bpps.append(stream_bpp(stream))
+            speeds.append(float(stream.get("speed_ratio") or 0))
+    if not bpps:
+        return dict(base)
+    bpps.sort()
+    speeds.sort()
+
+    def pct(arr: list[float], p: float) -> float:
+        return arr[min(int(len(arr) * p), len(arr) - 1)]
+
+    def clamp(value: float, default: float) -> float:
+        """只收紧不放宽，且不超过默认 2 倍。"""
+        return min(max(value, default), default * 2)
+
+    return {
+        "bpp_a": clamp(pct(bpps, 0.75), base["bpp_a"]),
+        "bpp_b": clamp(pct(bpps, 0.50), base["bpp_b"]),
+        "speed_a": clamp(pct(speeds, 0.75), base["speed_a"]),
+        "speed_b": clamp(pct(speeds, 0.50), base["speed_b"]),
+        "bpp_c": base["bpp_c"],
+        "audio_bitrate_a": base["audio_bitrate_a"],
+        "audio_speed_a": base["audio_speed_a"],
+        "audio_bitrate_b": base["audio_bitrate_b"],
+    }
 
 
 def line_grade_order(quality: dict[str, Any] | None) -> list[str]:
@@ -1998,10 +2053,11 @@ def build_report(
     removed: list[Any],
     entries: list[dict[str, Any]],
     output: Path,
+    thresholds: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     counts = Counter(result.status for result in results)
     grades = Counter(
-        effective_grade(result.quality)
+        effective_grade(result.quality, thresholds)
         for result in results
         if result.quality and result.status == "valid"
     )
@@ -2244,6 +2300,8 @@ def main(argv: list[str] | None = None) -> int:
     if quality_path is not None and quality_path.exists():
         quality_map = load_functional_report(quality_path)
         print(f"功能校验报告: {quality_path}（{len(quality_map)} 条）")
+    # 动态分级阈值（方向4）：quality_map 块内计算，块外（build_report/排序）也要用。
+    dyn_thresholds: dict[str, float] | None = None
     if quality_map:
         min_score = int(functional_cfg.get("min_score") or 0)
         quality_cfg = config.get("quality") or {}
@@ -2261,6 +2319,14 @@ def main(argv: list[str] | None = None) -> int:
         adult_allow = {str(name) for name in (filter_cfg.get("adult_allow") or [])}
         min_grade = str(quality_cfg.get("min_grade") or "").strip().upper()
         drop_unverified = bool(quality_cfg.get("drop_unverified"))
+        # 方向4：动态分级阈值（按源池分布分位数，默认关=固定阈值）
+        dyn_thresholds: dict[str, float] | None = None
+        if bool(quality_cfg.get("dynamic_grade_thresholds")):
+            dyn_thresholds = dynamic_grade_thresholds(quality_map)
+            print(f"动态分级阈值（P75/P50）: bpp_a={dyn_thresholds['bpp_a']:.3f} "
+                  f"bpp_b={dyn_thresholds['bpp_b']:.3f} "
+                  f"speed_a={dyn_thresholds['speed_a']:.2f} "
+                  f"speed_b={dyn_thresholds['speed_b']:.2f}")
         min_bitrate = float(quality_cfg.get("min_bitrate_kbps") or 0)
         min_bpp = float(quality_cfg.get("min_bpp") or 0)
         bitrate_thresholds = dict(DEFAULT_BITRATE_THRESHOLDS)
@@ -2311,7 +2377,7 @@ def main(argv: list[str] | None = None) -> int:
                 result.error = f"功能校验 {quality.get('score')}/3 < {min_score}"
                 continue
             if min_grade in grade_rank:
-                grade = effective_grade(quality)
+                grade = effective_grade(quality, dyn_thresholds)
                 if stream_check.is_audio_source(quality, result.filename):
                     # 音频源（听书/音乐）：本质不同（无分辨率，画质按码率评），
                     # 用户实测「正常保留」——不论 A/B/C/D/U 都保留，只按码率排序。
@@ -2374,7 +2440,7 @@ def main(argv: list[str] | None = None) -> int:
             f"1分 {scores.get(1, 0)}，0分 {scores.get(0, 0)}"
         )
         grades = Counter(
-            effective_grade(result.quality)
+            effective_grade(result.quality, dyn_thresholds)
             for result in results
             if result.quality and result.status == "valid"
         )
@@ -2474,7 +2540,7 @@ def main(argv: list[str] | None = None) -> int:
         result = result_by_entry.get(id(entry))
         if result is None:
             return (4, 0, 0.0, 0.0, str(entry.get("name") or ""))
-        return quality_sort_key(result)
+        return quality_sort_key(result, dyn_thresholds)
 
     entries.sort(key=_entry_sort_key)
 
@@ -2517,6 +2583,7 @@ def main(argv: list[str] | None = None) -> int:
             removed,
             entries,
             output,
+            dyn_thresholds,
         )
         write_json(report_path, report, "\n")
         print(f"校验报告: {report_path}")
