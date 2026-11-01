@@ -499,7 +499,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
+_TVBOX_DROP_LINES = ["地址8"]
 _TVBOX_LINE_ORDER = ["地址3", "地址4", "地址8"]
 
 def _tvbox_filter_lines(result, drop):

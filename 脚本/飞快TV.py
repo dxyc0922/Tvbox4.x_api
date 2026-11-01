@@ -792,7 +792,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
+_TVBOX_DROP_LINES = ["无广告5", "最大在线"]
 _TVBOX_LINE_ORDER = ["无广告2", "无广告0", "最大在线", "无广告5"]
 
 def _tvbox_filter_lines(result, drop):

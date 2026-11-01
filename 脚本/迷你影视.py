@@ -437,7 +437,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
+_TVBOX_DROP_LINES = ["GS线路"]
 _TVBOX_LINE_ORDER = ["FF线路", "FX线路", "YZ线路", "GS线路"]
 
 def _tvbox_filter_lines(result, drop):

@@ -166,7 +166,7 @@ class Spider(BaseSpider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["SN"]
+_TVBOX_DROP_LINES = ["BF", "SN"]
 _TVBOX_LINE_ORDER = ["BF", "SN", "WJ", "一起看APP"]
 
 def _tvbox_filter_lines(result, drop):

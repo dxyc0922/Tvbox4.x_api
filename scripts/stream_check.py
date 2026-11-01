@@ -768,7 +768,7 @@ def grade_of(
 # 只用纯音频特征词（音乐/听书/音频/flac/mp3...），不用品牌名（千千/酷我/汽水）——
 # 品牌名会误判视频源（如千千影视是视频源但名字含「千千」，靠 hls 画质 B 级保留）。
 AUDIO_NAME_RE = re.compile(
-    r"音乐|听书|音频|audio|music|flac|mp3|m4a|无损|音质|拾音",
+    r"音乐|听书|音频|audio|music|flac|mp3|m4a|无损|音质|拾音|有声|悦听|听歌|电台",
     re.IGNORECASE,
 )
 
@@ -777,13 +777,20 @@ def is_audio_source(quality: dict[str, Any] | None, name_hint: str = "") -> bool
     """通用判定源是否为音频源（听书/音乐）。音频与视频本质不同：无分辨率，
     画质按码率评，不能用 bpp。
 
-    规则（用户实测反馈）：
-    - 所有线路都是 local/page → 问题源（本地代理/网页解析拿不到真实播放，剔）；
-      即使名字含音乐（酷我音乐是 local 代理，实测有问题）。
+    规则（用户实测反馈：音频源正常保留，不论 A/B/C/D/U）：
+    - **名字/线路名含音频特征词 → 音频源**（听书/音乐）。即使播放地址是本地
+      代理（kind=local）或测不出 kind，TVBox 播放器能处理，保留。
     - 存在 kind=audio 线路 → 音频源（保留）。
-    - 无线路/kind=unknown → 按源名+线路名特征判断（music_dl 这类音频下载器
-      stream_check 测不出 kind，但名字含 music）。
+    - 非音频名 + 全 local/page → 问题源（本地代理/网页解析拿不到真实播放，剔）。
     """
+    flags = " ".join(
+        str(entry.get("flag") or "")
+        for entry in (quality or {}).get("line_streams") or []
+    )
+    # 音频特征词（音乐/听书/音频/flac/mp3...）→ 音频源，优先于 local/page 判断。
+    # 只用纯音频词不用品牌名：千千影视（视频源，名字含「千千」）不受影响。
+    if AUDIO_NAME_RE.search(f"{name_hint} {flags}"):
+        return True
     streams: list[dict[str, Any]] = []
     for entry in (quality or {}).get("line_streams") or []:
         stream = entry.get("stream") or {}
@@ -794,24 +801,19 @@ def is_audio_source(quality: dict[str, Any] | None, name_hint: str = "") -> bool
         if stream:
             streams.append(stream)
     if not streams:
-        return bool(AUDIO_NAME_RE.search(name_hint))
+        return False
     kinds = [str(stream.get("kind") or "") for stream in streams]
-    # 本地代理 / 网页解析线路：用户实测有问题（不管名字是否含音乐），非音频。
+    # 非音频名 + 本地代理 / 网页解析线路：用户实测有问题（拿不到真实播放）。
     if kinds and all(k in ("local", "page") for k in kinds):
         return False
     if any(k == "audio" for k in kinds):
         return True
-    # 无线路/kind=unknown：按源名+线路名音频特征兜底（音频下载器测不出 kind）。
-    flags = " ".join(
-        str(entry.get("flag") or "")
-        for entry in (quality or {}).get("line_streams") or []
-    )
-    return bool(AUDIO_NAME_RE.search(f"{name_hint} {flags}"))
+    return False
 
 
 def describe(result: dict[str, Any]) -> str:
     grade = result.get("grade", "D")
-    label = {"A": "自营直连", "B": "第三方直连", "C": "搬运/解析/有广告标记", "D": "无法验证"}[grade]
+    label = {"A": "高画质", "B": "画质达标", "C": "偏低", "D": "差"}.get(grade, "未知")
     parts = [f"{grade} {label}", result.get("kind", "?")]
     if result.get("resolution"):
         parts.append(result["resolution"])

@@ -191,12 +191,6 @@
             "api": "./脚本/猎手.py"
         },
         {
-            "key": "wzxxcz_7b394ac21dbf",
-            "name": "分享猎手",
-            "type": 3,
-            "api": "./脚本/分享猎手.py"
-        },
-        {
             "key": "wzxxcz_0e41f8766e95",
             "name": "追剧猫",
             "type": 3,
@@ -381,6 +375,18 @@
             "name": "music_dl",
             "type": 3,
             "api": "./脚本/music_dl.py"
+        },
+        {
+            "key": "wzxxcz_0753afca4a6c",
+            "name": "悦听吧",
+            "type": 3,
+            "api": "./脚本/悦听吧.py"
+        },
+        {
+            "key": "wzxxcz_28479a5974ed",
+            "name": "酷我音乐",
+            "type": 3,
+            "api": "./脚本/酷我音乐.py"
         }
     ],
     "lives": [

@@ -843,10 +843,10 @@ def main(argv: list[str] | None = None) -> int:
     if stream_summary:
         print(
             "源质量: "
-            f"A 自营 {stream_summary.get('A', 0)}，"
-            f"B 第三方 {stream_summary.get('B', 0)}，"
-            f"C 搬运/解析 {stream_summary.get('C', 0)}，"
-            f"D 无法验证 {stream_summary.get('D', 0)}"
+            f"A 高画质 {stream_summary.get('A', 0)}，"
+            f"B 画质达标 {stream_summary.get('B', 0)}，"
+            f"C 偏低 {stream_summary.get('C', 0)}，"
+            f"D 差 {stream_summary.get('D', 0)}"
         )
     print(f"报告: {output}")
     return 0

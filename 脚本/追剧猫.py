@@ -647,7 +647,7 @@ if __name__ == _dk8('fHxOQkpNfHw='):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
+_TVBOX_DROP_LINES = ["360", "电影天堂"]
 _TVBOX_LINE_ORDER = ["360", "量子资源", "非凡", "电影天堂"]
 
 def _tvbox_filter_lines(result, drop):

@@ -2446,9 +2446,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(
             "源质量（有效站点）: "
-            f"A 自营 {grades.get('A', 0)}，B 第三方 {grades.get('B', 0)}，"
-            f"C 搬运/解析 {grades.get('C', 0)}，D 无法验证 {grades.get('D', 0)}，"
-            f"U 未取得播放地址 {grades.get('U', 0)}"
+            f"A 高画质 {grades.get('A', 0)}，B 画质达标 {grades.get('B', 0)}，"
+            f"C 偏低 {grades.get('C', 0)}，D 差 {grades.get('D', 0)}，"
+            f"U 画质未知 {grades.get('U', 0)}"
         )
         if adult_hits:
             print(
