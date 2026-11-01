@@ -651,6 +651,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--cache", help="增量缓存路径（默认 reports/functional-cache.json）")
     parser.add_argument("--no-cache", action="store_true", help="禁用增量缓存，全量重测")
     parser.add_argument("--limit", type=int, default=0, help="只测前 N 个脚本")
+    parser.add_argument("--files", help="只测逗号分隔的指定文件（强制重测，忽略缓存）")
     return parser.parse_args(argv)
 
 
@@ -682,6 +683,9 @@ def main(argv: list[str] | None = None) -> int:
     cache_dir = Path(args.cache_dir).resolve() if args.cache_dir else None
 
     scripts = collect_scripts(config, source_dir, cache_dir, args.limit)
+    if args.files:
+        wanted = {f.strip() for f in args.files.split(",") if f.strip()}
+        scripts = [s for s in scripts if s.name in wanted]
     if not scripts:
         print("没有可测试的脚本", file=sys.stderr)
         return 1
@@ -692,11 +696,21 @@ def main(argv: list[str] | None = None) -> int:
     (workdir / "results").mkdir(parents=True, exist_ok=True)
 
     rows: list[dict[str, Any]] = []
+    # --files 只重测指定源：先加载旧报告作 base（保留其余 720 源结果），
+    # 重测的源覆盖对应条目，避免只测 5 个把 725 源报告覆盖掉。
+    if args.files:
+        try:
+            old = json.loads(output.read_text(encoding="utf-8-sig"))
+            old_rows = old.get("scripts") if isinstance(old, dict) else []
+            rows = [dict(r) for r in old_rows if isinstance(r, dict)]
+        except (OSError, ValueError):
+            rows = []
     probes = [str(k) for k in (settings.get("adult_probe_keywords") or []) if str(k).strip()]
     max_lines = int((config.get("quality") or {}).get("max_lines") or 4)
 
     # P1 增量缓存：脚本没变且上次结果干净的源复用，跳过子进程与逐线路重测。
-    use_cache = not args.no_cache and not args.no_stream
+    # --files 指定重测（stream_check 逻辑变了，旧音频结果 bitrate=0 不可复用）→ 强制重测。
+    use_cache = not args.no_cache and not args.no_stream and not args.files
     cache: dict[str, Any] = {"round": 0, "entries": {}}
     reuse: set[str] = set()
     if use_cache:
@@ -744,14 +758,24 @@ def main(argv: list[str] | None = None) -> int:
                 if done % 20 == 0 or done == len(futures):
                     print(f"  已测试 {done}/{len(futures)}")
 
-    for script in scripts:
-        if script.name in reuse:
-            entry = cache["entries"][script.name]
-            row = dict(entry.get("result") or {})
-            row["file"] = script.name
-            rows.append(row)
-        else:
-            rows.append(fresh[script.name])
+    if args.files:
+        # --files：rows 已加载旧报告 base（725 源），把重测结果覆盖对应条目。
+        by_file = {str(r.get("file")): r for r in rows}
+        for script in scripts:
+            row = fresh.get(script.name)
+            if row:
+                row["file"] = script.name
+                by_file[str(script.name)] = row
+        rows = list(by_file.values())
+    else:
+        for script in scripts:
+            if script.name in reuse:
+                entry = cache["entries"][script.name]
+                row = dict(entry.get("result") or {})
+                row["file"] = script.name
+                rows.append(row)
+            else:
+                rows.append(fresh[script.name])
 
     rows.sort(key=lambda row: str(row.get("file")))
 
@@ -760,7 +784,13 @@ def main(argv: list[str] | None = None) -> int:
         stream_workers = int(
             args.stream_workers or settings.get("stream_workers") or 12
         )
-        stream_summary = analyze_streams(rows, scripts, config, stream_workers, skip=reuse)
+        # --files 只重测指定源：跳过其余（保留旧 line_streams），只分析重测的。
+        if args.files:
+            retest = {f.strip() for f in args.files.split(",") if f.strip()}
+            analyze_skip = {str(r.get("file")) for r in rows} - retest
+        else:
+            analyze_skip = reuse
+        stream_summary = analyze_streams(rows, scripts, config, stream_workers, skip=analyze_skip)
 
     # 保存增量缓存：本轮重测的源写入结果并记录分析轮次；复用的源不更新（保持强制重测周期）。
     if use_cache:

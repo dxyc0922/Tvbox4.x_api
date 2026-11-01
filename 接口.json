@@ -65,6 +65,18 @@
             "api": "./脚本/分享者华谊.py"
         },
         {
+            "key": "wzxxcz_338201675967",
+            "name": "汽水音乐",
+            "type": 3,
+            "api": "./脚本/汽水音乐.py"
+        },
+        {
+            "key": "wzxxcz_d882a09af99b",
+            "name": "千千音乐",
+            "type": 3,
+            "api": "./脚本/千千音乐.py"
+        },
+        {
             "key": "wzxxcz_d2c369bfee55",
             "name": "99短剧网",
             "type": 3,
@@ -299,10 +311,10 @@
             "api": "./脚本/追剧达人.py"
         },
         {
-            "key": "wzxxcz_f897755e5f3c",
-            "name": "music_dl",
+            "key": "wzxxcz_7af6ff43efff",
+            "name": "爱听音乐",
             "type": 3,
-            "api": "./脚本/music_dl.py"
+            "api": "./脚本/爱听音乐.py"
         },
         {
             "key": "wzxxcz_e8d279df2881",
@@ -311,22 +323,10 @@
             "api": "./脚本/世界听书.py"
         },
         {
-            "key": "wzxxcz_d882a09af99b",
-            "name": "千千音乐",
+            "key": "wzxxcz_f897755e5f3c",
+            "name": "music_dl",
             "type": 3,
-            "api": "./脚本/千千音乐.py"
-        },
-        {
-            "key": "wzxxcz_338201675967",
-            "name": "汽水音乐",
-            "type": 3,
-            "api": "./脚本/汽水音乐.py"
-        },
-        {
-            "key": "wzxxcz_7af6ff43efff",
-            "name": "爱听音乐",
-            "type": 3,
-            "api": "./脚本/爱听音乐.py"
+            "api": "./脚本/music_dl.py"
         }
     ],
     "lives": [

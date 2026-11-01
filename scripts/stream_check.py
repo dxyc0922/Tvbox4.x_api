@@ -157,12 +157,18 @@ FFPROBE = shutil.which("ffprobe")
 AD_HOSTS: tuple[str, ...] = ()
 
 
-def probe_media(url: str, referer: str | None, timeout: float = 8.0) -> dict[str, Any]:
-    """用 ffprobe 读取视频流的分辨率和码率。
+def probe_media(
+    url: str,
+    referer: str | None,
+    timeout: float = 8.0,
+    select_stream: str = "v:0",
+) -> dict[str, Any]:
+    """用 ffprobe 读取媒体流的分辨率和码率。
 
     mp4/直链视频直接读；HLS 也用它复核真实分辨率——master 里的 `RESOLUTION`
     经常是 `1080x608` 这种模板占位值（ffprobe 会把 dimensions 放在
     `programs[0].streams` 里）。
+    音频源（听书/音乐）无分辨率，用 select_stream="a:0" 读 audio 流码率。
     没装 ffprobe、超时、流不可解析都返回空字典，调用方按「未知」处理。
     """
     if not FFPROBE:
@@ -174,7 +180,7 @@ def probe_media(url: str, referer: str | None, timeout: float = 8.0) -> dict[str
     command = [
         FFPROBE,
         "-v", "error",
-        "-select_streams", "v:0",
+        "-select_streams", select_stream,
         "-show_entries", "stream=bit_rate,height,width,avg_frame_rate",
         "-of", "json",
         "-probesize", "1000000",
@@ -633,6 +639,25 @@ def analyze_stream(
                 final_url=final_url[:300],
             )
             resp.close()
+            # 音频（听书/音乐）无分辨率：ffprobe 读 audio 流码率（画质=码率）。
+            # 与 mp4 分支一样，码率测到后 grade_of 的 audio 分支按 320/128K 分级。
+            result.update(
+                probe_media(final_url or url, referer, min(timeout, 8.0), select_stream="a:0")
+            )
+            speed = measure_speed(
+                [{"url": final_url or url}], referer, min(timeout, 15.0), samples=1
+            )
+            if speed:
+                result.update(
+                    ttfb_ms=int(speed.get("ttfb_ms") or 0),
+                    speed_kbps=int(speed.get("speed_kbps") or 0),
+                    speed_ratio=round(
+                        speed.get("speed_kbps", 0) / result["bitrate_kbps"], 2
+                    )
+                    if result.get("bitrate_kbps")
+                    else 0.0,
+                    speed_samples=int(speed.get("speed_samples") or 0),
+                )
             result["relation"] = site_relation(url, site_hosts, final_url)
             result["grade"] = grade_of(result)
             return result
@@ -682,13 +707,27 @@ def find_m3u8(text: str, base: str) -> list[str]:
     return out
 
 
-def grade_of(result: dict[str, Any]) -> str:
+# 质量分级默认阈值。方向4（动态阈值）可覆盖：update_api 按源分布算分位数传入，
+# 默认用固定值（行为不变），配置 quality.dynamic_grade_thresholds 启用。
+GRADE_THRESHOLDS: dict[str, float] = {
+    "bpp_a": 0.10, "speed_a": 0.7,   # A：画质密度 + 快
+    "bpp_b": 0.05, "speed_b": 0.3,   # B：画质速度达标
+    "bpp_c": 0.03,                   # C：偏低
+    "audio_bitrate_a": 320, "audio_speed_a": 0.5, "audio_bitrate_b": 128,
+}
+
+
+def grade_of(
+    result: dict[str, Any], thresholds: dict[str, float] | None = None
+) -> str:
     """质量等级：只按**画质（码率/分辨率/bpp）+ 速度（speed_ratio）**，不看链接类型。
 
     用户标准：画质好、速度快就行，是什么链接（直链/解析/page）没有区别。
     画质未知（拿不到码率/分辨率）→ U（无法验证画质，由功能门槛决定去留）；
     广告多（ad_score>=2）仍降 C（体验差）。音频无分辨率，按码率+速度判。
+    thresholds 可覆盖阈值（方向4动态阈值），默认 GRADE_THRESHOLDS。
     """
+    t = {**GRADE_THRESHOLDS, **(thresholds or {})}
     kind = result.get("kind")
     if kind in ("unknown", "local"):
         return "D"  # 播放地址无法外部验证
@@ -701,9 +740,9 @@ def grade_of(result: dict[str, Any]) -> str:
         # 音频无分辨率，按码率+速度判（画质=码率）
         if not bitrate:
             return "U"
-        if bitrate >= 320 and speed >= 0.5:
+        if bitrate >= t["audio_bitrate_a"] and speed >= t["audio_speed_a"]:
             return "A"
-        if bitrate >= 128:
+        if bitrate >= t["audio_bitrate_b"]:
             return "B"
         return "C"
     width = int(result.get("width") or 0)
@@ -715,11 +754,11 @@ def grade_of(result: dict[str, Any]) -> str:
         fps = 25.0
     bpp = bitrate * 1000.0 / (width * height * fps)
     # 画质（bpp）+ 速度（speed_ratio）定级
-    if bpp >= 0.10 and speed >= 0.7:
+    if bpp >= t["bpp_a"] and speed >= t["speed_a"]:
         return "A"
-    if bpp >= 0.05 and speed >= 0.3:
+    if bpp >= t["bpp_b"] and speed >= t["speed_b"]:
         return "B"
-    if bpp >= 0.03:
+    if bpp >= t["bpp_c"]:
         return "C"
     return "D"
 

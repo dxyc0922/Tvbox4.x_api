@@ -2248,13 +2248,13 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             if min_grade in grade_rank:
                 grade = effective_grade(quality)
-                if grade == "U":
-                    # 画质未知：区分音频源与视频源（用户实测）。
-                    # 音频（听书/音乐）无分辨率，画质按码率评，是正常源 → 保留；
-                    # 非音频（page/local/无线路/unknown）实测有问题 → 剔。
-                    if stream_check.is_audio_source(quality, result.filename):
-                        pass  # 音频源：功能优先，保留
-                    elif drop_unverified:
+                if stream_check.is_audio_source(quality, result.filename):
+                    # 音频源（听书/音乐）：本质不同（无分辨率，画质按码率评），
+                    # 用户实测「正常保留」——不论 A/B/C/D/U 都保留，只按码率排序。
+                    pass
+                elif grade == "U":
+                    # 非音频画质未知：page/local/无线路/unknown 用户实测有问题 → 剔。
+                    if drop_unverified:
                         result.status = "low_quality"
                         result.error = "U级画质未知且非音频（page/local/无线路/unknown）"
                 elif grade_rank.get(grade, 3) > grade_rank[min_grade]:
