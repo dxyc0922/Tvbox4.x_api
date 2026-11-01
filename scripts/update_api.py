@@ -1282,6 +1282,30 @@ def quality_sort_key(result: ScriptResult) -> tuple:
     return (grade_rank, -best_bpp, -best_speed, result.name)
 
 
+def line_grade_order(quality: dict[str, Any] | None) -> list[str]:
+    """按画质速度重排线路名（最优在前）。
+
+    线路级推荐：TVBox 默认播 vod_play_url 第一条，把画质速度最好的线路排第一。
+    只排有画质数据的线路（grade_of 可判）；未知线路不在 order 里，注入时
+    稳定保持原序后置。同一 grade 内按 bpp（画质密度）→ 速度排序。
+    """
+    if not quality:
+        return []
+    scored: list[tuple[float, float, float, str]] = []
+    for entry in quality.get("line_streams") or []:
+        flag = str(entry.get("flag") or "").strip()
+        stream = entry.get("stream") or {}
+        if not flag or not stream:
+            continue
+        grade = stream_check.grade_of(stream)
+        rank = {"A": 0, "B": 1, "C": 2, "D": 3, "U": 4}.get(grade, 4)
+        scored.append(
+            (rank, -stream_bpp(stream), -float(stream.get("speed_ratio") or 0), flag)
+        )
+    scored.sort()
+    return [flag for _, _, _, flag in scored]
+
+
 def resolution_threshold(
     stream: dict[str, Any],
     default_kbps: float,
@@ -1688,60 +1712,96 @@ def line_prune_drops(
     return drops, current_low, current_dead
 
 
-def inject_line_filter(source: str, drop_flags: list[str]) -> str:
-    """在脚本末尾注入线路过滤代码；不带 drop 时只打标记，方便后续清理。"""
+def inject_line_filter(
+    source: str, drop_flags: list[str], line_order: list[str] | None = None
+) -> str:
+    """在脚本末尾注入线路过滤 + 重排代码。
+
+    不带 drop 时只打标记（方便后续清理）；line_order 非空时按画质速度重排
+    线路（最优在前，TVBox 默认播第一条），未知线路保持原序后置。
+    """
     marker = LINE_FILTER_MARKER
     if marker in source:
         source = source.split(marker)[0].rstrip("\n")
     header = f"\n\n{marker}\n"
-    if not drop_flags:
+    order = [str(f) for f in (line_order or []) if str(f).strip()]
+    if not drop_flags and not order:
         return source + header
-    block = "\n".join(
-        [
-            header.rstrip("\n"),
-            f"_TVBOX_DROP_LINES = {json.dumps(sorted(drop_flags), ensure_ascii=False)}",
-            "",
-            "def _tvbox_filter_lines(result, drop):",
-            "    if not isinstance(result, dict):",
-            "        return result",
-            "    items = result.get('list')",
-            "    if isinstance(items, list):",
-            "        for item in items:",
-            "            _tvbox_filter_item(item, drop)",
-            "    else:",
-            "        _tvbox_filter_item(result, drop)",
-            "    return result",
-            "",
-            "def _tvbox_filter_item(item, drop):",
-            "    froms = item.get('vod_play_from') or ''",
-            "    urls = item.get('vod_play_url') or ''",
-            "    if not isinstance(froms, str) or not isinstance(urls, str):",
-            "        return",
-            "    if '$$$' not in froms:",
-            "        return",
-            "    parts_from = [f.strip() for f in froms.split('$$$')]",
-            "    parts_url = urls.split('$$$')",
-            "    if len(parts_from) != len(parts_url):",
-            "        return",
-            "    keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]",
-            "    if not keep or len(keep) == len(parts_from):",
-            "        return",
-            "    item['vod_play_from'] = '$$$'.join(f for f, _ in keep)",
-            "    item['vod_play_url'] = '$$$'.join(u for _, u in keep)",
-            "",
-            "def _tvbox_apply(cls):",
-            "    fn = getattr(cls, 'detailContent', None)",
-            "    if fn is None:",
-            "        return",
-            "    def wrapper(self, *a, _fn=fn, **k):",
-            "        return _tvbox_filter_lines(_fn(self, *a, **k), _TVBOX_DROP_LINES)",
-            "    setattr(cls, 'detailContent', wrapper)",
-            "",
-            "_tvbox_apply(Spider)",
-            "",
-        ]
-    )
-    return source + "\n" + block
+    lines: list[str] = [
+        header.rstrip("\n"),
+        f"_TVBOX_DROP_LINES = {json.dumps(sorted(drop_flags), ensure_ascii=False)}",
+        f"_TVBOX_LINE_ORDER = {json.dumps(order, ensure_ascii=False)}",
+        "",
+        "def _tvbox_filter_lines(result, drop):",
+        "    if not isinstance(result, dict):",
+        "        return result",
+        "    items = result.get('list')",
+        "    if isinstance(items, list):",
+        "        for item in items:",
+        "            _tvbox_filter_item(item, drop)",
+        "    else:",
+        "        _tvbox_filter_item(result, drop)",
+        "    return result",
+        "",
+        "def _tvbox_filter_item(item, drop):",
+        "    froms = item.get('vod_play_from') or ''",
+        "    urls = item.get('vod_play_url') or ''",
+        "    if not isinstance(froms, str) or not isinstance(urls, str):",
+        "        return",
+        "    if '$$$' not in froms:",
+        "        return",
+        "    parts_from = [f.strip() for f in froms.split('$$$')]",
+        "    parts_url = urls.split('$$$')",
+        "    if len(parts_from) != len(parts_url):",
+        "        return",
+        "    keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]",
+        "    if not keep or len(keep) == len(parts_from):",
+        "        return",
+        "    item['vod_play_from'] = '$$$'.join(f for f, _ in keep)",
+        "    item['vod_play_url'] = '$$$'.join(u for _, u in keep)",
+        "",
+        "def _tvbox_sort_lines(result, order):",
+        "    if not order or not isinstance(result, dict):",
+        "        return result",
+        "    items = result.get('list')",
+        "    if isinstance(items, list):",
+        "        for item in items:",
+        "            _tvbox_sort_item(item, order)",
+        "    else:",
+        "        _tvbox_sort_item(result, order)",
+        "    return result",
+        "",
+        "def _tvbox_sort_item(item, order):",
+        "    froms = item.get('vod_play_from') or ''",
+        "    urls = item.get('vod_play_url') or ''",
+        "    if not isinstance(froms, str) or not isinstance(urls, str):",
+        "        return",
+        "    if '$$$' not in froms:",
+        "        return",
+        "    parts_from = [f.strip() for f in froms.split('$$$')]",
+        "    parts_url = urls.split('$$$')",
+        "    if len(parts_from) != len(parts_url):",
+        "        return",
+        "    known = {f: i for i, f in enumerate(order)}",
+        "    pairs = list(zip(parts_from, parts_url))",
+        "    # 已知线路按 order（画质速度最优在前），未知线路稳定保持原序后置。",
+        "    pairs.sort(key=lambda p: known.get(p[0], len(order)))",
+        "    item['vod_play_from'] = '$$$'.join(f for f, _ in pairs)",
+        "    item['vod_play_url'] = '$$$'.join(u for _, u in pairs)",
+        "",
+        "def _tvbox_apply(cls):",
+        "    fn = getattr(cls, 'detailContent', None)",
+        "    if fn is None:",
+        "        return",
+        "    def wrapper(self, *a, _fn=fn, **k):",
+        "        res = _tvbox_filter_lines(_fn(self, *a, **k), _TVBOX_DROP_LINES)",
+        "        return _tvbox_sort_lines(res, _TVBOX_LINE_ORDER)",
+        "    setattr(cls, 'detailContent', wrapper)",
+        "",
+        "_tvbox_apply(Spider)",
+        "",
+    ]
+    return source + "\n" + "\n".join(lines)
 
 
 def write_local_spiders(
@@ -1828,7 +1888,11 @@ def write_local_spiders(
                 + "、".join(dead_candidates)
             )
         if write:
-            text = inject_line_filter(result.source, sorted(drops))
+            text = inject_line_filter(
+                result.source,
+                sorted(drops),
+                line_grade_order(quality_map.get(result.filename)),
+            )
             # 冒烟检查：注入后必须是合法 Python（线路过滤是运行时包装，不应破坏语法）。
             try:
                 compile(text, filename, "exec")

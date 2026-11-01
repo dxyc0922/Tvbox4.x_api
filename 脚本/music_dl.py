@@ -2564,4 +2564,75 @@ def _ui_handler(spider):
     return _H
 
 
+
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
+_TVBOX_DROP_LINES = []
+_TVBOX_LINE_ORDER = ["music-dl"]
+
+def _tvbox_filter_lines(result, drop):
+    if not isinstance(result, dict):
+        return result
+    items = result.get('list')
+    if isinstance(items, list):
+        for item in items:
+            _tvbox_filter_item(item, drop)
+    else:
+        _tvbox_filter_item(result, drop)
+    return result
+
+def _tvbox_filter_item(item, drop):
+    froms = item.get('vod_play_from') or ''
+    urls = item.get('vod_play_url') or ''
+    if not isinstance(froms, str) or not isinstance(urls, str):
+        return
+    if '$$$' not in froms:
+        return
+    parts_from = [f.strip() for f in froms.split('$$$')]
+    parts_url = urls.split('$$$')
+    if len(parts_from) != len(parts_url):
+        return
+    keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]
+    if not keep or len(keep) == len(parts_from):
+        return
+    item['vod_play_from'] = '$$$'.join(f for f, _ in keep)
+    item['vod_play_url'] = '$$$'.join(u for _, u in keep)
+
+def _tvbox_sort_lines(result, order):
+    if not order or not isinstance(result, dict):
+        return result
+    items = result.get('list')
+    if isinstance(items, list):
+        for item in items:
+            _tvbox_sort_item(item, order)
+    else:
+        _tvbox_sort_item(result, order)
+    return result
+
+def _tvbox_sort_item(item, order):
+    froms = item.get('vod_play_from') or ''
+    urls = item.get('vod_play_url') or ''
+    if not isinstance(froms, str) or not isinstance(urls, str):
+        return
+    if '$$$' not in froms:
+        return
+    parts_from = [f.strip() for f in froms.split('$$$')]
+    parts_url = urls.split('$$$')
+    if len(parts_from) != len(parts_url):
+        return
+    known = {f: i for i, f in enumerate(order)}
+    pairs = list(zip(parts_from, parts_url))
+    # 已知线路按 order（画质速度最优在前），未知线路稳定保持原序后置。
+    pairs.sort(key=lambda p: known.get(p[0], len(order)))
+    item['vod_play_from'] = '$$$'.join(f for f, _ in pairs)
+    item['vod_play_url'] = '$$$'.join(u for _, u in pairs)
+
+def _tvbox_apply(cls):
+    fn = getattr(cls, 'detailContent', None)
+    if fn is None:
+        return
+    def wrapper(self, *a, _fn=fn, **k):
+        res = _tvbox_filter_lines(_fn(self, *a, **k), _TVBOX_DROP_LINES)
+        return _tvbox_sort_lines(res, _TVBOX_LINE_ORDER)
+    setattr(cls, 'detailContent', wrapper)
+
+_tvbox_apply(Spider)
