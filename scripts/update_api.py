@@ -550,11 +550,18 @@ def download_script(
         f"https://cdn.jsdelivr.net/gh/{up['owner']}/{up['repo']}@"
         f"{up['branch']}/{up['path']}/{quoted}"
     )
-    proxy = f"https://gh-proxy.com/{raw}"
+    # 国内加速优先（用户反馈：国内直连 raw.githubusercontent 慢/不通，先试加速）。
+    # 读 config.accelerator（接口-remote.json 也用它），不硬编码单一镜像。
+    accelerator = str(config.get("accelerator") or "").strip()
+    proxy = (
+        accelerator.rstrip("/") + "/" + raw
+        if accelerator
+        else f"https://gh-proxy.com/{raw}"
+    )
 
     timeout = float(config["request"]["timeout"])
     errors: list[str] = []
-    for url in (raw, jsdelivr, proxy):
+    for url in (proxy, jsdelivr, raw):
         try:
             data = fetch_bytes(
                 url, timeout=timeout, retries=1, headers={"User-Agent": UA}
