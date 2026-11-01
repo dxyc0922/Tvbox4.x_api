@@ -42,6 +42,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import update_api  # noqa: E402
+import dynamic_keywords  # noqa: E402
 
 RUNNER = Path(__file__).resolve().with_name("_spider_runner.py")
 SHIM = Path(__file__).resolve().with_name("spider_shim")
@@ -261,6 +262,7 @@ def run_one(
     adult_probe: list[str] | None = None,
     max_lines: int = 4,
     keywords: list[str] | None = None,
+    keyword_chains: list[list[str]] | None = None,
 ) -> dict[str, Any]:
     job_path = workdir / "jobs" / f"{index}.json"
     result_path = workdir / "results" / f"{index}.json"
@@ -271,6 +273,7 @@ def run_one(
         "result": str(result_path),
         "keyword": keyword,
         "keywords": keywords,
+        "keyword_chains": keyword_chains,
         "timeout": timeout,
         "adult_probe": adult_probe or [],
         "max_lines": max_lines,
@@ -649,17 +652,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     config = update_api.load_config(Path(args.config))
     settings = config.get("functional") or {}
-    # 多关键词：优先 --keyword（逗号分隔），其次 config.functional.keywords（列表），
-    # 最后回退单 keyword（默认庆余年）。
+    # 动态关键词：从豆瓣.py categoryContent 拿最新动漫/剧集名，生成降级搜索链。
+    # 固定测旧片（庆余年）等于没测——源新旧影视画质/卡顿不同，必须测最新作品。
+    # --keyword 可覆盖（调试）：逗号分隔，每个词单独成链（不降级）。
     if args.keyword:
         keywords = [k.strip() for k in args.keyword.split(",") if k.strip()]
+        keyword_chains = [[k] for k in keywords]
     else:
-        kw_cfg = settings.get("keywords")
-        if isinstance(kw_cfg, list) and kw_cfg:
-            keywords = [str(k).strip() for k in kw_cfg if str(k).strip()]
-        else:
-            keywords = [str(settings.get("keyword") or "庆余年")]
+        keyword_chains = dynamic_keywords.keyword_chains()
+        keywords = [chain[0] for chain in keyword_chains]
     keyword = keywords[0] if keywords else "庆余年"
+    if not keyword_chains:
+        keyword_chains = [[keyword]]
     timeout = int(args.timeout or settings.get("timeout") or 30)
     workers = int(args.workers or settings.get("workers") or 6)
     output = Path(args.output).resolve()
@@ -715,7 +719,7 @@ def main(argv: list[str] | None = None) -> int:
             futures = {
                 executor.submit(
                     run_one, script, workdir, index, keyword, timeout, probes, max_lines,
-                    keywords,
+                    keywords, keyword_chains,
                 ): script
                 for index, script in enumerate(to_run)
             }

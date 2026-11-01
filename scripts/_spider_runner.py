@@ -243,11 +243,14 @@ class Reporter:
 
     def flush(self) -> None:
         self.data["elapsed"] = round(time.time() - self.started, 2)
-        # 功能评分只看用户关心的三个方法：searchContent + detailContent + playerContent。
-        # homeContent 不参与（首页内容不重要，源只要能搜、能取详情、能播即可）。
-        self.data["score"] = sum(
-            1 for key in ("search_ok", "detail_ok", "play_ok") if self.data[key]
-        )
+        # 三方法硬门槛：searchContent + detailContent + playerContent 任一失败 = 源废。
+        # 功能不能作为评分，只是「能否用」的门槛；homeContent/分类不重要（豆瓣提供）。
+        # score 仅保留作诊断（1-3），真正判定用 functional_ok。
+        search_ok = bool(self.data.get("search_ok"))
+        detail_ok = bool(self.data.get("detail_ok"))
+        play_ok = bool(self.data.get("play_ok"))
+        self.data["functional_ok"] = search_ok and detail_ok and play_ok
+        self.data["score"] = sum(1 for v in (search_ok, detail_ok, play_ok) if v)
         temporary = self.path + ".tmp"
         with open(temporary, "w", encoding="utf-8") as handle:
             json.dump(self.data, handle, ensure_ascii=False)
@@ -326,19 +329,27 @@ def main() -> int:
         try:
             search = getattr(spider, "searchContent", None)
             if callable(search):
-                # 多关键词：任一关键词搜到结果即算通过（源可能专精特定类型）。
-                # 关键词来自 job["keywords"]（配置 functional.keywords，默认单 keyword 兼容）。
-                keywords = [str(k) for k in (job.get("keywords") or [job.get("keyword")]) if str(k).strip()]
+                # 降级搜索链：从豆瓣动态获取的最新作品名，每个作品名带降级链
+                # （如 ["沧元图第3季", "沧元图"]）。原词搜不到则降级回退基础名，
+                # 避免同一作品不同源名称差异导致漏判。任一链的任一命中即通过。
+                chains = job.get("keyword_chains")
+                if not chains:
+                    # 兼容旧 keywords / keyword（单层列表）
+                    kw_list = job.get("keywords") or [job.get("keyword")]
+                    chains = [[str(k)] for k in kw_list if str(k).strip()]
                 search_hits: dict[str, int] = {}
-                for kw in keywords:
-                    try:
-                        items = video_list(call(search, [kw, False, "1"]))
-                    except Exception:  # noqa: BLE001
-                        items = []
-                    if items:
-                        search_items = items  # 用最后一个命中的结果挑 vod_id
-                        search_hits[kw] = len(items)
-                        break  # 任一命中即可，不再搜后续（省时间）
+                for chain in chains:
+                    for kw in chain:
+                        try:
+                            items = video_list(call(search, [kw, False, "1"]))
+                        except Exception:  # noqa: BLE001
+                            items = []
+                        if items:
+                            search_items = items  # 用命中的结果挑 vod_id
+                            search_hits[kw] = len(items)
+                            break  # 该作品命中，不再降级
+                    if search_items:
+                        break  # 任一作品命中即通过（省时间）
                 reporter.set(
                     search_items=len(search_items),
                     search_ok=bool(search_items),

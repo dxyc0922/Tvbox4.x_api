@@ -260,7 +260,7 @@ class ProbeResult:
 class ScriptResult:
     filename: str
     name: str
-    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / low_quality / low_bitrate / slow_stream
+    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / functional_fail / low_quality / low_bitrate / slow_stream
     hosts: list[str] = field(default_factory=list)
     tier: str = ""
     checked_host: str | None = None
@@ -1251,7 +1251,11 @@ VIDEO_KINDS = ("hls", "mp4", "video")
 
 
 def quality_sort_key(result: ScriptResult) -> tuple:
-    """站点排序：等级（A>B>C>D>U）→ 功能评分 → 最高 bpp（画质密度）→ 最快速度比 → 名称。
+    """站点排序：等级（A>B>C>D>U）→ 最高 bpp（画质密度）→ 最快速度比 → 名称。
+
+    用户标准：三方法（search/detail/player）是硬门槛（任一失败=源废，不进评分），
+    homeContent/分类不重要。通过门槛后只按**画质**（最高，bpp 归一化）→ **加载速度**
+    排名，功能 score 不参与（score 只作门槛判定的诊断，不是评分项）。
 
     bpp = 码率 ÷ (宽×高×fps)，把分辨率/帧率归一化，比绝对码率更能反映真实画质：
     720p@2500kbps 的 bpp 是 1080p@2500kbps 的两倍多，应排前面；绝对码率会高估
@@ -1260,14 +1264,13 @@ def quality_sort_key(result: ScriptResult) -> tuple:
     quality = result.quality or {}
     grade = effective_grade(quality)
     grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3, "U": 4, "": 4}.get(grade, 4)
-    score = int(quality.get("score") or 0)
     best_bpp = 0.0
     best_speed = 0.0
     for entry in quality.get("line_streams") or []:
         stream = entry.get("stream") or {}
         best_bpp = max(best_bpp, stream_bpp(stream))
         best_speed = max(best_speed, float(stream.get("speed_ratio") or 0))
-    return (grade_rank, -score, -best_bpp, -best_speed, result.name)
+    return (grade_rank, -best_bpp, -best_speed, result.name)
 
 
 def resolution_threshold(
@@ -1946,6 +1949,7 @@ def build_report(
             "duplicate": counts.get("duplicate", 0),
             "excluded": counts.get("excluded", 0),
             "excluded_adult": counts.get("excluded_adult", 0),
+            "functional_fail": counts.get("functional_fail", 0),
             "low_quality": counts.get("low_quality", 0),
             "low_bitrate": counts.get("low_bitrate", 0),
             "slow_stream": counts.get("slow_stream", 0),
@@ -2219,6 +2223,16 @@ def main(argv: list[str] | None = None) -> int:
                 result.status = "excluded_adult"
                 result.error = "成人内容: " + "、".join(hits[:5])
                 continue
+            # 三方法硬门槛：searchContent+detailContent+playerContent 任一失败 = 源废。
+            # functional_ok 由 _spider_runner 写入（True=三方法全通）。旧报告无该字段
+            # 视为通过（None 不误剔）；新报告有则必须为 True，否则剔除。
+            if quality.get("functional_ok") is False:
+                result.status = "functional_fail"
+                result.error = (
+                    f"功能门槛未过: search={quality.get('search_ok')} "
+                    f"detail={quality.get('detail_ok')} play={quality.get('play_ok')}"
+                )
+                continue
             if min_score > 0 and int(quality.get("score") or 0) < min_score:
                 result.status = "low_quality"
                 result.error = f"功能校验 {quality.get('score')}/3 < {min_score}"
@@ -2396,6 +2410,7 @@ def main(argv: list[str] | None = None) -> int:
         f"下载失败 {counts.get('download_failed', 0)}，"
         f"跳过 {counts.get('skipped', 0)}，"
         f"成人剔除 {counts.get('excluded_adult', 0)}，"
+        f"功能门槛未过 {counts.get('functional_fail', 0)}，"
         f"码率剔除 {counts.get('low_bitrate', 0)}，"
         f"慢速剔除 {counts.get('slow_stream', 0)}"
     )
