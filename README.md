@@ -51,7 +51,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -TaskName TVB
 | 机制 | 说明 |
 |---|---|
 | 功能校验 | **硬门槛**：真正调用 `searchContent`/`detailContent`/`playerContent`，任一失败=源废（不评分）；homeContent/分类不重要（豆瓣.py `categoryContent` 提供）。搜索词用**最新**动漫/剧集（豆瓣非凡分类），带**降级链**兼容同名不同源 |
-| 源质量分级 | A 自营 / B 第三方直连 / C 搬运解析 / U 未验证；只留 A/B（`min_grade=B`、`drop_unverified=true`） |
+| 源质量分级 | A 高画质+快 / B 画质速度达标 / C 偏低 / U 画质未知；**只按画质+速度，不看链接类型**（直链/解析/page 无区别）；只留 A/B（`min_grade=B`、`drop_unverified=true` 但三方法通保留 U） |
 | 低码率过滤 | 按分辨率分档 + bpp 下限（`min_bpp=0.05`），只留真正高码率源 |
 | 加载速度过滤 | 实测吞吐/启动耗时，只留流畅源 |
 | 线路级裁减 | 给脚本注入过滤，去掉不通/低质/慢速线路（同源另有达标线路才删）；线路级两振 |
