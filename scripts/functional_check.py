@@ -240,13 +240,19 @@ def result_clean(row: dict[str, Any], config: dict[str, Any]) -> bool:
 
 
 def reusable_from_cache(
-    script: Path, entry: dict[str, Any], config: dict[str, Any], round_num: int
+    script: Path,
+    entry: dict[str, Any],
+    config: dict[str, Any],
+    round_num: int,
+    kw_fingerprint: str = "",
 ) -> bool:
-    """缓存结果是否可复用：脚本没变、上次分析干净、且未超过强制重测周期。"""
+    """缓存结果是否可复用：脚本没变、关键词没变、上次分析干净、且未超过强制重测周期。"""
     if not isinstance(entry, dict):
         return False
     if entry.get("sha256") != source_hash(script):
         return False
+    if kw_fingerprint and entry.get("kw_fingerprint") != kw_fingerprint:
+        return False  # 搜索关键词变了（如从固定片换动态最新片），旧结果不可复用
     last = int(entry.get("last_analyzed_round") or 0)
     if last <= 0 or round_num - last >= REUSE_MAX_AGE_ROUNDS:
         return False
@@ -664,6 +670,11 @@ def main(argv: list[str] | None = None) -> int:
     keyword = keywords[0] if keywords else "庆余年"
     if not keyword_chains:
         keyword_chains = [[keyword]]
+    # 关键词指纹：缓存复用依据（脚本没变 + 关键词没变才可复用）。关键词变了
+    # （如固定片→动态最新片）旧结果不可复用，必须重测。
+    kw_fingerprint = hashlib.sha256(
+        json.dumps(keyword_chains, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
     timeout = int(args.timeout or settings.get("timeout") or 30)
     workers = int(args.workers or settings.get("workers") or 6)
     output = Path(args.output).resolve()
@@ -699,7 +710,7 @@ def main(argv: list[str] | None = None) -> int:
         round_num = int(cache["round"])
         entries = cache.setdefault("entries", {})
         for script in scripts:
-            if reusable_from_cache(script, entries.get(script.name), config, round_num):
+            if reusable_from_cache(script, entries.get(script.name), config, round_num, kw_fingerprint):
                 reuse.add(script.name)
         if reuse:
             print(f"增量缓存: 复用 {len(reuse)} 个未变化且结果干净的源（每 {REUSE_MAX_AGE_ROUNDS} 轮强制重测）")
@@ -769,6 +780,7 @@ def main(argv: list[str] | None = None) -> int:
                 hash_value = ""
             entries[name] = {
                 "sha256": hash_value,
+                "kw_fingerprint": kw_fingerprint,
                 "last_analyzed_round": round_num,
                 "result": row,
             }
