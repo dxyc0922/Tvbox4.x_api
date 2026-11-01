@@ -683,21 +683,45 @@ def find_m3u8(text: str, base: str) -> list[str]:
 
 
 def grade_of(result: dict[str, Any]) -> str:
+    """质量等级：只按**画质（码率/分辨率/bpp）+ 速度（speed_ratio）**，不看链接类型。
+
+    用户标准：画质好、速度快就行，是什么链接（直链/解析/page）没有区别。
+    画质未知（拿不到码率/分辨率）→ U（无法验证画质，由功能门槛决定去留）；
+    广告多（ad_score>=2）仍降 C（体验差）。音频无分辨率，按码率+速度判。
+    """
     kind = result.get("kind")
     if kind in ("unknown", "local"):
-        return "D"
-    relation = result.get("relation")
+        return "D"  # 播放地址无法外部验证
     ad_score = int(result.get("ad_score") or 0)
-    if relation == "platform":
-        return "C"
     if ad_score >= 2:
         return "C"
-    if kind == "page":
-        # 页面型播放地址：要么需要解析，要么是网页播放器，广告不可控
+    bitrate = int(result.get("bitrate_kbps") or 0)
+    speed = float(result.get("speed_ratio") or 0.0)
+    if kind == "audio":
+        # 音频无分辨率，按码率+速度判（画质=码率）
+        if not bitrate:
+            return "U"
+        if bitrate >= 320 and speed >= 0.5:
+            return "A"
+        if bitrate >= 128:
+            return "B"
         return "C"
-    if relation == "self":
+    width = int(result.get("width") or 0)
+    height = int(result.get("height") or 0)
+    if not bitrate or not width or not height:
+        return "U"  # 画质未知（页面/解析拿不到参数）
+    fps = float(result.get("fps") or 0.0)
+    if not (0 < fps <= 120):
+        fps = 25.0
+    bpp = bitrate * 1000.0 / (width * height * fps)
+    # 画质（bpp）+ 速度（speed_ratio）定级
+    if bpp >= 0.10 and speed >= 0.7:
         return "A"
-    return "B"
+    if bpp >= 0.05 and speed >= 0.3:
+        return "B"
+    if bpp >= 0.03:
+        return "C"
+    return "D"
 
 
 def describe(result: dict[str, Any]) -> str:

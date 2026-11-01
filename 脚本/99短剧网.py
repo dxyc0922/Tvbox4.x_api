@@ -914,7 +914,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["小橙子官4"]
+_TVBOX_DROP_LINES = ["小橙子官2", "小橙子官3", "小橙子官4"]
 
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):

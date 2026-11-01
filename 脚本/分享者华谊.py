@@ -487,7 +487,7 @@ class Spider(BaseSpider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["F蓝光", "蓝光4K"]
+_TVBOX_DROP_LINES = ["F蓝光", "Y蓝光", "蓝光4K"]
 
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):

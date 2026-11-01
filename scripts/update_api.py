@@ -39,6 +39,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+import stream_check  # noqa: E402  # grade_of 按画质+速度重算等级
+
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = ROOT / "scripts" / "config.json"
 
@@ -1217,10 +1219,10 @@ def detect_adult(
 
 
 def effective_grade(quality: dict[str, Any] | None) -> str:
-    """把功能校验结果换算成 A/B/C/D，无法验证的返回 U。
+    """把功能校验结果换算成 A/B/C/D，无法验证画质的返回 U。
 
-    U 包括：没拿到播放地址、请求失败、本地代理（127.0.0.1）。
-    这些是「测不出来」，不代表源差，默认不参与等级过滤。
+    质量等级**只按画质（码率/分辨率/bpp）+ 速度**，不看链接类型（直链/解析/page）。
+    用 stream_check.grade_of 对每个 stream 重算（不依赖旧 stream.grade 链接类型值）。
 
     优先看所有采样线路（line_streams），取其中最好的等级：实测华谊影视的
     第一条线路经常连接失败，但 K蓝光线路正常，只看第一条会误判成 U。
@@ -1237,7 +1239,7 @@ def effective_grade(quality: dict[str, Any] | None) -> str:
             streams.append(stream)
     grades: list[str] = []
     for stream in streams:
-        grade = str(stream.get("grade") or "").upper()
+        grade = stream_check.grade_of(stream)
         kind = str(stream.get("kind") or "")
         if grade and kind and kind not in ("local", "unknown"):
             grades.append(grade)
@@ -2240,10 +2242,13 @@ def main(argv: list[str] | None = None) -> int:
             if min_grade in grade_rank:
                 grade = effective_grade(quality)
                 if grade == "U":
-                    # 没拿到播放地址（地区限制/超时/本地代理）不等于源差，默认保留。
-                    if drop_unverified:
+                    # 画质未知（页面/解析拿不到码率/分辨率）不等于源差：三方法通
+                    # 就保留（功能优先，用户标准：链接类型无区别，画质未知不剔）。
+                    # 三方法未通已在 functional_fail 剔除。drop_unverified 仅在
+                    # functional_ok 非 True（旧报告/异常）时收紧。
+                    if drop_unverified and quality.get("functional_ok") is not True:
                         result.status = "low_quality"
-                        result.error = "源质量无法验证"
+                        result.error = "源质量无法验证（画质未知）"
                 elif grade_rank.get(grade, 3) > grade_rank[min_grade]:
                     result.status = "low_quality"
                     result.error = f"源质量 {grade} 低于 {min_grade}"

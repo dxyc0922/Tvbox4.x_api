@@ -166,7 +166,7 @@ class Spider(BaseSpider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["WJ"]
+_TVBOX_DROP_LINES = ["SN", "WJ"]
 
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):
