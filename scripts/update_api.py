@@ -2242,13 +2242,14 @@ def main(argv: list[str] | None = None) -> int:
             if min_grade in grade_rank:
                 grade = effective_grade(quality)
                 if grade == "U":
-                    # 画质未知（页面/解析拿不到码率/分辨率）不等于源差：三方法通
-                    # 就保留（功能优先，用户标准：链接类型无区别，画质未知不剔）。
-                    # 三方法未通已在 functional_fail 剔除。drop_unverified 仅在
-                    # functional_ok 非 True（旧报告/异常）时收紧。
-                    if drop_unverified and quality.get("functional_ok") is not True:
+                    # 画质未知：区分音频源与视频源（用户实测）。
+                    # 音频（听书/音乐）无分辨率，画质按码率评，是正常源 → 保留；
+                    # 非音频（page/local/无线路/unknown）实测有问题 → 剔。
+                    if stream_check.is_audio_source(quality, result.filename):
+                        pass  # 音频源：功能优先，保留
+                    elif drop_unverified:
                         result.status = "low_quality"
-                        result.error = "源质量无法验证（画质未知）"
+                        result.error = "U级画质未知且非音频（page/local/无线路/unknown）"
                 elif grade_rank.get(grade, 3) > grade_rank[min_grade]:
                     result.status = "low_quality"
                     result.error = f"源质量 {grade} 低于 {min_grade}"

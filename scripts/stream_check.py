@@ -724,6 +724,52 @@ def grade_of(result: dict[str, Any]) -> str:
     return "D"
 
 
+# 音频源特征：名字/线路名含这些词的，按音频源处理（无分辨率，画质=码率）。
+# 覆盖 stream_check 测不出 kind 的音频下载器（如 music_dl：kind=unknown 但名字含 music）。
+# 只用纯音频特征词（音乐/听书/音频/flac/mp3...），不用品牌名（千千/酷我/汽水）——
+# 品牌名会误判视频源（如千千影视是视频源但名字含「千千」，靠 hls 画质 B 级保留）。
+AUDIO_NAME_RE = re.compile(
+    r"音乐|听书|音频|audio|music|flac|mp3|m4a|无损|音质|拾音",
+    re.IGNORECASE,
+)
+
+
+def is_audio_source(quality: dict[str, Any] | None, name_hint: str = "") -> bool:
+    """通用判定源是否为音频源（听书/音乐）。音频与视频本质不同：无分辨率，
+    画质按码率评，不能用 bpp。
+
+    规则（用户实测反馈）：
+    - 所有线路都是 local/page → 问题源（本地代理/网页解析拿不到真实播放，剔）；
+      即使名字含音乐（酷我音乐是 local 代理，实测有问题）。
+    - 存在 kind=audio 线路 → 音频源（保留）。
+    - 无线路/kind=unknown → 按源名+线路名特征判断（music_dl 这类音频下载器
+      stream_check 测不出 kind，但名字含 music）。
+    """
+    streams: list[dict[str, Any]] = []
+    for entry in (quality or {}).get("line_streams") or []:
+        stream = entry.get("stream") or {}
+        if stream:
+            streams.append(stream)
+    if not streams:
+        stream = (quality or {}).get("stream") or {}
+        if stream:
+            streams.append(stream)
+    if not streams:
+        return bool(AUDIO_NAME_RE.search(name_hint))
+    kinds = [str(stream.get("kind") or "") for stream in streams]
+    # 本地代理 / 网页解析线路：用户实测有问题（不管名字是否含音乐），非音频。
+    if kinds and all(k in ("local", "page") for k in kinds):
+        return False
+    if any(k == "audio" for k in kinds):
+        return True
+    # 无线路/kind=unknown：按源名+线路名音频特征兜底（音频下载器测不出 kind）。
+    flags = " ".join(
+        str(entry.get("flag") or "")
+        for entry in (quality or {}).get("line_streams") or []
+    )
+    return bool(AUDIO_NAME_RE.search(f"{name_hint} {flags}"))
+
+
 def describe(result: dict[str, Any]) -> str:
     grade = result.get("grade", "D")
     label = {"A": "自营直连", "B": "第三方直连", "C": "搬运/解析/有广告标记", "D": "无法验证"}[grade]

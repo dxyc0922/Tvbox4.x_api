@@ -51,7 +51,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -TaskName TVB
 | 机制 | 说明 |
 |---|---|
 | 功能校验 | **硬门槛**：真正调用 `searchContent`/`detailContent`/`playerContent`，任一失败=源废（不评分）；homeContent/分类不重要（豆瓣.py `categoryContent` 提供）。搜索词用**最新**动漫/剧集（豆瓣非凡分类），带**降级链**兼容同名不同源 |
-| 源质量分级 | A 高画质+快 / B 画质速度达标 / C 偏低 / U 画质未知；**只按画质+速度，不看链接类型**（直链/解析/page 无区别）；只留 A/B（`min_grade=B`、`drop_unverified=true` 但三方法通保留 U） |
+| 源质量分级 | A 高画质+快 / B 画质速度达标 / C 偏低 / U 画质未知；**只按画质+速度，不看链接类型**（直链/解析/page 无区别）；U 级**音频源保留、非音频剔**（用户实测 page/local/无线路/unknown 有问题） |
 | 低码率过滤 | 按分辨率分档 + bpp 下限（`min_bpp=0.05`），只留真正高码率源 |
 | 加载速度过滤 | 实测吞吐/启动耗时，只留流畅源 |
 | 线路级裁减 | 给脚本注入过滤，去掉不通/低质/慢速线路（同源另有达标线路才删）；线路级两振 |
@@ -70,7 +70,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -TaskName TVB
 |---|---|---|
 | `upstream` | 4 个仓库 | 上游 py 脚本仓库列表（`owner/repo/branch/path`），按文件名去重合并 |
 | `quality.min_grade` | `"B"` | 最低源质量等级（A/B/C/D），设 `""` 不过滤 |
-| `quality.drop_unverified` | `true` | 连「拿不到播放地址（U）」的源一起剔除 |
+| `quality.drop_unverified` | `true` | U 级**非音频**（page/local/无线路/unknown）源剔除；音频源（听书/音乐，无分辨率）保留 |
 | `quality.min_bpp` | `0.05` | 每像素每帧最低比特数，设 `0` 关闭 |
 | `quality.min_speed_ratio` | `0.7` | 实测吞吐 ÷ 码率下限，设 `0` 关闭 |
 | `quality.max_startup_ms` | `12000` | 播放列表+首个分片首字节耗时上限（毫秒） |
