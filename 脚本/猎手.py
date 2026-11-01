@@ -281,7 +281,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["天堂线路", "索尼线路", "非凡线路"]
+_TVBOX_DROP_LINES = ["天堂线路"]
 
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):
