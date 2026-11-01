@@ -43,6 +43,21 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -TaskName TVB
 `接口.json` 的生成站点 `api` 指向本地 `./脚本/<脚本名>.py`（随仓库发布）；
 `接口-remote.json` 用 gh-proxy 绝对链接，只发布单个 JSON 也能用。
 
+## 每周搜新源
+
+项目不依赖固定仓库——若上游删库/分支变动，重新按关键字搜 GitHub 收集新源。
+`scripts/search_new_sources.py` 每周搜 GitHub（tvbox/接口/影视源等关键词），
+排除已接入的 4 上游，筛选最近活跃 + 有 py 脚本的仓库，输出建议加入的 upstream：
+
+```powershell
+python scripts/search_new_sources.py          # 搜索 + 写建议 reports/new-source-candidates.json
+python scripts/search_new_sources.py --dry-run  # 只打印不写
+```
+
+实测找到 6 个候选（qist/tvbox 12518★、cluntop/tvbox 637★ 等），并排除非源仓库
+（播放器壳/不带内容源）。候选加入 `config.json` 的 `upstream` 后由功能校验
+（三方法门槛）筛选去留。
+
 ## 筛选机制（概述）
 
 `接口.json` 只保留**验证过的高质量源**；源级质量过滤（低质/低码率/慢速）**立即剔除**，
@@ -51,10 +66,11 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -TaskName TVB
 | 机制 | 说明 |
 |---|---|
 | 功能校验 | **硬门槛**：真正调用 `searchContent`/`detailContent`/`playerContent`，任一失败=源废（不评分）；homeContent/分类不重要（豆瓣.py `categoryContent` 提供）。搜索词用**最新**动漫/剧集（豆瓣非凡分类），带**降级链**兼容同名不同源 |
-| 源质量分级 | A 高画质+快 / B 画质速度达标 / C 偏低 / U 画质未知；**只按画质+速度，不看链接类型**（直链/解析/page 无区别）；U 级**音频源保留、非音频剔**（用户实测 page/local/无线路/unknown 有问题） |
+| 源质量分级 | A 高画质+快 / B 画质速度达标 / C 偏低 / U 画质未知；**只按画质+速度，不看链接类型**（直链/解析/page 无区别）；**音频**（听书/音乐）无分辨率**按码率分级**（≥320K+快=A、≥128K=B）；U 级**音频源保留、非音频剔**（用户实测 page/local/无线路/unknown 有问题） |
 | 低码率过滤 | 按分辨率分档 + bpp 下限（`min_bpp=0.05`），只留真正高码率源 |
 | 加载速度过滤 | 实测吞吐/启动耗时，只留流畅源 |
 | 线路级裁减 | 给脚本注入过滤，去掉不通/低质/慢速线路（同源另有达标线路才删）；线路级两振 |
+| 线路级推荐 | 注入脚本按画质速度**重排线路**（最优排第一，TVBox 默认播它）；未知线路保持原序后置 |
 | 成人内容过滤 | 分类名 + 探针搜索，自动剔除 |
 | 源级质量 | 低质（C/D/U）/低码率/慢速源**立即剔除**（不走两振），只留 A/B |
 
@@ -71,6 +87,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -TaskName TVB
 | `upstream` | 4 个仓库 | 上游 py 脚本仓库列表（`owner/repo/branch/path`），按文件名去重合并 |
 | `quality.min_grade` | `"B"` | 最低源质量等级（A/B/C/D），设 `""` 不过滤 |
 | `quality.drop_unverified` | `true` | U 级**非音频**（page/local/无线路/unknown）源剔除；音频源（听书/音乐，无分辨率）保留 |
+| `quality.dynamic_grade_thresholds` | `false` | 按源池分布动态算分级阈值（P75/P50，只收紧），默认固定阈值 |
 | `quality.min_bpp` | `0.05` | 每像素每帧最低比特数，设 `0` 关闭 |
 | `quality.min_speed_ratio` | `0.7` | 实测吞吐 ÷ 码率下限，设 `0` 关闭 |
 | `quality.max_startup_ms` | `12000` | 播放列表+首个分片首字节耗时上限（毫秒） |
