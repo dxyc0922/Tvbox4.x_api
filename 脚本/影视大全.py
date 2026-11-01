@@ -856,7 +856,7 @@ class Spider(Spider):
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
 _TVBOX_DROP_LINES = ["B线"]
-_TVBOX_LINE_ORDER = ["A线", "B线", "AA线", "C线"]
+_TVBOX_LINE_ORDER = ["C线", "B线", "AA线", "A线"]
 
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):
