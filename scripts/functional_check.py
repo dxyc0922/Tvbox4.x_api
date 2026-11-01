@@ -328,6 +328,7 @@ def run_one(
             "play_from": 0,
             "play_episodes": 0,
             "sample_play_url": "",
+            "play_ok": False,
             "score": 0,
             "stage": "no_result",
             "elapsed": round(time.time() - started, 2),

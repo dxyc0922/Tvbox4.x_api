@@ -221,6 +221,7 @@ class Reporter:
             "play_episodes": 0,
             "sample_play_url": "",
             "play_flag": "",
+            "play_ok": False,
             "stream_url": "",
             "stream_parse": -1,
             "stream_header": {},
@@ -242,8 +243,10 @@ class Reporter:
 
     def flush(self) -> None:
         self.data["elapsed"] = round(time.time() - self.started, 2)
+        # 功能评分只看用户关心的三个方法：searchContent + detailContent + playerContent。
+        # homeContent 不参与（首页内容不重要，源只要能搜、能取详情、能播即可）。
         self.data["score"] = sum(
-            1 for key in ("home_ok", "search_ok", "detail_ok") if self.data[key]
+            1 for key in ("search_ok", "detail_ok", "play_ok") if self.data[key]
         )
         temporary = self.path + ".tmp"
         with open(temporary, "w", encoding="utf-8") as handle:
@@ -471,6 +474,16 @@ def main() -> int:
                         )
                 if rows:
                     reporter.set(lines=rows)
+                # play_ok：playerContent 是否成功解析出可播地址（用户核心标准）。
+                # 无 playerContent 的直链源：detail 返回的播放 URL 直接可用。
+                if samples:
+                    if callable(player):
+                        play_ok = any(
+                            r.get("url") and not r.get("error") for r in rows
+                        )
+                    else:
+                        play_ok = bool(reporter.data.get("sample_play_url"))
+                    reporter.set(play_ok=play_ok)
                 reporter.flush()
 
         reporter.set(stage="done")
