@@ -5,6 +5,8 @@
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -Time 03:30 -Day Monday
+#   powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -Daily          # 每天跑 update_api
+#   powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -Daily -Functional  # 每天 update_api + 每周功能校验
 #   powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -Unregister
 
 [CmdletBinding()]
@@ -15,6 +17,7 @@ param(
     [string]$Day = "Monday",
     [string]$Python = "",
     [switch]$Functional,
+    [switch]$Daily,
     [switch]$Notify,
     [switch]$RunWhenLoggedOff,
     [switch]$Unregister
@@ -54,7 +57,12 @@ if ($Notify) { $arguments += " --notify" }
 
 $action = New-ScheduledTaskAction -Execute $Python -Argument $arguments -WorkingDirectory $repo
 
-$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $Day -At $Time
+if ($Daily) {
+    # 每天运行（update_api 快速刷新）
+    $trigger = New-ScheduledTaskTrigger -Daily -At $Time
+} else {
+    $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $Day -At $Time
+}
 
 $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
@@ -81,7 +89,11 @@ $info = Get-ScheduledTask -TaskName $TaskName
 $next = ($info | Get-ScheduledTaskInfo).NextRunTime
 Write-Host ""
 Write-Host "已注册任务: $($info.TaskName)"
-Write-Host "  运行时间: 每周 $Day $Time"
+if ($Daily) {
+    Write-Host "  运行时间: 每天 $Time"
+} else {
+    Write-Host "  运行时间: 每周 $Day $Time"
+}
 Write-Host "  Python  : $Python"
 Write-Host "  参数    : $arguments"
 Write-Host "  下次运行: $next"
