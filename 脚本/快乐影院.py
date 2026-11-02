@@ -1,6 +1,6 @@
 # coding=utf-8
 """
-快乐影院 tspnd.cc | TVBox Python 爬虫
+快乐影院 tspnd.cc | TVBox Python 爬虫 
 关键:
   - 网络层 100% Python 标准库 (urllib), 零第三方依赖, TVBox 任何环境可跑
   - 模块级初始化全部防御式+懒加载, 任何环境均可加载成功 (分类永不丢失)
@@ -199,23 +199,30 @@ for c in CLASSES:
 
 
 # ===================== 正则 =====================
-# 分类/搜索/首页列表卡片
+# img 标签先整段抓取, 再优先取 data-src (站点懒加载: src="" data-src=真图)
 _RE_CARD = re.compile(
-    r'<a href="(/tspnbd/\d+\.html)">\s*'
-    r'<img[^>]*?(?:data-src|src)="([^"]*)"[^>]*?alt="([^"]*)"',
+    r'<a href="(/tspnbd/\d+\.html)">\s*(<img[^>]*>)',
     re.S | re.I)
 # 首页推荐卡 (ys-poster)
 _RE_HOME_CARD = re.compile(
     r'<a href="(/tspnbd/\d+\.html)">\s*'
-    r'<div class="ys-poster">\s*'
-    r'<img[^>]*?(?:data-src|src)="([^"]*)"[^>]*?alt="([^"]*)"',
+    r'<div class="ys-poster">\s*(<img[^>]*>)',
     re.S | re.I)
 # 首页轮播
 _RE_SWIPER = re.compile(
-    r'<a href="(/tspnbd/\d+\.html)">\s*'
-    r'<img[^>]*?(?:data-src|src)="([^"]*)"[^>]*?alt="([^"]*)"[^>]*>\s*'
+    r'<a href="(/tspnbd/\d+\.html)">\s*(<img[^>]*>)\s*'
     r'<div class="filmName">([^<]*)</div>',
     re.S | re.I)
+
+
+def _img_pic(tag):
+    """从 img 标签取图片地址: data-src 优先, src 兜底"""
+    if not tag:
+        return ""
+    m = re.search(r'data-src="([^"]*)"', tag, re.I)
+    if not m or not m.group(1):
+        m = re.search(r'src="([^"]*)"', tag, re.I)
+    return m.group(1) if m else ""
 # 详情页线路块: 线路名 + 其后剧集
 _RE_LINE_BLOCK = re.compile(
     r'name17">(线路\d+)</div>\s*</div>\s*</div>\s*'
@@ -515,6 +522,7 @@ class Spider(Spider):
             self.log("预热失败: %s" % e)
 
     def _fetch(self, url, timeout=30, headers=None):
+        text = ""
         for attempt in range(3):
             try:
                 h = dict(self.headers)
@@ -537,9 +545,13 @@ class Spider(Spider):
                     return text
                 return text
             except Exception as e:
-                self.log("fetch FAIL %s -> %s" % (url, e))
-                return ""
-        return ""
+                # 网络/限流异常: 等待后重试, 不直接放弃
+                self.log("fetch FAIL (attempt %d) %s -> %s" % (attempt + 1, url, e))
+                try:
+                    time.sleep(1.5)
+                except Exception:
+                    pass
+        return text
 
     def _fix_url(self, url):
         if not url:
@@ -574,14 +586,18 @@ class Spider(Spider):
             return videos
         matches = _RE_CARD.findall(html)
         self.log("  卡片: %d 条" % len(matches))
-        for href, pic, alt in matches:
+        for href, img_tag in matches:
             if href in seen:
                 continue
             seen.add(href)
+            alt = ""
+            m = re.search(r'alt="([^"]*)"', img_tag, re.I)
+            if m:
+                alt = m.group(1)
             videos.append({
                 "vod_id":      href,
                 "vod_name":    self._clean(alt)[:100],
-                "vod_pic":     self._fix_url(pic) or self.default_pic,
+                "vod_pic":     self._fix_url(_img_pic(img_tag)) or self.default_pic,
                 "vod_remarks": (remarks_map or {}).get(href, ""),
             })
         return videos
@@ -599,34 +615,53 @@ class Spider(Spider):
     def homeContent(self, filter=False):
         return {"class": CLASSES, "filters": FILTERS}
 
-    def homeVideoContent(self):
-        self._warm_up()
-        html = self._fetch(self.site_url + "/")
-        self.log("home HTML 长度: %d" % len(html))
+    def _parse_home(self, html):
         videos = []
         seen = set()
         # 轮播
-        for href, pic, alt, name in _RE_SWIPER.findall(html):
+        for href, img_tag, name in _RE_SWIPER.findall(html):
             if href in seen:
                 continue
             seen.add(href)
             videos.append({
                 "vod_id":      href,
                 "vod_name":    self._clean(name)[:100],
-                "vod_pic":     self._fix_url(pic) or self.default_pic,
+                "vod_pic":     self._fix_url(_img_pic(img_tag)) or self.default_pic,
                 "vod_remarks": "推荐",
             })
         # 各板块推荐
-        for href, pic, alt in _RE_HOME_CARD.findall(html):
+        for href, img_tag in _RE_HOME_CARD.findall(html):
             if href in seen:
                 continue
             seen.add(href)
+            alt = ""
+            m = re.search(r'alt="([^"]*)"', img_tag, re.I)
+            if m:
+                alt = m.group(1)
             videos.append({
                 "vod_id":      href,
                 "vod_name":    self._clean(alt)[:100],
-                "vod_pic":     self._fix_url(pic) or self.default_pic,
+                "vod_pic":     self._fix_url(_img_pic(img_tag)) or self.default_pic,
                 "vod_remarks": "",
             })
+        return videos
+
+    def homeVideoContent(self):
+        # 空结果自动重试: 首次调用可能早于滑块破解完成, 避免 TVBox 缓存空列表
+        for attempt in range(3):
+            self._warm_up()
+            html = self._fetch(self.site_url + "/")
+            videos = self._parse_home(html)
+            self.log("home 第%d次: HTML %d 字节, %d 条" % (attempt + 1, len(html), len(videos)))
+            if videos:
+                return {"list": videos}
+            # 没拿到 → 重置预热状态, 强制重新破解滑块
+            self.log("  空结果, 重置滑块状态后重试")
+            self._warmed = False
+            try:
+                time.sleep(1)
+            except Exception:
+                pass
         return {"list": videos}
 
     def categoryContent(self, tid, pg, filter, extend):
@@ -658,12 +693,21 @@ class Spider(Spider):
         path = "-".join(slots)
         url = "%s/tspnbdshow/%s.html" % (self.site_url, urllib.parse.quote(path))
         self.log("category: %s" % url)
-        html = self._fetch(url)
-        self.log("  HTML 长度: %d" % len(html))
-
-        videos = self._extract_videos(html)
-        pagecount = self._page_count(html)
-        self.log("  最终: %d 条, 总页数: %d" % (len(videos), pagecount))
+        for attempt in range(3):
+            html = self._fetch(url)
+            videos = self._extract_videos(html)
+            pagecount = self._page_count(html)
+            self.log("  第%d次: HTML %d 字节, %d 条, 总页数: %d"
+                     % (attempt + 1, len(html), len(videos), pagecount))
+            if videos or not html:
+                break
+            # 有响应但没解析到内容 → 重置滑块状态重试
+            self.log("  空结果, 重置滑块状态后重试")
+            self._warmed = False
+            try:
+                time.sleep(1)
+            except Exception:
+                pass
 
         return {
             "list": videos, "page": page, "pagecount": pagecount,
@@ -680,9 +724,18 @@ class Spider(Spider):
         path = "-".join(slots)
         url = "%s/search/%s.html" % (self.site_url, urllib.parse.quote(path))
         self.log("search: %s" % url)
-        html = self._fetch(url)
-        self.log("  HTML 长度: %d" % len(html))
-        videos = self._extract_videos(html)
+        for attempt in range(3):
+            html = self._fetch(url)
+            videos = self._extract_videos(html)
+            self.log("  第%d次: HTML %d 字节, %d 条" % (attempt + 1, len(html), len(videos)))
+            if videos or not html:
+                break
+            self.log("  空结果, 重置滑块状态后重试")
+            self._warmed = False
+            try:
+                time.sleep(1)
+            except Exception:
+                pass
         return {
             "list": videos, "page": page,
             "pagecount": self._page_count(html),
@@ -700,6 +753,14 @@ class Spider(Spider):
         self.log("detail: %s" % url)
 
         html = self._fetch(url)
+        if not html:
+            for attempt in range(2):
+                self.log("  详情空响应, 重置滑块状态后重试")
+                self._warmed = False
+                self._warm_up()
+                html = self._fetch(url)
+                if html:
+                    break
         self.log("  HTML 长度: %d" % len(html))
         if not html:
             return {"list": []}

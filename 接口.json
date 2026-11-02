@@ -371,6 +371,12 @@
             "api": "./脚本/芒果TV.py"
         },
         {
+            "key": "wzxxcz_c090da47d1b8",
+            "name": "西瓜影院",
+            "type": 3,
+            "api": "./脚本/西瓜影院.py"
+        },
+        {
             "key": "wzxxcz_28479a5974ed",
             "name": "酷我音乐",
             "type": 3,

@@ -371,6 +371,12 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E8%8A%92%E6%9E%9CTV.py"
         },
         {
+            "key": "wzxxcz_c090da47d1b8",
+            "name": "西瓜影院",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E8%A5%BF%E7%93%9C%E5%BD%B1%E9%99%A2.py"
+        },
+        {
             "key": "wzxxcz_28479a5974ed",
             "name": "酷我音乐",
             "type": 3,
