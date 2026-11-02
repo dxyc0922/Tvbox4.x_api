@@ -65,23 +65,28 @@ def github_headers(token: str | None) -> dict[str, str]:
 def _gh_get(
     url: str,
     token: str | None,
-    accelerator: str = "",
+    accelerators: list[str] | str = "",
     timeout: float = 15,
 ) -> requests.Response | None:
-    """GitHub API GET：直连优先，失败/限流降级 accelerator（gh-proxy）。
+    """GitHub API GET：直连优先，失败/限流降级多个加速镜像。
 
-    gh-proxy 出口是共享 IP，GitHub API 会限流（实测 tree 403），但 search
-    端点有独立限额（实测 200）。直连本地通常快（~1s），失败才走加速兜底。
+    多个镜像按优先级降级（gh-proxy.com 挂了换 ghfast.top 等）。gh-proxy 出口
+    是共享 IP，GitHub API 会限流（实测 tree 403），但 search 端点有独立限额
+    （实测 200）。直连本地通常快（~1s），失败才走加速兜底。
     """
+    if isinstance(accelerators, str):
+        accel_list = [accelerators] if accelerators else []
+    else:
+        accel_list = [a for a in (accelerators or []) if str(a).strip()]
     hdrs = github_headers(token)
     last_err = ""
-    for base in [None, accelerator or None]:
-        u = base.rstrip("/") + "/" + url if base else url
+    for base in [None, *accel_list]:
+        u = str(base).rstrip("/") + "/" + url if base else url
         try:
             r = requests.get(u, headers=hdrs, timeout=timeout)
             if r.status_code == 403:
                 last_err = f"403 rate limit（{url.split('/')[3] if '/' in url else '?'}）"
-                continue  # 限流：试下一个（accelerator 可能有独立限额）
+                continue  # 限流：试下一个（其他镜像可能有独立限额）
             return r
         except requests.RequestException as exc:
             last_err = f"{type(exc).__name__}: {exc}"
@@ -94,16 +99,16 @@ def _gh_get(
 def search_repos(
     keyword: str,
     token: str | None,
-    accelerator: str = "",
+    accelerators: list[str] | str = "",
     per_page: int = 30,
 ) -> list[dict[str, Any]]:
-    """GitHub 搜索仓库，按最近更新排序（直连→加速降级）。"""
+    """GitHub 搜索仓库，按最近更新排序（直连→多个加速镜像降级）。"""
     q = urllib.parse.quote(f"{keyword} in:name,description")
     url = (
         f"https://api.github.com/search/repositories?q={q}"
         f"&sort=updated&order=desc&per_page={per_page}"
     )
-    r = _gh_get(url, token, accelerator)
+    r = _gh_get(url, token, accelerators)
     if r is None:
         return []
     if r.status_code == 403:
@@ -125,11 +130,11 @@ def probe_py_dir(
     repo: str,
     branch: str,
     token: str | None,
-    accelerator: str = "",
+    accelerators: list[str] | str = "",
 ) -> tuple[str | None, int]:
-    """查仓库 git/trees，找含 .py 脚本的目录（path + py 文件数，直连→加速降级）。"""
+    """查仓库 git/trees，找含 .py 脚本的目录（path + py 文件数，直连→多加速降级）。"""
     url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
-    r = _gh_get(url, token, accelerator)
+    r = _gh_get(url, token, accelerators)
     if r is None or r.status_code != 200:
         return None, 0
     try:
@@ -160,13 +165,13 @@ def main(argv: list[str] | None = None) -> int:
 
     token = os.environ.get("GITHUB_TOKEN") or ""
     config = update_api.load_config(Path(args.config))
-    accelerator = str(config.get("accelerator") or "").strip()
+    accels = update_api.accelerator_list(config)
     existing = {
         f"{u['owner']}/{u['repo']}".lower()
         for u in (config.get("upstream") or [])
         if isinstance(u, dict)
     }
-    print(f"现有上游: {len(existing)} 个（加速: {accelerator or '无'}）")
+    print(f"现有上游: {len(existing)} 个（加速镜像: {len(accels)} 个）")
     for u in existing:
         print(f"  - {u}")
 
@@ -174,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     seen: dict[str, dict[str, Any]] = {}
     for kw in SEARCH_KEYWORDS:
         print(f"\n搜索: {kw}")
-        items = search_repos(kw, token, accelerator)
+        items = search_repos(kw, token, accels)
         for it in items:
             full = f"{it.get('full_name', '')}".lower()
             if full in existing:
@@ -217,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  跳过（非源仓库）: {owner_repo} — {desc[:50]}")
             continue
         print(f"  探测 {owner_repo}（star {it.get('stargazers_count')}）...")
-        py_dir, py_count = probe_py_dir(owner, repo, default_branch, token, accelerator)
+        py_dir, py_count = probe_py_dir(owner, repo, default_branch, token, accels)
         if py_count >= 3:  # 至少 3 个 py 才算源仓库
             sugg = {
                 "owner": owner,

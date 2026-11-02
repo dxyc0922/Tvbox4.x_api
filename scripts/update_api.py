@@ -364,12 +364,34 @@ def upstream_raw_url(config: dict[str, Any], filename: str, src: int = 0) -> str
     )
 
 
+def accelerator_list(config: dict[str, Any]) -> list[str]:
+    """返回国内 GitHub 加速镜像列表（多个，按优先级）。
+
+    用户反馈：不要只依赖单一加速（gh-proxy.com 挂掉就完了），有很多国内
+    镜像可用。config.accelerators 是列表（优先）；config.accelerator 旧单值
+    只在 accelerators 为空时兜底。每个都归一化成以 / 结尾，去重。
+    """
+    accels: list[str] = []
+    raw_accels = config.get("accelerators") or []
+    if isinstance(raw_accels, str):
+        raw_accels = [raw_accels]
+    for a in raw_accels:
+        a = str(a).strip().rstrip("/")
+        if a and a + "/" not in accels:
+            accels.append(a + "/")
+    if not accels:
+        old = str(config.get("accelerator") or "").strip().rstrip("/")
+        if old and old + "/" not in accels:
+            accels.append(old + "/")
+    return accels
+
+
 def upstream_api_url(config: dict[str, Any], filename: str, src: int = 0) -> str:
-    accelerator = str(config.get("accelerator") or "").strip()
+    accels = accelerator_list(config)
     raw = upstream_raw_url(config, filename, src)
-    if not accelerator:
+    if not accels:
         return raw
-    return accelerator.rstrip("/") + "/" + raw
+    return accels[0] + raw
 
 
 def local_api_to_remote(config: dict[str, Any], api: str) -> str:
@@ -389,10 +411,10 @@ def local_api_to_remote(config: dict[str, Any], api: str) -> str:
         return api
     rel = urllib.parse.quote(api[2:].strip("/"), safe="/")
     raw = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{rel}"
-    accelerator = str(config.get("accelerator") or "").strip()
-    if not accelerator:
+    accels = accelerator_list(config)
+    if not accels:
         return raw
-    return accelerator.rstrip("/") + "/" + raw
+    return accels[0] + raw
 
 
 def github_headers(token: str | None) -> dict[str, str]:
@@ -551,17 +573,13 @@ def download_script(
         f"{up['branch']}/{up['path']}/{quoted}"
     )
     # 国内加速优先（用户反馈：国内直连 raw.githubusercontent 慢/不通，先试加速）。
-    # 读 config.accelerator（接口-remote.json 也用它），不硬编码单一镜像。
-    accelerator = str(config.get("accelerator") or "").strip()
-    proxy = (
-        accelerator.rstrip("/") + "/" + raw
-        if accelerator
-        else f"https://gh-proxy.com/{raw}"
-    )
+    # 多个镜像按优先级降级（gh-proxy.com 挂了换 ghfast.top 等），全失败才 jsdelivr/raw。
+    accels = accelerator_list(config)
+    urls = [a + raw for a in accels] + [jsdelivr, raw]
 
     timeout = float(config["request"]["timeout"])
     errors: list[str] = []
-    for url in (proxy, jsdelivr, raw):
+    for url in urls:
         try:
             data = fetch_bytes(
                 url, timeout=timeout, retries=1, headers={"User-Agent": UA}
@@ -1095,19 +1113,30 @@ def sync_jsm_fields(
     cfg = config.get("jsm_sync") or {}
     if not cfg.get("enabled"):
         return output
-    url = str(cfg.get("url") or "").strip()
-    if not url:
+    url_tpl = str(cfg.get("url") or "").strip()
+    if not url_tpl:
         return output
     fields = [str(f) for f in (cfg.get("fields") or []) if str(f).strip()]
 
-    try:
-        raw = fetch_bytes(url, timeout=float(config.get("request", {}).get("timeout") or 15), retries=1)
-        data = json.loads(raw.decode("utf-8-sig"))
-    except Exception as exc:  # noqa: BLE001 - 网络/解析失败都回退
-        print(f"  jsm_sync: 拉取 {url} 失败（回退 existing 保留）: {type(exc).__name__}: {exc}")
-        return output
-    if not isinstance(data, dict):
-        print("  jsm_sync: jsm.json 不是 JSON 对象，跳过")
+    # jsm_sync.url 支持 {accelerator} 模板（多镜像降级）：每个加速镜像各试一次，
+    # 成功即用；兼容旧完整 url（含 gh-proxy 前缀，无模板时直接用）。
+    urls: list[str] = []
+    if "{accelerator}" in url_tpl:
+        urls = [url_tpl.format(accelerator=a) for a in accelerator_list(config)]
+    else:
+        urls = [url_tpl]
+    data: dict[str, Any] | None = None
+    for url in urls:
+        try:
+            raw = fetch_bytes(url, timeout=float(config.get("request", {}).get("timeout") or 15), retries=1)
+            data = json.loads(raw.decode("utf-8-sig"))
+            if isinstance(data, dict):
+                break
+            data = None
+        except Exception as exc:  # noqa: BLE001 - 网络/解析失败换下一个镜像
+            print(f"  jsm_sync: 拉取 {url} 失败: {type(exc).__name__}: {exc}")
+    if data is None:
+        print(f"  jsm_sync: 全部镜像拉取失败（回退 existing 保留）: {url_tpl}")
         return output
 
     got = 0

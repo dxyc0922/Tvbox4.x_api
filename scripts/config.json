@@ -26,7 +26,13 @@
         }
     ],
     "output": "接口.json",
-    "accelerator": "https://gh-proxy.com/",
+    "accelerators": [
+        "https://gh-proxy.com/",
+        "https://ghfast.top/",
+        "https://gh-proxy.net/",
+        "https://ghproxy.net/",
+        "https://gh.ddlc.top/"
+    ],
     "self_repo": {
         "owner": "dxyc0922",
         "repo": "Tvbox4.x_api",
@@ -34,7 +40,7 @@
     },
     "jsm_sync": {
         "enabled": true,
-        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/qist/tvbox/master/jsm.json",
+        "url": "{accelerator}https://raw.githubusercontent.com/qist/tvbox/master/jsm.json",
         "fields": [
             "hosts",
             "doh",
