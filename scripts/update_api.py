@@ -1360,6 +1360,7 @@ def dynamic_grade_thresholds(
         "speed_a": clamp(pct(speeds, 0.75), base["speed_a"]),
         "speed_b": clamp(pct(speeds, 0.50), base["speed_b"]),
         "bpp_c": base["bpp_c"],
+        "res_a": base["res_a"], "res_b": base["res_b"], "res_c": base["res_c"],
         "audio_bitrate_a": base["audio_bitrate_a"],
         "audio_speed_a": base["audio_speed_a"],
         "audio_bitrate_b": base["audio_bitrate_b"],

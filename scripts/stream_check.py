@@ -713,6 +713,7 @@ GRADE_THRESHOLDS: dict[str, float] = {
     "bpp_a": 0.10, "speed_a": 0.7,   # A：画质密度 + 快
     "bpp_b": 0.05, "speed_b": 0.3,   # B：画质速度达标
     "bpp_c": 0.03,                   # C：偏低
+    "res_a": 1280, "res_b": 854, "res_c": 640,  # 物理分辨率（长边）：480x270 长边 480 模糊
     "audio_bitrate_a": 320, "audio_speed_a": 0.5, "audio_bitrate_b": 128,
 }
 
@@ -753,12 +754,15 @@ def grade_of(
     if not (0 < fps <= 120):
         fps = 25.0
     bpp = bitrate * 1000.0 / (width * height * fps)
-    # 画质（bpp）+ 速度（speed_ratio）定级
-    if bpp >= t["bpp_a"] and speed >= t["speed_a"]:
+    # 物理分辨率（长边）：480x270 长边 480 模糊；1280x544 长边 1280（2.35:1 电影）HD 清晰。
+    # bpp 只反映密度（低分辨率高密度也高），必须加分辨率门槛才不把模糊源误判 A/B。
+    long_edge = max(width, height)
+    # 画质 = 物理分辨率（长边）+ 密度（bpp）+ 速度（speed_ratio）
+    if long_edge >= t["res_a"] and bpp >= t["bpp_a"] and speed >= t["speed_a"]:
         return "A"
-    if bpp >= t["bpp_b"] and speed >= t["speed_b"]:
+    if long_edge >= t["res_b"] and bpp >= t["bpp_b"] and speed >= t["speed_b"]:
         return "B"
-    if bpp >= t["bpp_c"]:
+    if long_edge >= t["res_c"] and bpp >= t["bpp_c"]:
         return "C"
     return "D"
 

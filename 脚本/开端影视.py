@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
-# 本资源来源于互联网公开渠道，仅可用于个人学习爬虫技术。
-# 严禁将其用于任何商业用途，下载后请于 24 小时内删除，搜索结果均来自源站，本人不承担任何责任。
 
 from Crypto.Cipher import AES
-import sys,json,base64,urllib3
+import sys, json, base64, urllib3
 from base.spider import Spider
 from urllib.parse import urljoin
 from Crypto.Util.Padding import unpad
@@ -11,7 +9,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 sys.path.append('..')
 
 class Spider(Spider):
-    host,site,path,timeout,targets = '','','',5,{b'\xb1\xa1\xa6\xe2'.decode('big5'),b'\xc2\xd7\xc0\xed'.decode('gbk'),b'\xba\xd6\xa7Q'.decode('big5'),b"\xff\xfe\x0cT'`".decode('utf-16')}
+    host, site, path, timeout, targets = '','','', 5, {b'\xb1\xa1\xa6\xe2'.decode('big5'), b'\xc2\xd7\xc0\xed'.decode('gbk'), b'\xba\xd6\xa7Q'.decode('big5'), b"\xff\xfe\x0cT'`".decode('utf-16')}
     headers = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2; rv:107) Gecko/20100101 Firefox/98',
         'Accept-Encoding': 'gzip',
@@ -183,5 +181,6 @@ class Spider(Spider):
 
     def localProxy(self, param):
         pass
+
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----

@@ -17,24 +17,6 @@
             }
         },
         {
-            "key": "wzxxcz_a2bce5b5d0c8",
-            "name": "分享央视",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%88%86%E4%BA%AB%E5%A4%AE%E8%A7%86.py"
-        },
-        {
-            "key": "wzxxcz_72a53d4741dc",
-            "name": "央视片库",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/jak0099/dr/master/py/%E7%BB%BC/%E5%A4%AE%E8%A7%86%E7%89%87%E5%BA%93.py"
-        },
-        {
-            "key": "wzxxcz_a3550acdbc71",
-            "name": "央库云",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E5%A4%AE%E5%BA%93%E4%BA%91.py"
-        },
-        {
             "key": "wzxxcz_be50d9b607f5",
             "name": "分享者华谊",
             "type": 3,
@@ -57,12 +39,6 @@
             "name": "华谊影视",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%8D%8E%E8%B0%8A%E5%BD%B1%E8%A7%86.py"
-        },
-        {
-            "key": "wzxxcz_3b5f51887f99",
-            "name": "巨婴云播-TVBox插件",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/zzq1234567890/tvbox1/main/py/%E5%B7%A8%E5%A9%B4%E4%BA%91%E6%92%AD-TVBox%E6%8F%92%E4%BB%B6.py"
         },
         {
             "key": "wzxxcz_5bf72f5af13e",
@@ -323,12 +299,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%92%B8%E9%B1%BC%E5%BD%B1%E8%A7%86.py"
         },
         {
-            "key": "wzxxcz_075e73129a50",
-            "name": "看看剧",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%9C%8B%E7%9C%8B%E5%89%A7.py"
-        },
-        {
             "key": "wzxxcz_6cdd06cd7473",
             "name": "追剧达人",
             "type": 3,
@@ -353,12 +323,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/zzq1234567890/tvbox1/main/py/%E6%9E%9D%E6%9E%9D%E5%BD%B1%E8%A7%86.py"
         },
         {
-            "key": "wzxxcz_6476c4d03210",
-            "name": "开端",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/jak0099/dr/master/py/%E7%BB%BC/%E5%BC%80%E7%AB%AF.py"
-        },
-        {
             "key": "wzxxcz_7af6ff43efff",
             "name": "爱听音乐",
             "type": 3,
@@ -377,16 +341,46 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/zzq1234567890/tvbox1/main/py/music_dl.py"
         },
         {
+            "key": "wzxxcz_2a26af9d3da0",
+            "name": "厂长影视",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E5%8E%82%E9%95%BF%E5%BD%B1%E8%A7%86.py"
+        },
+        {
+            "key": "wzxxcz_a7e07c2876fc",
+            "name": "开端影视",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E5%BC%80%E7%AB%AF%E5%BD%B1%E8%A7%86.py"
+        },
+        {
+            "key": "wzxxcz_1db25a2b46ed",
+            "name": "快乐影院",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%BF%AB%E4%B9%90%E5%BD%B1%E9%99%A2.py"
+        },
+        {
             "key": "wzxxcz_0753afca4a6c",
             "name": "悦听吧",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E6%82%A6%E5%90%AC%E5%90%A7.py"
         },
         {
+            "key": "wzxxcz_e3e5e6fed198",
+            "name": "芒果TV",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E8%8A%92%E6%9E%9CTV.py"
+        },
+        {
             "key": "wzxxcz_28479a5974ed",
             "name": "酷我音乐",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%85%B7%E6%88%91%E9%9F%B3%E4%B9%90.py"
+        },
+        {
+            "key": "wzxxcz_e6b4e69c052a",
+            "name": "高清点播",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E9%AB%98%E6%B8%85%E7%82%B9%E6%92%AD.py"
         }
     ],
     "lives": [
