@@ -4,7 +4,6 @@ import json
 import random
 import re
 import time
-import urllib.parse
 import uuid
 
 try:
@@ -28,21 +27,15 @@ except Exception:
 
 class Spider(BaseSpider):
     CONFIG = {
-        "appName": "橘汁",
-        "publicKey": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCr8SzZhjYy+rsya1K09t8d2K50pWFoBkgUqMpKOiW+3IEVKd4eTdvg9RSOjQ82kypL6R9BnsmrS1V8s4PVDwjQbUtYhTPPC9Hz16qY7rpD6m0d2vr09/UpWQ5uOy9PR0QTrsioveZ+DIe9jc3C+zBCu/kZSY/R8stwJoiitki3gwIDAQAB",
-        "dataKey": "OW1WBLFZCLJ0WTNJCDMYEGXWYVP3PT0=",
-        "dataIv": "OC1A06E197EF10CF3F6058CA7A803B5E",
-        "pkg": "com.mxj.wylcjbxyx",
-        # [修复 2026-10] 老 IP 103.36.167.27 已下线(连接 reset),
-        # 新版 App 后端迁到 202.189.6.51:18004。fallbackHosts 做兜底,
-        # init() 会逐个探测,选能拉到动态密钥的节点;域名放最后(protobuf POST 会 502)
-        "host": "http://202.189.6.51:18004",
-        "fallbackHosts": [
-            "http://103.36.167.27:18004",
-        ],
-        "site": "https://123-1349250429.cos.ap-shanghai.myqcloud.com/app.txt",
-        "version": "3.0.2.3",
-        "decrypt": "1"
+       "appName": "橘汁",
+       "publicKey": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCr8SzZhjYy+rsya1K09t8d2K50pWFoBkgUqMpKOiW+3IEVKd4eTdvg9RSOjQ82kypL6R9BnsmrS1V8s4PVDwjQbUtYhTPPC9Hz16qY7rpD6m0d2vr09/UpWQ5uOy9PR0QTrsioveZ+DIe9jc3C+zBCu/kZSY/R8stwJoiitki3gwIDAQAB",
+       "dataKey": "ZU1DSFFWNENKMDYXVUQRN0ZJDUC4PQ==",
+       "dataIv": "OC1A06E197EF10CF3F6058CA7A803B5E",
+       "pkg": "com.asjdhjhd.mgd.p3",
+       "host": "",
+       "site": "https://123-1349250429.cos.ap-shanghai.myqcloud.com/app.txt",
+       "version": "3.0.7.0",
+       "decrypt": "1"
     }
 
     def getName(self):
@@ -58,55 +51,29 @@ class Spider(BaseSpider):
             except Exception:
                 pass
 
-        self.host = ""
+        self.host = str(self.cfg.get("host", "")).rstrip("/")
         self.public_key = str(self.cfg.get("publicKey", ""))
         self.dynamic_key = ""
         self.data_key = str(self.cfg.get("dataKey", ""))
         self.data_iv = str(self.cfg.get("dataIv", ""))
         self.common_key = "ed5fdsgucxumegqa"
         self.session = requests.Session() if requests else None
-        if not self.session:
-            return
 
-        # 组装候选节点: 配置 host → fallbackHosts → site 域名
-        candidates = []
-        h = str(self.cfg.get("host", "")).strip().rstrip("/")
-        if h:
-            candidates.append(h)
-        for x in self.cfg.get("fallbackHosts", []) or []:
-            x = str(x).strip().rstrip("/")
-            if x and x not in candidates:
-                candidates.append(x)
         site = str(self.cfg.get("site", ""))
-        if site:
+        if site and self.session and not self.host:
             try:
                 obj = self.session.get(site, timeout=12).json()
                 domain = str(obj.get("domain", "")).strip().rstrip("/")
-                if domain and domain not in candidates:
-                    candidates.append(domain)
+                if domain:
+                    self.host = domain
             except Exception:
                 pass
 
-        # 探测: 优先能拉到动态密钥的节点(说明 protobuf 全链路可用)
-        for cand in candidates:
-            self.host = cand
+        if self.host:
             try:
                 self._load_dynamic_key()
             except Exception:
                 self.dynamic_key = ""
-            if self.dynamic_key:
-                return
-        # 全部拉不到动态密钥时, 退而求其次选 GET 接口可用的节点
-        for cand in candidates:
-            try:
-                r = self.session.get(cand + "/api/v3/drama/getCategory?orderBy=type_id", timeout=10)
-                if r.ok and r.text.replace(" ", "").startswith('{"code":200'):
-                    self.host = cand
-                    return
-            except Exception:
-                continue
-        if candidates:
-            self.host = candidates[0]
 
     def isVideoFormat(self, url):
         return bool(re.search(r"(?i)\.(?:mp4|m3u8|flv|mkv|avi|ts|mov|mpd|m4a|wmv)(?:\?.*)?$", str(url)))
@@ -269,30 +236,16 @@ class Spider(BaseSpider):
     def _post(self, path, body):
         if not self.session or not self.host:
             raise RuntimeError("橘汁接口域名获取失败")
-        last = None
-        for _ in range(2):  # [修复] 新节点偶发 RemoteDisconnected, 断线重试一次
-            try:
-                r = self.session.post(self.host + path, data=body, headers=self._public_headers(True), timeout=18)
-                r.raise_for_status()
-                return r.content
-            except requests.exceptions.ConnectionError as e:
-                last = e
-                time.sleep(0.8)
-        raise last
+        r = self.session.post(self.host + path, data=body, headers=self._public_headers(True), timeout=18)
+        r.raise_for_status()
+        return r.content
 
     def _get_json(self, path):
         if not self.session or not self.host:
             raise RuntimeError("橘汁接口域名获取失败")
-        last = None
-        for _ in range(2):
-            try:
-                r = self.session.get(self.host + path, headers=self._public_headers(False), timeout=18)
-                r.raise_for_status()
-                return r.json()
-            except requests.exceptions.ConnectionError as e:
-                last = e
-                time.sleep(0.8)
-        raise last
+        r = self.session.get(self.host + path, headers=self._public_headers(False), timeout=18)
+        r.raise_for_status()
+        return r.json()
 
     def _api_data(self, raw):
         return self._first(self._pb_parse(raw), 3, b"")
@@ -345,6 +298,7 @@ class Spider(BaseSpider):
                     continue
                 classes.append({"type_id": tid, "type_name": name})
 
+                # 优先从 typeExtend 接口获取最新筛选条件
                 fl = []
                 try:
                     ext_obj = self._get_json("/api/ex/v3/drama/typeExtend?cate=" + tid)
@@ -365,6 +319,7 @@ class Spider(BaseSpider):
                 except Exception:
                     pass
 
+                # fallback: 从 converUrl 解析
                 if not fl:
                     raw_filter = item.get("converUrl") or ""
                     try:
@@ -502,53 +457,10 @@ class Spider(BaseSpider):
         except Exception as e:
             return {"list": [], "error": str(e)}
 
-    def _search_via_debug(self, key, pg="1"):
-        """备用搜索通道: GET /api/v3/debug/drama/search (JSON)。
-
-        主搜索接口 /api/proto/v5/drama/search 依赖 MeiliSearch 搜索服务,
-        该服务故障时主接口持续返回 424 Failed Dependency(空body, 0.1s秒回),
-        而列表/详情等接口完全正常。debug 通道直连数据库, 不依赖搜索服务。
-        """
-        url = self.host + "/api/v3/debug/drama/search?searchKeys=%s&page=%s&pagesize=21" % (
-            urllib.parse.quote(str(key)), str(pg or "1"))
-        r = self.session.get(url, headers=self._public_headers(False), timeout=18)
-        r.raise_for_status()
-        data = (r.json() or {}).get("data") or {}
-        items = data.get("list") or []
-        out = []
-        for it in items:
-            if not isinstance(it, dict):
-                continue
-            vid, name = it.get("id"), it.get("name")
-            if vid is None or not name:
-                continue
-            cover = it.get("coverImage") or {}
-            out.append({
-                "vod_id": str(vid),
-                "vod_name": str(name),
-                "vod_pic": cover.get("thumbnailPath") or cover.get("path") or "",
-                "vod_remarks": str(it.get("remark") or ""),
-                "vod_area": str(it.get("area") or ""),
-                "vod_year": str(it.get("year") or ""),
-            })
-        return out
-
     def searchContent(self, key, quick, pg="1"):
-        # 主接口(protobuf)优先; 424(搜索服务依赖故障)时自动切备用 JSON 通道。
-        # 故障状态缓存10分钟, 避免每次搜索都为必失败的主接口多等一次。
-        dead = getattr(self, "_search_main_dead", 0)
-        if time.time() - dead > 600:
-            try:
-                raw = self._post("/api/proto/v5/drama/search", self._secure_body(
-                    {"searchKeys": key, "page": str(pg), "pagesize": "21"}))
-                lst = self._parse_drama_page(raw)
-                if lst:
-                    return {"list": lst}
-                self._search_main_dead = time.time()
-            except Exception:
-                self._search_main_dead = time.time()
         try:
-            return {"list": self._search_via_debug(key, pg)}
+            raw = self._post("/api/proto/v5/drama/search", self._secure_body({"searchKeys": key, "page": str(pg), "pagesize": "21"}))
+            return {"list": self._parse_drama_page(raw)}
         except Exception as e:
             return {"list": [], "error": str(e)}
 

@@ -21,6 +21,7 @@ try:
     from base.spider import Spider
 except ImportError:
     import requests as _rq
+    _rq_stream = _rq
     try:
         import urllib3
         urllib3.disable_warnings()
@@ -180,6 +181,12 @@ class Spider(Spider):
         self.default_pic = DEFAULT_PIC
         self._play_cache = {}
         self._filter_cache = {}
+        # 分片代理：序列表 / 预取缓存 / m3u8正文缓存 / 线程锁
+        self._seg_seq = {}
+        self._seg_cache = {}
+        self._seg_body = {}
+        self._seg_pending = set()
+        self._seg_lock = __import__("threading").Lock()
         self.log("init: site=%s" % self.site_url)
 
     # ---------------- 基础工具 ----------------
@@ -577,8 +584,9 @@ class Spider(Spider):
         """直链活性探测：签名类 m3u8/mp4 过期会 403，需重新解析"""
         if not url or not url.startswith("http"):
             return True
+        probe = url.split("#")[0]  # 剥离 #.mp4 伪后缀再探测
         try:
-            body = self._fetch(url, timeout=10, headers={
+            body = self._fetch(probe, timeout=10, headers={
                 "User-Agent": UA,
                 "Referer": "https://hls.xiguadh.com/",
                 "Range": "bytes=0-63",
@@ -586,7 +594,7 @@ class Spider(Spider):
             if not body:
                 return False
             # m3u8 要求 #EXTM3U 头；mp4/flv 有任意响应体即视为存活
-            if ".m3u8" in url.lower():
+            if ".m3u8" in probe.lower():
                 return body.lstrip().startswith("#EXTM3U")
             return True
         except Exception:
@@ -626,25 +634,231 @@ class Spider(Spider):
             if attempt == 0:
                 time.sleep(1)
 
-        # 3) 兜底：交给 TVBox 嗅探
-        if res is None:
+        # 3) 慢速 CDN（Cloudflare 系）分片 -> localProxy 代理+预取（可选）
+        #    默认关闭：部分内核不支持 proxy:// 会导致无法播放；
+        #    需要时在配置 ext 传 {"proxy": 1} 开启
+        try:
+            proxy_on = int(self.extend.get("proxy", 0))
+        except Exception:
+            proxy_on = 0
+        if proxy_on and res is not None and res.get("parse") == 0 and \
+                self._need_proxy(res.get("url", "")):
+            mu = res["url"]
+            res = {
+                "parse": 0,
+                "playUrl": "",
+                "url": "proxy://do=py&url=%s&type=m3u8&play=%s"
+                       % (urllib.parse.quote(mu, safe=""),
+                          urllib.parse.quote(play_page, safe="")),
+                "header": {"User-Agent": UA},
+            }
+            # 预拉一次 m3u8 并缓存分片列表，同时预热第 1 个分片
+            self._proxy_m3u8(mu, play_page)
+            self.log("  => 慢速分片, 走本地代理: %s" % mu[:100])
+
+        # 4) 兜底：直链两轮均失效（解析接口给死链）-> 交给 TVBox 嗅探，与网页行为一致
+        if res is None or (res.get("parse") == 0 and not self._alive(res.get("url", ""))):
             res = {"parse": 1, "playUrl": "", "url": play_page,
                    "header": {"User-Agent": UA, "Referer": self.site_url + "/"}}
+            self.log("  => 直链不可用, 回退嗅探: %s" % play_page)
+
+        # 5) 字节 CDN（byteimg）直链电视端拉不动 -> 自动换同片其他线路（现在解析已提速，约3-5秒）
+        #    换源失败再回退嗅探兜底
+        if res.get("parse") == 0 and "byteimg.com" in str(res.get("url", "")):
+            alt = self._swap_source(play_page, res.get("url", ""))
+            if alt:
+                res = {"parse": 0, "playUrl": "", "url": alt,
+                       "header": {"User-Agent": UA}}
+            else:
+                res = {"parse": 1, "playUrl": "", "url": play_page,
+                       "header": {"User-Agent": UA, "Referer": self.site_url + "/"}}
+                self.log("  => byteimg换源失败, 回退嗅探: %s" % play_page)
 
         self._play_cache[play_page] = (now, res)
         return res
 
+    # 排查确认：byteimg(字节CDN) 直链服务器正常但部分电视端无法拉流
+    BAD_HOST_PAT = "byteimg.com"
+
+    def _swap_source(self, play_page, bad_url):
+        """同片同集自动换源：遍历其他 sid 线路，拿到非 byteimg 的直链。
+        注：不做严格 alive 检查（探测偶发误杀有效链接），失败交给播放器重试"""
+        mm = re.search(r"/vod/play/id/(\d+)/sid/(\d+)/nid/(\d+)", play_page)
+        if not mm:
+            return ""
+        vid, cur_sid, nid = mm.group(1), mm.group(2), mm.group(3)
+        for sid in ("1", "2", "3"):
+            if sid == cur_sid:
+                continue
+            alt_page = "%s/index.php/vod/play/id/%s/sid/%s/nid/%s.html" % (
+                self.site_url, vid, sid, nid)
+            html = self._fetch(alt_page, timeout=12)
+            info = self._parse_player(html)
+            src = info.get("url", "")
+            if not src:
+                continue
+            real = self._resolve(src, alt_page)
+            if real and self.BAD_HOST_PAT not in real:
+                if ".mp4" in real.lower():
+                    real = self._follow302(real)
+                else:
+                    real = self._video_fix(real)
+                self.log("  => byteimg不可播, 换源 sid=%s: %s" % (sid, real[:120]))
+                return real
+        return ""
+
+    # -------- 慢速 CDN 分片代理（localProxy + 预取） --------
+    SLOW_TS_PATTERNS = ["cf.003838.xyz", "003838.xyz"]
+
+    def _need_proxy(self, m3u8_url):
+        """m3u8 分片落在慢速域名（且非 BYTERANGE 源）时启用本地代理"""
+        if not m3u8_url or ".m3u8" not in m3u8_url.lower():
+            return False
+        if m3u8_url in self._seg_seq:
+            return True
+        body = self._fetch(m3u8_url, timeout=12, headers={"User-Agent": UA})
+        if not body or "#EXT-X-BYTERANGE" in body:
+            return False
+        if not any(p in body for p in self.SLOW_TS_PATTERNS):
+            return False
+        # 缓存正文：站方每次拉 m3u8 都会给分片重新签名，
+        # 检测/预热/播放必须用同一份正文，否则预取地址对不上播放器请求
+        with self._seg_lock:
+            self._seg_body[m3u8_url] = (time.time(), body)
+        return True
+
+    def _get_m3u8_body(self, m3u8_url, play_page):
+        """取 m3u8 正文：25 秒内复用同一份（保证签名一致），过期则重拉/重解析"""
+        with self._seg_lock:
+            item = self._seg_body.get(m3u8_url)
+        if item and time.time() - item[0] < 25:
+            return m3u8_url, item[1]
+        for attempt in range(2):
+            body = self._fetch(m3u8_url, timeout=12, headers={"User-Agent": UA})
+            if body.lstrip().startswith("#EXTM3U"):
+                with self._seg_lock:
+                    self._seg_body[m3u8_url] = (time.time(), body)
+                return m3u8_url, body
+            # 签名过期 -> 经播放页重新解析拿新 m3u8
+            try:
+                r = self.playerContent(None, play_page, "")
+                mu = r.get("url", "")
+                if mu.startswith("proxy://"):
+                    mu = urllib.parse.parse_qs(
+                        urllib.parse.urlparse(mu).query).get("url", [""])[0]
+                if mu and mu != m3u8_url:
+                    m3u8_url = mu
+            except Exception:
+                pass
+        return m3u8_url, body if isinstance(body, str) else ""
+
+    def _proxy_m3u8(self, m3u8_url, play_page):
+        """取 m3u8，把慢速分片改写为 proxy:// 形式，并预热前几片"""
+        m3u8_url, body = self._get_m3u8_body(m3u8_url, play_page)
+        if not body or not body.lstrip().startswith("#EXTM3U"):
+            return [404, "text/plain", b"m3u8 fetch failed", ""]
+        seq = [
+            ln.strip() for ln in body.split("\n")
+            if ln.strip() and not ln.strip().startswith("#")
+            and ln.strip().startswith("http")
+        ]
+        with self._seg_lock:
+            self._seg_seq[m3u8_url] = seq
+        out = []
+        for ln in body.split("\n"):
+            t = ln.strip()
+            if t and not t.startswith("#") and t.startswith("http"):
+                out.append("proxy://do=py&url=%s&type=ts" %
+                           urllib.parse.quote(t, safe=""))
+            else:
+                out.append(ln)
+        content = ("\n".join(out)).encode("utf-8")
+        # 同步预热第 1 片（起播前拉好，播放器请求秒回），第 2、3 片后台预取
+        if seq:
+            first = seq[0]
+            with self._seg_lock:
+                have = self._seg_cache.get(first)
+            if not have:
+                t = time.time()
+                data = self._fetch_seg(first, retries=2)
+                with self._seg_lock:
+                    self._seg_cache[first] = data
+                self.log("  首片预热完成: %dB %.1fs" % (len(data), time.time() - t))
+            self._prefetch(seq[1:4])
+        return [200, "application/vnd.apple.mpegurl", content, ""]
+
+    def _fetch_seg(self, url, retries=3):
+        """分片拉取：3 次重试 + 连接复用"""
+        for i in range(retries):
+            body = self._fetch(url, timeout=30, headers={"User-Agent": UA})
+            if body:
+                return body
+            time.sleep(0.5)
+        return b""
+
+    def _prefetch(self, urls):
+        """并行预取分片（每个 URL 独立线程，去重防重复下载）"""
+        import threading
+        for u in urls:
+            with self._seg_lock:
+                if u in self._seg_cache or u in self._seg_pending:
+                    continue
+                self._seg_pending.add(u)
+
+            def worker(url=u):
+                data = self._fetch_seg(url, retries=2)
+                with self._seg_lock:
+                    self._seg_pending.discard(url)
+                    if data:
+                        if len(self._seg_cache) > 6:
+                            for k in list(self._seg_cache.keys())[:-3]:
+                                self._seg_cache.pop(k, None)
+                        self._seg_cache[url] = data
+            try:
+                threading.Thread(target=worker, daemon=True).start()
+            except Exception:
+                with self._seg_lock:
+                    self._seg_pending.discard(u)
+
+    def _follow302(self, url):
+        """302 跳转直链跟随到最终地址。
+        人人(rrmj)等 mp4 源会 302 到非标准端口(如 :20443)的 CDN 节点，
+        部分 TVBox 播放器内核不会正确跟随导致"无法播放"，
+        这里在返回前主动跟随一次，把最终地址直接交给播放器。"""
+        if not url or not url.startswith("http"):
+            return url
+        try:
+            rsp = _rq_stream.get(url, headers={"User-Agent": UA}, timeout=10,
+                                 allow_redirects=True, stream=True, verify=False)
+            final = getattr(rsp, "url", url) or url
+            try:
+                rsp.close()
+            except Exception:
+                pass
+            if final != url and final.startswith("http"):
+                self.log("302 follow: %s" % final[:150])
+                return final
+        except Exception as e:
+            self.log("302 follow FAIL: %s" % e)
+        return url
+
+    def _video_fix(self, url):
+        """非常规后缀直链处理（如字节CDN .image）。
+        实测部分内核对 #.mp4 伪后缀处理异常（会把 fragment 发出导致403），
+        且嗅探兜底已验证可播，故这里不再加伪后缀，交由上层换源/嗅探兜底"""
+        return url
+
     def _direct(self, url, referer):
-        """m3u8 统一带上站点 header，TVBox 系播放器可直出"""
+        """直链输出（实测签名 CDN 对 Referer/Origin 不敏感，仅带 UA 最稳）"""
+        if url and ".mp4" in url.lower():
+            url = self._follow302(url)
+        else:
+            url = self._video_fix(url)
         return {
             "parse": 0,
             "playUrl": "",
             "url": url,
-            "header": {
-                "User-Agent": UA,
-                "Referer": referer,
-                "Origin": self.site_url,
-            },
+            "header": {"User-Agent": UA},
         }
 
     def _parse_player(self, html):
@@ -685,10 +899,13 @@ class Spider(Spider):
             return url
         if re.search(r"\.(m3u8|mp4|flv)(\?|$)", url, re.I):
             return url
-        body = self._fetch(url, timeout=18, headers={
+        body = self._fetch(url, timeout=10, headers={
             "User-Agent": UA,
             "Referer": "https://hls.xiguadh.com/",
             "Accept": "*/*",
+            # 关键：只取前 4KB。有些"跳转页"其实是视频直链（如字节CDN mp4），
+            # 无 Range 会狂拉整个视频流导致解析卡死几十秒
+            "Range": "bytes=0-4095",
         })
         if not body:
             return url
@@ -710,61 +927,95 @@ class Spider(Spider):
         return url
 
     def _resolve(self, src_url, referer):
-        """调站点解析接口 hls.xiguadh.com -> apiToken -> api/resolve.php -> m3u8"""
-        try:
-            page = PARSE_API + urllib.parse.quote(src_url, safe="")
-            h = self._fetch(page, timeout=20, headers={
-                "User-Agent": UA,
-                "Referer": self.site_url + "/",
-                "Accept": "text/html,*/*",
-            })
-            if not h:
-                self.log("  解析页空")
-                return ""
-            mt = _RE_TOKEN.search(h)
-            if not mt:
-                self.log("  未取到 apiToken")
-                return ""
-            token = mt.group(1)
-            api = "https://hls.xiguadh.com/api/resolve.php?token=" + \
-                  urllib.parse.quote(token, safe="")
-            body = self._fetch(api, timeout=20, headers={
-                "User-Agent": UA,
-                "Referer": "https://hls.xiguadh.com/",
-                "Accept": "application/json, */*",
-            })
-            if not body:
-                return ""
+        """调站点解析接口 hls.xiguadh.com -> apiToken -> api/resolve.php -> m3u8
+        解析接口偶发抖动（连接超时/空响应），快速失败 + 重试 3 次，避免播放器干等"""
+        for attempt in range(2):
             try:
-                data = json.loads(body)
-            except Exception:
-                return ""
-            if str(data.get("code")) != "200":
-                self.log("  resolve 失败: %s" % body[:120])
-                return ""
-            u = (data.get("url") or "").replace("\\/", "/")
-            if not u:
-                return ""
-            # 中间跳转页 -> 追到真正的 m3u8
-            final = self._follow_link(u)
-            self.log("  resolve -> %s%s" % (final[:140],
-                                            "" if final == u else "  (跟跳转)"))
-            return final
-        except Exception as e:
-            self.log("  resolve 异常: %s" % e)
-            return ""
+                page = PARSE_API + urllib.parse.quote(src_url, safe="")
+                h = self._fetch(page, timeout=5, headers={
+                    "User-Agent": UA,
+                    "Referer": self.site_url + "/",
+                    "Accept": "text/html,*/*",
+                })
+                if not h:
+                    self.log("  解析页空 (尝试%d)" % (attempt + 1))
+                    time.sleep(0.3)
+                    continue
+                mt = _RE_TOKEN.search(h)
+                if not mt:
+                    self.log("  未取到 apiToken (尝试%d)" % (attempt + 1))
+                    time.sleep(0.3)
+                    continue
+                token = mt.group(1)
+                api = "https://hls.xiguadh.com/api/resolve.php?token=" + \
+                      urllib.parse.quote(token, safe="")
+                body = self._fetch(api, timeout=5, headers={
+                    "User-Agent": UA,
+                    "Referer": "https://hls.xiguadh.com/",
+                    "Accept": "application/json, */*",
+                })
+                if not body:
+                    time.sleep(0.3)
+                    continue
+                try:
+                    data = json.loads(body)
+                except Exception:
+                    time.sleep(0.3)
+                    continue
+                if str(data.get("code")) != "200":
+                    self.log("  resolve 失败: %s" % body[:120])
+                    return ""
+                u = (data.get("url") or "").replace("\\/", "/")
+                if not u:
+                    return ""
+                # 中间跳转页 -> 追到真正的 m3u8
+                final = self._follow_link(u)
+                self.log("  resolve -> %s%s" % (final[:140],
+                                                "" if final == u else "  (跟跳转)"))
+                return final
+            except Exception as e:
+                self.log("  resolve 异常 (尝试%d): %s" % (attempt + 1, e))
+                time.sleep(0.3)
+        return ""
 
     def localProxy(self, param):
+        """
+        双职责：
+          1) 图片代理（原有）
+          2) 慢速 CDN 视频分片代理：type=m3u8 改写分片 -> type=ts 取缓存/拉取
+        """
         try:
-            url = ""
-            if isinstance(param, dict):
-                url = param.get("url", "")
-            else:
+            # -------- 视频代理分支 --------
+            raw = param if isinstance(param, dict) else {}
+            if not isinstance(param, dict):
                 for pair in str(param).split("&"):
                     if "=" in pair:
                         k, v = pair.split("=", 1)
-                        if k == "url":
-                            url = v
+                        raw[k] = v
+            ptype = raw.get("type", "")
+            if ptype in ("m3u8", "ts"):
+                url = urllib.parse.unquote(raw.get("url", ""))
+                if ptype == "m3u8":
+                    return self._proxy_m3u8(url, urllib.parse.unquote(raw.get("play", "")))
+                # ts：先取预取缓存，未命中同步拉，同时预取后续分片
+                with self._seg_lock:
+                    data = self._seg_cache.pop(url, None)
+                if not data:
+                    data = self._fetch_seg(url)
+                # 找到该分片在序列中的位置，预取后两片
+                for m3u8_url, seq in list(self._seg_seq.items()):
+                    try:
+                        i = seq.index(url)
+                        self._prefetch(seq[i + 1:i + 4])
+                        break
+                    except ValueError:
+                        continue
+                if data:
+                    return [200, "video/mp2t", data, ""]
+                return [404, "text/plain", b"seg failed", ""]
+
+            # -------- 图片代理分支 --------
+            url = raw.get("url", "")
             if not url:
                 return [200, "image/jpeg", b"", ""]
             url = urllib.parse.unquote(url) if "%" in url else url

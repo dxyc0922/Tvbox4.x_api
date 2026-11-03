@@ -371,6 +371,12 @@
             "api": "./脚本/芒果TV.py"
         },
         {
+            "key": "wzxxcz_8580dbe77199",
+            "name": "落雪",
+            "type": 3,
+            "api": "./脚本/落雪.py"
+        },
+        {
             "key": "wzxxcz_c090da47d1b8",
             "name": "西瓜影院",
             "type": 3,
