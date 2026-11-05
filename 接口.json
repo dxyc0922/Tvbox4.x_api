@@ -239,12 +239,6 @@
             "api": "./脚本/橙果.py"
         },
         {
-            "key": "wzxxcz_b632dc9ec0ee",
-            "name": "第七影院",
-            "type": 3,
-            "api": "./脚本/第七影院.py"
-        },
-        {
             "key": "wzxxcz_c5e1234c063f",
             "name": "麻花影视",
             "type": 3,
@@ -363,6 +357,12 @@
             "name": "悦听吧",
             "type": 3,
             "api": "./脚本/悦听吧.py"
+        },
+        {
+            "key": "wzxxcz_28c2094abf60",
+            "name": "枫叶影院1",
+            "type": 3,
+            "api": "./脚本/枫叶影院1.py"
         },
         {
             "key": "wzxxcz_e3e5e6fed198",
