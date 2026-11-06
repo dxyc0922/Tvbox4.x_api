@@ -203,12 +203,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E8%BF%BD%E5%BD%B1.py"
         },
         {
-            "key": "wzxxcz_7a11a5da6b40",
-            "name": "君念影院",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%90%9B%E5%BF%B5%E5%BD%B1%E9%99%A2.py"
-        },
-        {
             "key": "wzxxcz_32a0326da571",
             "name": "欧洲影院",
             "type": 3,
@@ -393,6 +387,12 @@
             "name": "酷我音乐",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%85%B7%E6%88%91%E9%9F%B3%E4%B9%90.py"
+        },
+        {
+            "key": "wzxxcz_f98fdbedc2c8",
+            "name": "量子资源网",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%87%8F%E5%AD%90%E8%B5%84%E6%BA%90%E7%BD%91.py"
         },
         {
             "key": "wzxxcz_e6b4e69c052a",
