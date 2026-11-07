@@ -359,6 +359,18 @@
             "api": "./脚本/枫叶影院1.py"
         },
         {
+            "key": "wzxxcz_80cf2a0e698c",
+            "name": "森林影院",
+            "type": 3,
+            "api": "./脚本/森林影院.py"
+        },
+        {
+            "key": "wzxxcz_1701585ea278",
+            "name": "河豚",
+            "type": 3,
+            "api": "./脚本/河豚.py"
+        },
+        {
             "key": "wzxxcz_e3e5e6fed198",
             "name": "芒果TV",
             "type": 3,
