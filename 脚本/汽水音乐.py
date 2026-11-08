@@ -578,7 +578,7 @@ if __name__ == "__main__":
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
 _TVBOX_DROP_LINES = []
-_TVBOX_LINE_ORDER = ["省流音质(65K)", "极高音质(257K)", "标准音质(129K)"]
+_TVBOX_LINE_ORDER = ["标准音质(129K)", "省流音质(65K)", "极高音质(257K)"]
 
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):

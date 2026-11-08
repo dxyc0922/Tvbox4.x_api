@@ -347,8 +347,8 @@ if __name__ == '__main__':
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["暴风云", "红牛云", "闪电云"]
-_TVBOX_LINE_ORDER = ["闪电云", "量子云", "暴风云", "红牛云"]
+_TVBOX_DROP_LINES = ["暴风云", "红牛云"]
+_TVBOX_LINE_ORDER = ["索尼云", "量子云", "暴风云", "红牛云"]
 
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):

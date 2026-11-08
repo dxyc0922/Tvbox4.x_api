@@ -170,35 +170,6 @@ def _t2s(text):
     return "".join(_TO_SIMP.get(c, c) for c in text)
 
 
-# JS 的 escape()/旧版 encodeURIComponent() 会产生 %uXXXX 这种非标准转义，
-# urllib.parse.unquote 只认 %XX，会把 %u7B2C 原样留下 -> 服务器 400。
-# 站内有源（如 c1.rrcdnbf4.com/video/wanjieduzun/%u7B2C01%u96C6/index.m3u8）
-# 就是这么转义的，必须先在 "第" 这个层级解掉。
-_RE_UESC = re.compile(r"%u([0-9a-fA-F]{4})")
-
-
-def _unquote_js(url):
-    """解码 URL：先处理 JS 风格 %uXXXX，再按标准 %XX 解码。
-
-    注意顺序：必须先把 %uXXXX 换成真正的字符，否则后续 unquote 会把
-    "%u7B2C" 里的 "%7B" 当成 "{" 解掉，拼出乱码地址。
-    """
-    if not url:
-        return ""
-    s = url
-    # %uXXXX -> 字符；两轮足以处理极少数二次转义
-    for _ in range(2):
-        if "%u" not in s.lower():
-            break
-        s = _RE_UESC.sub(lambda m: chr(int(m.group(1), 16)), s)
-    # 仅解码一次：已解出的中文再解会破坏（如 %E7%AC%AC 才需要解）
-    try:
-        s = urllib.parse.unquote(s)
-    except Exception:
-        pass
-    return s
-
-
 
 # 四大主分类 -> 拼音段（type 为空时使用该段作为默认值）
 CLASSES = [
@@ -327,9 +298,6 @@ _RE_EP = re.compile(
     r'<a class="module-play-list-link"\s+href="([^"]+)"[^>]*>\s*'
     r'<span>([^<]*)</span>', re.I)
 
-# 单条线路的剧集容器（站内多个 panel 都复用 id="panel1"，按出现顺序切块）
-_RE_PANEL = re.compile(r'<div class="module-list[^"]*"', re.I)
-
 # 播放页
 _RE_PLAYER = re.compile(r'var\s+player_aaaa\s*=\s*(\{[\s\S]*?\})\s*</script>', re.I)
 
@@ -368,15 +336,6 @@ _WINDOW = 30           # 预取窗口：30 片 ≈ 90s 素材
 _LOW_WATER = 14        # 连续缓冲低于 14 片（约 42s）就补货：稳态覆盖更厚
 _BATCH = 10            # 每次补货片数
 _SPEED_MEM = {}        # 线路名 -> 实测速度(KB/s)，跨片复用，避免重复测速
-_PAUSE_UNTIL = [0.0]   # 播放器优先：此时刻之前填充线程不出新流量
-
-
-def _player_first(seconds):
-    """播放头要片时把预取压住几秒，把带宽让给播放器"""
-    try:
-        _PAUSE_UNTIL[0] = max(_PAUSE_UNTIL[0], time.time() + seconds)
-    except Exception:
-        pass
 # 并发数：实测该 CDN 对单连接限死 ~150KB/s，16 路可达 1400~1900KB/s。
 # 但因为采用"水位补货"，稳态只用 8~16 路，且绝不与播放头抢带宽。
 _PREFETCH = 16
@@ -397,55 +356,14 @@ def _ssl_ctx():
     return _SSL_CTX
 
 
-def _ascii_url(url):
-    """把含中文等非 ASCII 字符的 URL 重新做 percent-encoding。
-
-    站内有源把集数写在中文明文路径里（.../video/wanjieduzun/第01集/index.m3u8），
-    http.client 只吃 ASCII，直接把 str 塞进去会抛
-    "'ascii' codec can't encode character ..."。这里保留已有的 %XX
-    和 URL 结构字符，只转义非 ASCII 部分。
-    """
-    try:
-        url.encode("ascii")
-        return url
-    except UnicodeEncodeError:
-        pass
-    return urllib.parse.quote(url, safe=":/?#[]@!$&'()*+,;=%~")
-
-
-# 无水印源的两个域名 NOT 互为镜像：换域名直接 401（鉴权绑域名）。
-# 所以这里不做域名互切，只做"同域名重试"——它的 CDN 偶发抽风
-# （连接复位/空响应/超时），重试一两次就能过。
-def _mirror_url(url):
-    """保留占位：曾经尝试过域名互切，实测 401，已废弃（不再调用）"""
-    return url
-
-
-def _http_get(url, timeout=12, referer="", retries=2):
-    """带重试的 GET。
-
-    无水印源的 CDN 会偶发抽风（连接复位/空响应/超时），
-    一次失败就把整集判死刑太冤——默认重试 2 次，间隔递增。
-    """
-    last = None
-    for i in range(retries + 1):
-        try:
-            req = urllib.request.Request(_ascii_url(url), headers={
-                "User-Agent": UA,
-                "Referer": referer or HOST + "/",
-                "Accept": "*/*",
-                "Connection": "close",
-            })
-            data = urllib.request.urlopen(req, timeout=timeout,
-                                          context=_ssl_ctx()).read()
-            if data:
-                return data
-            last = IOError("empty response")
-        except Exception as e:
-            last = e
-        if i < retries:
-            time.sleep(0.3 * (i + 1))
-    raise last
+def _http_get(url, timeout=12, referer=""):
+    req = urllib.request.Request(url, headers={
+        "User-Agent": UA,
+        "Referer": referer or HOST + "/",
+        "Accept": "*/*",
+    })
+    return urllib.request.urlopen(req, timeout=timeout,
+                                  context=_ssl_ctx()).read()
 
 
 def _abs(baseurl, seg):
@@ -1350,77 +1268,63 @@ class Spider(Spider):
             content = INTRO_PREFIX
 
         # ===== 线路与剧集 =====
-        # 站点的「标签线路」与「剧集列表」是两段独立输出：
-        #   <div class="module-tab-item tab-item" data-dropdown-value="DY"><span>DY</span><small>538</small></div>
-        #   ...（逐条 tab）
-        #   <div class="module-list ..." id="panel1"><a class="module-play-list-link" href="/userpy/{slug}-3-1.html">
-        #   ...（每个 tab 对应一个 panel，panel 的出现顺序 = tab 顺序）
-        #
-        # 注意：/userpy/{slug}-{n}-{ep}.html 里的 n **不是**界面顺序，
-        # 例如 7 条线时 tab 顺序是 DY,BY,LY,SY,WY,RY,無水印，
-        # 而 n 依次是 5,1,2,3,4,6,7（甚至 1..7 混排）。
-        # 早先版本用「第 i 个 tab 配第 i 个 n」的位置猜测，电视剧碰巧对得上，
-        # 综艺/动漫的 n 顺序是乱的，配错后 线路名↔剧集 完全错位，
-        # 点开某一线路拿到的地址属于另一条源 -> 播放直接失败。
-        #
-        # 正确做法：以 panel 为单位切块，panel 内第一个链接的 n 就是该 tab
-        # 真正对应的站内序号；顺序严格取 tab 顺序（= panel 顺序），
-        # 与网站界面完全一致。
         tabs = []
         for m in _RE_TAB.finditer(html):
             tname = self._clean(m.group(2))
             if tname:
                 tabs.append(tname)
 
-        # 按 panel 切块（每块只含一条线路的剧集）
-        blocks = []
-        cuts = [m.start() for m in _RE_PANEL.finditer(html)]
-        if cuts:
-            cuts.append(len(html))
-            for i in range(len(cuts) - 1):
-                seg = html[cuts[i]:cuts[i + 1]]
-                items = []
-                for href, ep_name in _RE_EP.findall(seg):
-                    href = href.replace("&amp;", "&")
-                    items.append((self._clean(ep_name) or "正片",
-                                  self._fix_url(href)))
-                if items:
-                    blocks.append(items)
-        if not blocks:
-            # 兜底：没有 panel 结构时，按链接出现顺序整体成一条线路
-            items = []
-            for href, ep_name in _RE_EP.findall(html):
-                href = href.replace("&amp;", "&")
-                items.append((self._clean(ep_name) or "正片",
-                              self._fix_url(href)))
-            if items:
-                blocks.append(items)
-
+        eps = _RE_EP.findall(html)
         self.log("  标签线路: %s" % tabs)
-        self.log("  剧集块: %d 组 / 共 %d 集"
-                 % (len(blocks), sum(len(b) for b in blocks)))
+        self.log("  剧集链接: %d" % len(eps))
 
-        if not blocks:
+        if not eps:
             return {"list": []}
+
+        # 按 sid 分组（/userpy/{slug}-{sid}-{nid}.html）
+        groups = {}
+        order = []
+        for href, ep_name in eps:
+            href = href.replace("&amp;", "&")
+            mm = re.search(r"-(\d+)-(\d+)\.html", href)
+            if mm:
+                sid = mm.group(1)
+            else:
+                sid = "0"
+            if sid not in groups:
+                groups[sid] = []
+                order.append(sid)
+                # 记录站内序号 -> 线路名（线路名按出现顺序对应 tabs）
+                _i = len(order) - 1
+                if _i < len(tabs):
+                    self._sid_name[sid] = tabs[_i]
+            groups[sid].append((self._clean(ep_name) or "正片",
+                                self._fix_url(href)))
 
         play_from = []
         play_url = []
-        for i, items in enumerate(blocks):
+        for i, sid in enumerate(order):
             if i < len(tabs):
                 alias = tabs[i]
             else:
                 alias = "线路%d" % (i + 1)
-            # 记下站内序号 -> 线路名，供播放页反查（_line_name）
-            mm = re.search(r"-(\d+)-\d+\.html", items[0][1])
-            if mm:
-                self._sid_name[mm.group(1)] = alias
             play_from.append(alias)
-            play_url.append("#".join("%s$%s" % (n, h) for n, h in items))
+            play_url.append("#".join("%s$%s" % (n, h)
+                                     for n, h in groups[sid]))
 
-        # 线路顺序严格与网站一致，不做任何重排、不在线路名上加标注。
-        # （早期版本曾按实测速度重排并把速度拼进线路名，显示成
-        #   "DY·1920KB/s" 这种怪异样子，且破坏了站点的线路顺序，
-        #   已废弃；测速数据只留给内部预取调度用，不上屏。）
+        # ---- 线路测速：把快的源排到前面，并给线路名加上速度标注 ----
+        # 默认播放器取第一条线路，因此顺序 + 命名直接决定"点开能不能流畅播"
+        try:
+            ranked = self._rank_lines(order, groups, tabs)
+            if ranked:
+                play_from = [x[1] for x in ranked]
+                play_url = ["#".join("%s$%s" % (n, h) for n, h in x[2])
+                            for x in ranked]
+                self.log("  测速排序: %s" % [
+                    "%s(%dKB/s)" % (x[1], int(x[3])) for x in ranked])
+        except Exception as e:
+            self.log("  测速失败(忽略): %s" % e)
+
         result = {
             "vod_id": vod_id,
             "vod_name": name,
@@ -1443,6 +1347,38 @@ class Spider(Spider):
     # ------------------------------------------------------------------
     # 播放
     # ------------------------------------------------------------------
+    def _rank_lines(self, order, groups, tabs):
+        """按"历史测速评分"给线路排序，让快源排在前面
+
+        不在详情页里现场测速：那样每次打开详情都要多花 5~8 秒，
+        而且会把带宽占满、拖慢紧接着的起播。
+        改为：播放时顺手记录每条线路的实测速度（_SPEED_MEM，进程内共享），
+        之后打开别的片时就能直接用历史评分排序，零额外开销。
+        """
+        try:
+            scored = []
+            for i, sid in enumerate(order):
+                name = tabs[i] if i < len(tabs) else ("线路%d" % (i + 1))
+                host = ""
+                try:
+                    host = urllib.parse.urlparse(groups[sid][0][1]).netloc
+                except Exception:
+                    pass
+                sp = _SPEED_MEM.get(name, 0.0)
+                scored.append((i, sid, name, groups[sid], sp, host))
+            # 有评分的按速度降序在前；没评分的保持原顺序在后
+            known = sorted([x for x in scored if x[4] > 0], key=lambda x: -x[4])
+            unknown = [x for x in scored if x[4] <= 0]
+            out = []
+            for x in known + unknown:
+                tag = x[2]
+                if x[4] > 0:
+                    tag = "%s·%dKB/s" % (x[2], int(x[4]))
+                out.append((x[1], tag, x[3], x[4]))
+            return out
+        except Exception:
+            return None
+
     def _line_name(self, play_page):
         """从播放页地址推线路名：/userpy/{slug}-{线路序号}-{集数}.html
 
@@ -1469,17 +1405,7 @@ class Spider(Spider):
             ev = threading.Event()
             self._prewarm_evt[m3u8] = ev
             t0 = time.time()
-            raw = None
-            for _ in range(2):
-                try:
-                    raw = _seg_fetch(m3u8, timeout=12)
-                except Exception:
-                    raw = None
-                if raw:
-                    break
-                time.sleep(0.4)
-            if not raw:
-                return
+            raw = _seg_fetch(m3u8, timeout=12)
             txt = raw.decode("utf-8", "ignore")
             real = m3u8
             if "#EXT-X-STREAM-INF" in txt:
@@ -1487,18 +1413,7 @@ class Spider(Spider):
                 if mv:
                     sub = _abs(m3u8, mv.group(1).strip())
                     self._variant_of[m3u8] = sub   # 先登记，让播放器能直接下钻
-                    sub_raw = None
-                    for _ in range(3):             # 下钻层最容易抽风，多试
-                        try:
-                            sub_raw = _seg_fetch(sub, timeout=12)
-                        except Exception:
-                            sub_raw = None
-                        if sub_raw:
-                            break
-                        time.sleep(0.4)
-                    if not sub_raw:
-                        return
-                    txt = sub_raw.decode("utf-8", "ignore")
+                    txt = _seg_fetch(sub, timeout=12).decode("utf-8", "ignore")
                     real = sub
 
             base = self._proxy_base or ""
@@ -1630,7 +1545,7 @@ class Spider(Spider):
             if not mm:
                 return ""
             val = mm.group(1)
-            return _unquote_js(
+            return urllib.parse.unquote(
                 val.replace("\\/", "/").replace("\\u0026", "&"))
 
         val = data.get("url") or ""
@@ -1638,8 +1553,8 @@ class Spider(Spider):
             return ""
 
         val = val.replace("\\/", "/").replace("\\u0026", "&")
-        if "%" in val:
-            val = _unquote_js(val)
+        if val.startswith("%") or "%2F" in val or "%3A" in val:
+            val = urllib.parse.unquote(val)
         if val.startswith("//"):
             val = "https:" + val
         if val.startswith("/"):
@@ -1675,7 +1590,7 @@ class Spider(Spider):
             if not url:
                 return [200, "image/jpeg", b"", ""]
             if "%" in url:
-                url = _unquote_js(url)
+                url = urllib.parse.unquote(url)
             url = self._fix_url(url)
             base = self._proxy_base or ""
 
@@ -1694,26 +1609,7 @@ class Spider(Spider):
                 # 预热线程可能正在算同一个列表：等它，别重复请求
                 self._await_prewarm(url)
 
-                # ★ 播放器优先（首帧专用）：播放器正在等 m3u8/首片时，
-                #   压住预取几秒别跟首帧抢带宽
-                _player_first(2.0)
-
-                # 主列表：CDN 抽风就多试几次（_seg_fetch 内部已按 URL 去重，
-                # 失败后重新调用会建新的去重槽，等于真重试）
-                raw = None
-                for _ in range(3):
-                    try:
-                        raw = _seg_fetch(url, timeout=15)
-                    except Exception:
-                        raw = None
-                    if raw:
-                        break
-                    time.sleep(0.4)
-                if not raw:
-                    # 502 让播放器自己重试这一集，比回一个空列表
-                    # 让它直接判"播放失败"强得多
-                    return [502, "text/plain", b"",
-                            "Content-Type: text/plain\r\n"]
+                raw = _seg_fetch(url, timeout=15)
                 txt = raw.decode("utf-8", "ignore")
 
                 # 变体流：下钻到真正的分片列表（预热已算过就直接用）
@@ -1729,20 +1625,7 @@ class Spider(Spider):
                         if sub_url:
                             txt = sub_url[1].decode("utf-8", "ignore")
                         else:
-                            # 下钻层也要顶住 CDN 抽风：重试 3 次
-                            sub_raw = None
-                            for _ in range(3):
-                                try:
-                                    sub_raw = _seg_fetch(real, timeout=15)
-                                except Exception:
-                                    sub_raw = None
-                                if sub_raw:
-                                    break
-                                time.sleep(0.4)
-                            if not sub_raw:
-                                return [502, "text/plain", b"",
-                                        "Content-Type: text/plain\r\n"]
-                            txt = sub_raw.decode("utf-8", "ignore")
+                            txt = _seg_fetch(real, timeout=15).decode("utf-8", "ignore")
                         url = real
                         self._variant_of[orig] = real
 
@@ -1796,25 +1679,8 @@ class Spider(Spider):
                     self._roll_ahead(url)
                     return [200, "video/mp2t", hit[1], "Content-Type: video/mp2t\r\n"]
 
-                # ★ 播放器优先只作用在首帧（m3u8 阶段）。切片请求**不能**
-                #   触发暂停：播放器是顺序拉片的，每片 miss 都暂停的话
-                #   填充线程会被永久压住，预取引擎整个失效（实测倒退回
-                #   单连接 150KB/s）。带宽协调交给下面的自适应并发档位。
                 t0 = time.time()
-                data = None
-                for _ in range(3):
-                    try:
-                        data = _seg_fetch(url, timeout=20)
-                    except Exception:
-                        data = None
-                    if data:
-                        break
-                    time.sleep(0.4)
-                if not data:
-                    # 两次都失败：给播放器一个明确的 502，让它自己重试这一片，
-                    # 比回一坨空数据直接被判"播放失败"强
-                    return [502, "video/mp2t", b"",
-                            "Content-Type: video/mp2t\r\n"]
+                data = _seg_fetch(url, timeout=20)
                 # 顺手记一次真实速度：只记"真正出网"的那次，命中缓存不记
                 self._note_speed(getattr(self, "_cur_line", ""),
                                  len(data), time.time() - t0)
@@ -1932,32 +1798,12 @@ class Spider(Spider):
                     sem.acquire(timeout=2)
                     continue
 
-                # ★ 播放器优先：播放头正在等片（缓存断档）时压住预取，
-                #   别跟播放器抢带宽。压住窗口过了就自动恢复。
-                if time.time() < _PAUSE_UNTIL[0]:
-                    sem.acquire(timeout=0.5)
-                    continue
-
                 idle = 0
                 start = idx + have
                 todo = [pl[k] for k in range(start, min(start + _BATCH, total))]
                 if todo:
-                    # 并发自适应：限速源（如無水印，单连接 ~150KB/s）开太猛
-                    # 只会把家庭宽带打满、播放器反而挤不过去；
-                    # 按实测单连接速度降档，快源维持 16 路全速。
-                    try:
-                        spd = _SPEED_MEM.get(self._cur_line, 0.0)
-                    except Exception:
-                        spd = 0.0
-                    if spd <= 0:
-                        workers = max(4, min(_PREFETCH, len(todo) * 2))
-                    elif spd < 250:
-                        workers = 8
-                    elif spd < 600:
-                        workers = 12
-                    else:
-                        workers = _PREFETCH
-                    _concurrent_download(todo, workers)
+                    # 并发按片数放大：缺口越大越猛，但绝不进场就满负荷
+                    _concurrent_download(todo, max(4, min(_PREFETCH, len(todo) * 2)))
             except Exception:
                 idle += 1
                 time.sleep(0.2)
