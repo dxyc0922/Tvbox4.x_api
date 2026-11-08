@@ -323,6 +323,12 @@
             "api": "./脚本/世界听书.py"
         },
         {
+            "key": "wzxxcz_cd658e43788b",
+            "name": "mino",
+            "type": 3,
+            "api": "./脚本/mino.py"
+        },
+        {
             "key": "wzxxcz_f897755e5f3c",
             "name": "music_dl",
             "type": 3,
@@ -371,6 +377,12 @@
             "api": "./脚本/河豚.py"
         },
         {
+            "key": "wzxxcz_1949d4788755",
+            "name": "腾讯4K",
+            "type": 3,
+            "api": "./脚本/腾讯4K.py"
+        },
+        {
             "key": "wzxxcz_e3e5e6fed198",
             "name": "芒果TV",
             "type": 3,
@@ -393,6 +405,12 @@
             "name": "西瓜影院",
             "type": 3,
             "api": "./脚本/西瓜影院.py"
+        },
+        {
+            "key": "wzxxcz_0d943d60c89d",
+            "name": "西瓜短剧",
+            "type": 3,
+            "api": "./脚本/西瓜短剧.py"
         },
         {
             "key": "wzxxcz_28479a5974ed",
