@@ -2365,7 +2365,7 @@ def destroy():
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
+_TVBOX_DROP_LINES = ["360资源", "官采蓝光 腾讯"]
 _TVBOX_LINE_ORDER = ["官采蓝光·洛雪4K", "🔥 直链", "360资源", "官采蓝光 腾讯"]
 
 def _tvbox_filter_lines(result, drop):

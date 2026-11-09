@@ -83,12 +83,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/zzq1234567890/tvbox1/main/py/%E7%9C%8B%E6%88%8F%E5%BD%B1%E8%A7%86.py"
         },
         {
-            "key": "wzxxcz_7b394ac21dbf",
-            "name": "分享猎手",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E5%88%86%E4%BA%AB%E7%8C%8E%E6%89%8B.py"
-        },
-        {
             "key": "wzxxcz_9c107b1c2ba4",
             "name": "小鸡看看",
             "type": 3,
@@ -405,6 +399,12 @@
             "name": "悦听吧",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E6%82%A6%E5%90%AC%E5%90%A7.py"
+        },
+        {
+            "key": "wzxxcz_05219ac4d184",
+            "name": "网飞猫影视",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%BD%91%E9%A3%9E%E7%8C%AB%E5%BD%B1%E8%A7%86.py"
         },
         {
             "key": "wzxxcz_28479a5974ed",

@@ -252,7 +252,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
+_TVBOX_DROP_LINES = ["极速-在线播放", "秒播-在线播放"]
 _TVBOX_LINE_ORDER = ["索尼-在线播放", "量子-在线播放", "极速-在线播放", "秒播-在线播放"]
 
 def _tvbox_filter_lines(result, drop):

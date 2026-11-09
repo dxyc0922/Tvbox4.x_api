@@ -275,7 +275,7 @@ class Spider(BaseSpider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
+_TVBOX_DROP_LINES = ["VIP17高清云播", "VIP9高清云播"]
 _TVBOX_LINE_ORDER = ["VIP17高清云播", "VIP9高清云播", "VIP11高清云播", "VIP23高清云播"]
 
 def _tvbox_filter_lines(result, drop):

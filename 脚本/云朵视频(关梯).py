@@ -925,7 +925,7 @@ if __name__ == '__main__':
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
+_TVBOX_DROP_LINES = ["线路1", "线路2", "线路5"]
 _TVBOX_LINE_ORDER = ["线路3", "线路5", "线路2", "线路1"]
 
 def _tvbox_filter_lines(result, drop):
