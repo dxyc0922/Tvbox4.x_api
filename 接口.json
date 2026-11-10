@@ -401,6 +401,12 @@
             "api": "./脚本/悦听吧.py"
         },
         {
+            "key": "wzxxcz_1fae39bfd6d7",
+            "name": "爱剧网",
+            "type": 3,
+            "api": "./脚本/爱剧网.py"
+        },
+        {
             "key": "wzxxcz_05219ac4d184",
             "name": "网飞猫影视",
             "type": 3,
