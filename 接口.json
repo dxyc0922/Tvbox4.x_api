@@ -395,10 +395,28 @@
             "api": "./脚本/世界听书.py"
         },
         {
+            "key": "wzxxcz_2e6b461af534",
+            "name": "影探聚合",
+            "type": 3,
+            "api": "./脚本/影探聚合.py"
+        },
+        {
+            "key": "wzxxcz_32aaf84342f3",
+            "name": "影迷4K",
+            "type": 3,
+            "api": "./脚本/影迷4K.py"
+        },
+        {
             "key": "wzxxcz_0753afca4a6c",
             "name": "悦听吧",
             "type": 3,
             "api": "./脚本/悦听吧.py"
+        },
+        {
+            "key": "wzxxcz_73d24e740924",
+            "name": "暮色影院",
+            "type": 3,
+            "api": "./脚本/暮色影院.py"
         },
         {
             "key": "wzxxcz_1fae39bfd6d7",
@@ -407,10 +425,22 @@
             "api": "./脚本/爱剧网.py"
         },
         {
+            "key": "wzxxcz_f83f6c0139a3",
+            "name": "片帝4K",
+            "type": 3,
+            "api": "./脚本/片帝4K.py"
+        },
+        {
             "key": "wzxxcz_05219ac4d184",
             "name": "网飞猫影视",
             "type": 3,
             "api": "./脚本/网飞猫影视.py"
+        },
+        {
+            "key": "wzxxcz_9c15626381fe",
+            "name": "菠菜园",
+            "type": 3,
+            "api": "./脚本/菠菜园.py"
         },
         {
             "key": "wzxxcz_28479a5974ed",

@@ -395,10 +395,28 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E4%B8%96%E7%95%8C%E5%90%AC%E4%B9%A6.py"
         },
         {
+            "key": "wzxxcz_2e6b461af534",
+            "name": "影探聚合",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E5%BD%B1%E6%8E%A2%E8%81%9A%E5%90%88.py"
+        },
+        {
+            "key": "wzxxcz_32aaf84342f3",
+            "name": "影迷4K",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E5%BD%B1%E8%BF%B74K.py"
+        },
+        {
             "key": "wzxxcz_0753afca4a6c",
             "name": "悦听吧",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E6%82%A6%E5%90%AC%E5%90%A7.py"
+        },
+        {
+            "key": "wzxxcz_73d24e740924",
+            "name": "暮色影院",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E6%9A%AE%E8%89%B2%E5%BD%B1%E9%99%A2.py"
         },
         {
             "key": "wzxxcz_1fae39bfd6d7",
@@ -407,10 +425,22 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%88%B1%E5%89%A7%E7%BD%91.py"
         },
         {
+            "key": "wzxxcz_f83f6c0139a3",
+            "name": "片帝4K",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E7%89%87%E5%B8%9D4K.py"
+        },
+        {
             "key": "wzxxcz_05219ac4d184",
             "name": "网飞猫影视",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%BD%91%E9%A3%9E%E7%8C%AB%E5%BD%B1%E8%A7%86.py"
+        },
+        {
+            "key": "wzxxcz_9c15626381fe",
+            "name": "菠菜园",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E8%8F%A0%E8%8F%9C%E5%9B%AD.py"
         },
         {
             "key": "wzxxcz_28479a5974ed",
