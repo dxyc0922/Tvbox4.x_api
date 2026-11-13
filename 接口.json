@@ -215,12 +215,6 @@
             "api": "./脚本/热播.py"
         },
         {
-            "key": "wzxxcz_63cc7ccfec95",
-            "name": "云朵视频(关梯)",
-            "type": 3,
-            "api": "./脚本/云朵视频(关梯).py"
-        },
-        {
             "key": "wzxxcz_c5e1234c063f",
             "name": "麻花影视",
             "type": 3,
@@ -377,12 +371,6 @@
             "api": "./脚本/开端影视.py"
         },
         {
-            "key": "wzxxcz_7af6ff43efff",
-            "name": "爱听音乐",
-            "type": 3,
-            "api": "./脚本/爱听音乐.py"
-        },
-        {
             "key": "wzxxcz_f897755e5f3c",
             "name": "music_dl",
             "type": 3,
@@ -393,6 +381,12 @@
             "name": "世界听书",
             "type": 3,
             "api": "./脚本/世界听书.py"
+        },
+        {
+            "key": "wzxxcz_8e9379b26b1a",
+            "name": "云朵视频",
+            "type": 3,
+            "api": "./脚本/云朵视频.py"
         },
         {
             "key": "wzxxcz_2e6b461af534",

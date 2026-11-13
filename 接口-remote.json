@@ -215,12 +215,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/zzq1234567890/tvbox1/main/py/%E7%83%AD%E6%92%AD.py"
         },
         {
-            "key": "wzxxcz_63cc7ccfec95",
-            "name": "云朵视频(关梯)",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E4%BA%91%E6%9C%B5%E8%A7%86%E9%A2%91%28%E5%85%B3%E6%A2%AF%29.py"
-        },
-        {
             "key": "wzxxcz_c5e1234c063f",
             "name": "麻花影视",
             "type": 3,
@@ -377,12 +371,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E5%BC%80%E7%AB%AF%E5%BD%B1%E8%A7%86.py"
         },
         {
-            "key": "wzxxcz_7af6ff43efff",
-            "name": "爱听音乐",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%88%B1%E5%90%AC%E9%9F%B3%E4%B9%90.py"
-        },
-        {
             "key": "wzxxcz_f897755e5f3c",
             "name": "music_dl",
             "type": 3,
@@ -393,6 +381,12 @@
             "name": "世界听书",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E4%B8%96%E7%95%8C%E5%90%AC%E4%B9%A6.py"
+        },
+        {
+            "key": "wzxxcz_8e9379b26b1a",
+            "name": "云朵视频",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E4%BA%91%E6%9C%B5%E8%A7%86%E9%A2%91.py"
         },
         {
             "key": "wzxxcz_2e6b461af534",
