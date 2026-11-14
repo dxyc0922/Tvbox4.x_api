@@ -371,6 +371,12 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E5%BC%80%E7%AB%AF%E5%BD%B1%E8%A7%86.py"
         },
         {
+            "key": "wzxxcz_7af6ff43efff",
+            "name": "爱听音乐",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%88%B1%E5%90%AC%E9%9F%B3%E4%B9%90.py"
+        },
+        {
             "key": "wzxxcz_f897755e5f3c",
             "name": "music_dl",
             "type": 3,
@@ -389,6 +395,12 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E4%BA%91%E6%9C%B5%E8%A7%86%E9%A2%91.py"
         },
         {
+            "key": "wzxxcz_3fffd6089bb4",
+            "name": "南瓜",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/zzq1234567890/tvbox1/main/py/%E5%8D%97%E7%93%9C.py"
+        },
+        {
             "key": "wzxxcz_2e6b461af534",
             "name": "影探聚合",
             "type": 3,
@@ -405,6 +417,12 @@
             "name": "悦听吧",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E6%82%A6%E5%90%AC%E5%90%A7.py"
+        },
+        {
+            "key": "wzxxcz_1f4d051b258c",
+            "name": "懂片",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E6%87%82%E7%89%87.py"
         },
         {
             "key": "wzxxcz_73d24e740924",
