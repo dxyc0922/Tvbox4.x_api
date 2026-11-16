@@ -29,12 +29,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E5%88%86%E4%BA%AB%E8%80%85%E5%8D%8E%E8%B0%8A.py"
         },
         {
-            "key": "wzxxcz_58a8da623293",
-            "name": "华谊影视",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%8D%8E%E8%B0%8A%E5%BD%B1%E8%A7%86.py"
-        },
-        {
             "key": "wzxxcz_fdf9a3930b9b",
             "name": "分享者小苹果",
             "type": 3,
@@ -203,12 +197,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E4%B8%80%E8%B5%B7%E7%9C%8B.py"
         },
         {
-            "key": "wzxxcz_7b394ac21dbf",
-            "name": "分享猎手",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E5%88%86%E4%BA%AB%E7%8C%8E%E6%89%8B.py"
-        },
-        {
             "key": "wzxxcz_b91c700aaf47",
             "name": "奇优影院",
             "type": 3,
@@ -365,6 +353,12 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%87%87%E9%9B%86%E8%81%9A%E5%90%88.py"
         },
         {
+            "key": "wzxxcz_b5503e1a86e1",
+            "name": "ZIP0影视",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/ZIP0%E5%BD%B1%E8%A7%86.py"
+        },
+        {
             "key": "wzxxcz_a7e07c2876fc",
             "name": "开端影视",
             "type": 3,
@@ -383,6 +377,12 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E4%B8%96%E7%95%8C%E5%90%AC%E4%B9%A6.py"
         },
         {
+            "key": "wzxxcz_88e47b655247",
+            "name": "OK看剧网",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/OK%E7%9C%8B%E5%89%A7%E7%BD%91.py"
+        },
+        {
             "key": "wzxxcz_f897755e5f3c",
             "name": "music_dl",
             "type": 3,
@@ -393,6 +393,12 @@
             "name": "悦听吧",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E6%82%A6%E5%90%AC%E5%90%A7.py"
+        },
+        {
+            "key": "wzxxcz_322dcdc28bf8",
+            "name": "豆播AI",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E8%B1%86%E6%92%ADAI.py"
         },
         {
             "key": "wzxxcz_28479a5974ed",

@@ -29,12 +29,6 @@
             "api": "./脚本/分享者华谊.py"
         },
         {
-            "key": "wzxxcz_58a8da623293",
-            "name": "华谊影视",
-            "type": 3,
-            "api": "./脚本/华谊影视.py"
-        },
-        {
             "key": "wzxxcz_fdf9a3930b9b",
             "name": "分享者小苹果",
             "type": 3,
@@ -203,12 +197,6 @@
             "api": "./脚本/一起看.py"
         },
         {
-            "key": "wzxxcz_7b394ac21dbf",
-            "name": "分享猎手",
-            "type": 3,
-            "api": "./脚本/分享猎手.py"
-        },
-        {
             "key": "wzxxcz_b91c700aaf47",
             "name": "奇优影院",
             "type": 3,
@@ -365,6 +353,12 @@
             "api": "./脚本/采集聚合.py"
         },
         {
+            "key": "wzxxcz_b5503e1a86e1",
+            "name": "ZIP0影视",
+            "type": 3,
+            "api": "./脚本/ZIP0影视.py"
+        },
+        {
             "key": "wzxxcz_a7e07c2876fc",
             "name": "开端影视",
             "type": 3,
@@ -383,6 +377,12 @@
             "api": "./脚本/世界听书.py"
         },
         {
+            "key": "wzxxcz_88e47b655247",
+            "name": "OK看剧网",
+            "type": 3,
+            "api": "./脚本/OK看剧网.py"
+        },
+        {
             "key": "wzxxcz_f897755e5f3c",
             "name": "music_dl",
             "type": 3,
@@ -393,6 +393,12 @@
             "name": "悦听吧",
             "type": 3,
             "api": "./脚本/悦听吧.py"
+        },
+        {
+            "key": "wzxxcz_322dcdc28bf8",
+            "name": "豆播AI",
+            "type": 3,
+            "api": "./脚本/豆播AI.py"
         },
         {
             "key": "wzxxcz_28479a5974ed",
