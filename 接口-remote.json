@@ -182,7 +182,7 @@
             "key": "wzxxcz_debace9449e1",
             "name": "洛雪TV",
             "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E6%B4%9B%E9%9B%AATV.py"
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/zzq1234567890/tvbox1/main/py/%E6%B4%9B%E9%9B%AATV.py"
         },
         {
             "key": "wzxxcz_8580dbe77199",
@@ -405,6 +405,12 @@
             "name": "酷我音乐",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%85%B7%E6%88%91%E9%9F%B3%E4%B9%90.py"
+        },
+        {
+            "key": "wzxxcz_1b2c93bb9dfb",
+            "name": "飞龙影院",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%A3%9E%E9%BE%99%E5%BD%B1%E9%99%A2.py"
         }
     ],
     "lives": [

@@ -405,6 +405,12 @@
             "name": "酷我音乐",
             "type": 3,
             "api": "./脚本/酷我音乐.py"
+        },
+        {
+            "key": "wzxxcz_1b2c93bb9dfb",
+            "name": "飞龙影院",
+            "type": 3,
+            "api": "./脚本/飞龙影院.py"
         }
     ],
     "lives": [
