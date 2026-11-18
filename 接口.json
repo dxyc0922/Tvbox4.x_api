@@ -113,12 +113,6 @@
             "api": "./脚本/网飞猫影视.py"
         },
         {
-            "key": "wzxxcz_96e2fb06482b",
-            "name": "草莓影视",
-            "type": 3,
-            "api": "./脚本/草莓影视.py"
-        },
-        {
             "key": "wzxxcz_32676b0d47ec",
             "name": "看客TV",
             "type": 3,
@@ -237,12 +231,6 @@
             "name": "大马猴影视",
             "type": 3,
             "api": "./脚本/大马猴影视.py"
-        },
-        {
-            "key": "wzxxcz_f98fdbedc2c8",
-            "name": "量子资源网",
-            "type": 3,
-            "api": "./脚本/量子资源网.py"
         },
         {
             "key": "wzxxcz_32a0326da571",
@@ -399,6 +387,12 @@
             "name": "豆播AI",
             "type": 3,
             "api": "./脚本/豆播AI.py"
+        },
+        {
+            "key": "wzxxcz_6fcb4bc3d31c",
+            "name": "追影猫",
+            "type": 3,
+            "api": "./脚本/追影猫.py"
         },
         {
             "key": "wzxxcz_28479a5974ed",

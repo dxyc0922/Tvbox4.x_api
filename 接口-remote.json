@@ -113,12 +113,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E7%BD%91%E9%A3%9E%E7%8C%AB%E5%BD%B1%E8%A7%86.py"
         },
         {
-            "key": "wzxxcz_96e2fb06482b",
-            "name": "草莓影视",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E8%8D%89%E8%8E%93%E5%BD%B1%E8%A7%86.py"
-        },
-        {
             "key": "wzxxcz_32676b0d47ec",
             "name": "看客TV",
             "type": 3,
@@ -237,12 +231,6 @@
             "name": "大马猴影视",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%A4%A7%E9%A9%AC%E7%8C%B4%E5%BD%B1%E8%A7%86.py"
-        },
-        {
-            "key": "wzxxcz_f98fdbedc2c8",
-            "name": "量子资源网",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E9%87%8F%E5%AD%90%E8%B5%84%E6%BA%90%E7%BD%91.py"
         },
         {
             "key": "wzxxcz_32a0326da571",
@@ -399,6 +387,12 @@
             "name": "豆播AI",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/maoystv/6/main/PY/%E8%B1%86%E6%92%ADAI.py"
+        },
+        {
+            "key": "wzxxcz_6fcb4bc3d31c",
+            "name": "追影猫",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E8%BF%BD%E5%BD%B1%E7%8C%AB.py"
         },
         {
             "key": "wzxxcz_28479a5974ed",
