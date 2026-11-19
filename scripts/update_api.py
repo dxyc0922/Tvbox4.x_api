@@ -40,18 +40,20 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import stream_check  # noqa: E402  # grade_of 按画质+速度重算等级
+import resource_station  # noqa: E402  # 资源站（采集站）线路检测：基本是低质源
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = ROOT / "scripts" / "config.json"
 
-# 按分辨率（短边）定最低码率，单位 kbps。阈值取在实测数据的空档里：
+# 按分辨率定最低码率，单位 kbps。阈值取在实测数据的空档里：
 # 按分辨率返回「最低达标码率」档位表。
-# 键 = **长边（宽）**，与画质分级（grade_of 用长边判档）一致：
-#   3840 = 4K 宽、2560 = 1440p 宽、1920 = 1080p 宽、1280 = 720p 宽、
-#   854 = 480p 宽、640 = 360p 宽。
-# 用长边而非短边/垂直高度：2.35:1 电影（1280x544）长边 1280 是 720p 类，
-# 短边 544 会误判成 480p（只要求 600kbps，1831kbps 虚高达标）；
-# 竖屏短剧（720x1280）长边 1280 是 720p 类，垂直高度会误判成 1440p。
+# 键 = **长边（max(宽,高)）**，决定码率门槛（码率需求随像素数/数据量增长）：
+#   3840 = 4K、2560 = 1440p、1920 = 1080p、1280 = 720p、854 = 480p、640 = 360p。
+# 用长边而非短边：2.35:1 电影（1280x544）长边 1280 属 720p 类（69.6 万像素），
+# 短边 544 会误判成 480p 档（只要求 1000kbps，1831kbps 虚高达标）；
+# 竖屏短剧（720x1280）长边 1280 属 720p 类，按垂直高度会误判成 1440p 档。
+# 注意：码率门槛看长边/像素数，与画质分级 grade_of 的**短边**清晰度判档是两个
+# 维度——清晰度看短边（1920x1080=1080p），码率看数据量，两者不矛盾。
 # 值 = 「好画质」最低线（用户实测 1280x544@1831 不达标，故 1280 宽档 ≥2000）。
 # 再叠加 min_bpp（每像素密度）挡「1080p 但码率低」的廉价转码。
 DEFAULT_BITRATE_THRESHOLDS: dict[str, int] = {
@@ -269,7 +271,7 @@ class ProbeResult:
 class ScriptResult:
     filename: str
     name: str
-    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / functional_fail / low_quality / low_bitrate / slow_stream
+    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / functional_fail / low_quality / low_bitrate / slow_stream / resource_station
     hosts: list[str] = field(default_factory=list)
     tier: str = ""
     checked_host: str | None = None
@@ -1627,7 +1629,10 @@ def speed_verdict(
 LINE_FILTER_MARKER = "# ---- TVBox 本地线路过滤（自动生成，勿改） ----"
 
 # 两振出局：源要连续两轮被判「要剔除」才真剔除；第一轮保留（strike1）。
-HISTORY_REMOVE_STATUSES = {"low_quality", "low_bitrate", "slow_stream"}
+# 源级剔除状态：命中即剔除（立即生效，不走两振）。
+# 资源站（resource_station）是结构性属性——线路的 CDN/名字固定，不像速度会抖动，
+# 一轮就能确定，且项目定位是「剔除低质源」，严格过滤立即剔。
+HISTORY_REMOVE_STATUSES = {"low_quality", "low_bitrate", "slow_stream", "resource_station"}
 HISTORY_MAX_ROUNDS = 8
 
 
@@ -1964,6 +1969,9 @@ def write_local_spiders(
     thresholds.update(quality_cfg.get("bitrate_thresholds") or {})
     bitrate_allow = {str(n) for n in (quality_cfg.get("bitrate_allow") or [])}
     speed_allow = {str(n) for n in (quality_cfg.get("speed_allow") or [])}
+    zs_cfg = quality_cfg.get("resource_station") or {}
+    zs_drop_lines = bool(zs_cfg.get("enabled")) and bool(zs_cfg.get("drop_lines"))
+    zs_allow = {str(name) for name in (zs_cfg.get("allow") or [])}
     prev_low = prev_low or set()
     prev_dead = prev_dead or set()
 
@@ -2001,6 +2009,76 @@ def write_local_spiders(
             new_dead |= {f"{filename}::{f}" for f in dead_flags}
             for flag, reason in auto.items():
                 drops.setdefault(flag, reason)
+            # 资源站（采集站）线路剔除：混合源剔掉资源站线路、留自有线路。
+            # 纯资源站源已在源级被剔（status=resource_station），不会走到这里；
+            # 这里再加一道护栏：剔完不能把所有视频线路都删空（保留最优一条）。
+            if zs_drop_lines and filename not in zs_allow:
+                zs_cls = resource_station.classify_source(
+                    (quality_map.get(filename) or {}).get("line_streams") or []
+                )
+                zs_flags = {f for f in zs_cls["z_flags"] if f}
+                video_flags = {f for f in zs_cls["video_flags"] if f}
+                remaining = video_flags - zs_flags
+                if zs_flags and remaining:
+                    for flag in sorted(zs_flags):
+                        drops.setdefault(flag, "资源站线路")
+            # 不剔空源（通用护栏）：上面三套检查（码率/速度/资源站）各自为政，
+            # 可能把同源线路全删空（如猎手.py：暴风/魔都/索尼被码率剔、天堂线路被
+            # 资源站剔，4 条全没了）。删空源等于给 TVBox 一个打不开的空源，比留一条
+            # 低质线路更差。故全部命中时优先保留最优**自有线路**（严格过滤：资源站
+            # 线路是低质源，不该被优先留）；确实只剩资源站线路时兜底保留最优一条。
+            # 「所有线路都是资源站」的纯聚合源已在源级被剔（status=resource_station），
+            # 不会走到这里。
+            entries_all = (quality_map.get(filename) or {}).get("line_streams") or []
+            all_flags = {
+                str(e.get("flag") or "").strip()
+                for e in entries_all
+                if str(e.get("flag") or "").strip()
+            }
+            if all_flags and all(f in drops for f in all_flags):
+                zs_flags_now = {
+                    str(e.get("flag") or "").strip()
+                    for e in entries_all
+                    if str(e.get("flag") or "").strip()
+                    and resource_station.match_resource_station(
+                        str(e.get("url") or ""), str(e.get("flag") or "")
+                    )
+                }
+
+                def _best(pool: list[dict[str, Any]]) -> str:
+                    if not pool:
+                        return ""
+                    return str(
+                        max(
+                            pool,
+                            key=lambda e: (
+                                int(
+                                    (e.get("stream") or {}).get("status") or 0
+                                ) < 400,
+                                int(
+                                    (e.get("stream") or {}).get("bitrate_kbps") or 0
+                                ),
+                            ),
+                        ).get("flag")
+                        or ""
+                    ).strip()
+
+                own_pool = [
+                    e for e in entries_all
+                    if str(e.get("flag") or "").strip() not in zs_flags_now
+                ]
+                zs_pool = [
+                    e for e in entries_all if str(e.get("flag") or "").strip() in zs_flags_now
+                ]
+                best_flag = _best(own_pool) or _best(zs_pool)
+                if best_flag in drops:
+                    reason = drops.pop(best_flag)
+                    new_low.discard(f"{filename}::{best_flag}")
+                    origin = "自有线路" if own_pool else "资源站线路（兜底）"
+                    print(
+                        f"    {filename}: 线路全被剔（{reason}），"
+                        f"保留最优{origin} {best_flag}（不剔空源）"
+                    )
         pruned[filename] = drops
         # 检测到 4xx/5xx 但未自动剔除的线路（单集 token 可能过期，不代表整条线路死），
         # 列出来提示用户确认；确认死了再加进 line_prune.blacklist。
@@ -2156,6 +2234,7 @@ def build_report(
             "low_quality": counts.get("low_quality", 0),
             "low_bitrate": counts.get("low_bitrate", 0),
             "slow_stream": counts.get("slow_stream", 0),
+            "resource_station": counts.get("resource_station", 0),
             "with_quality": sum(1 for result in results if result.quality),
             "grade_a": grades.get("A", 0),
             "grade_b": grades.get("B", 0),
@@ -2413,6 +2492,12 @@ def main(argv: list[str] | None = None) -> int:
         speed_allow = {
             str(name) for name in (quality_cfg.get("speed_allow") or [])
         }
+        # 资源站（采集站）线路过滤：资源站线路基本是低质源，严格过滤剔除。
+        zs_cfg = quality_cfg.get("resource_station") or {}
+        zs_enabled = bool(zs_cfg.get("enabled"))
+        zs_drop_pure = bool(zs_cfg.get("drop_pure_source"))
+        zs_drop_lines = bool(zs_cfg.get("drop_lines"))
+        zs_allow = {str(name) for name in (zs_cfg.get("allow") or [])}
         grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
         adult_hits: list[tuple[str, list[str]]] = []
         for result in results:
@@ -2503,6 +2588,20 @@ def main(argv: list[str] | None = None) -> int:
                         for item in verdict["lines"]
                     )
                     result.error = f"所有线路加载慢（{detail}）"
+            # 资源站（采集站）线路过滤：项目定位是「剔除低质源」，资源站线路
+            # 内容来自第三方采集站聚合，质量不可控（转码/压缩/失效），基本是低质源。
+            # 纯资源站源（所有视频线路都是资源站）→ 整源剔除；混合源 → 只剔资源站线路。
+            if zs_enabled and result.status == "valid" and result.filename not in zs_allow:
+                zs_cls = resource_station.classify_source(
+                    quality.get("line_streams") or []
+                )
+                quality["resource_station"] = zs_cls
+                if zs_drop_pure and zs_cls["pure"]:
+                    result.status = "resource_station"
+                    result.error = (
+                        f"资源站聚合源（{zs_cls['n_z']}/{zs_cls['n_video']} 条视频线路"
+                        f"全是资源站：{'、'.join(zs_cls['z_flags'][:6])}）"
+                    )
         scores = Counter(
             int(result.quality.get("score") or 0)
             for result in results
@@ -2552,6 +2651,17 @@ def main(argv: list[str] | None = None) -> int:
             )
             for result in slow_stream[:10]:
                 print(f"  - {result.filename}: {result.error}")
+        if zs_enabled:
+            zs_dropped = [
+                result for result in results if result.status == "resource_station"
+            ]
+            if zs_dropped:
+                print(
+                    f"资源站过滤: 剔除 {len(zs_dropped)} 个"
+                    "（所有视频线路都是资源站/采集站聚合线路，基本是低质源）"
+                )
+                for result in zs_dropped[:20]:
+                    print(f"  - {result.filename}: {result.error}")
 
     # 质量剔除：min_grade/drop_unverified/码率/速度过滤立即生效，不留两振缓冲。
     if not args.dry_run:
@@ -2629,7 +2739,8 @@ def main(argv: list[str] | None = None) -> int:
         f"成人剔除 {counts.get('excluded_adult', 0)}，"
         f"功能门槛未过 {counts.get('functional_fail', 0)}，"
         f"码率剔除 {counts.get('low_bitrate', 0)}，"
-        f"慢速剔除 {counts.get('slow_stream', 0)}"
+        f"慢速剔除 {counts.get('slow_stream', 0)}，"
+        f"资源站剔除 {counts.get('resource_station', 0)}"
     )
     print(
         f"生成站点: {len(entries)}（同名/排除跳过 {len(skipped)}），"

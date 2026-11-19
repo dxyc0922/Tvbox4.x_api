@@ -102,6 +102,12 @@
             "enabled": true,
             "dead_status_min": 0,
             "blacklist": {}
+        },
+        "resource_station": {
+            "enabled": true,
+            "drop_pure_source": true,
+            "drop_lines": true,
+            "allow": []
         }
     },
     "local_spider_dir": "脚本",
