@@ -302,8 +302,8 @@ class Spider(BaseSpider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["八戒", "无尽", "闪电"]
-_TVBOX_LINE_ORDER = ["闪电", "八戒", "红牛", "无尽"]
+_TVBOX_DROP_LINES = ["乐播", "红牛"]
+_TVBOX_LINE_ORDER = ["乐播", "红牛", "爱看"]
 
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):
