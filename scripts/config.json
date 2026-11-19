@@ -1,135 +1,148 @@
 {
-    "upstream": [
-        {
-            "owner": "wzxxcz",
-            "repo": "wzxxcz",
-            "branch": "maing",
-            "path": "py"
-        },
-        {
-            "owner": "zzq1234567890",
-            "repo": "tvbox1",
-            "branch": "main",
-            "path": "py"
-        },
-        {
-            "owner": "jak0099",
-            "repo": "dr",
-            "branch": "master",
-            "path": "py"
-        },
-        {
-            "owner": "maoystv",
-            "repo": "6",
-            "branch": "main",
-            "path": "PY"
-        }
-    ],
-    "output": "接口.json",
-    "accelerators": [
-        "https://gh-proxy.com/",
-        "https://ghfast.top/",
-        "https://gh-proxy.net/",
-        "https://ghproxy.net/",
-        "https://gh.ddlc.top/"
-    ],
-    "self_repo": {
-        "owner": "dxyc0922",
-        "repo": "Tvbox4.x_api",
-        "branch": "main"
+  "upstream": [
+    {
+      "owner": "wzxxcz",
+      "repo": "wzxxcz",
+      "branch": "maing",
+      "path": "py"
     },
-    "jsm_sync": {
-        "enabled": true,
-        "url": "{accelerator}https://raw.githubusercontent.com/qist/tvbox/master/jsm.json",
-        "fields": [
-            "hosts",
-            "doh",
-            "rules",
-            "ads"
-        ]
+    {
+      "owner": "zzq1234567890",
+      "repo": "tvbox1",
+      "branch": "main",
+      "path": "py"
     },
-    "auto_key_prefix": "wzxxcz_",
-    "preserve_api_prefixes": [
-        "./"
-    ],
-    "preserve_non_http": true,
-    "exclude_scripts": [],
-    "exclude_names": [],
-    "filters": {
-        "require_spider_class": true,
-        "dedupe_identical_scripts": true,
-        "exclude_adult": true,
-        "adult_keywords": [],
-        "adult_title_keywords": [],
-        "adult_allow": [],
-        "ad_hosts": []
+    {
+      "owner": "jak0099",
+      "repo": "dr",
+      "branch": "master",
+      "path": "py"
     },
-    "functional": {
-        "enabled": true,
-        "report": "reports/functional-report.json",
-        "min_score": 0,
-        "keyword": "庆余年",
-        "keywords": ["庆余年", "斗罗大陆", "流浪地球"],
-        "prefer_keywords": ["仙逆"],
-        "adult_probe_keywords": [
-            "麻豆传媒",
-            "被家长调教的女教师"
-        ],
-        "timeout": 30,
-        "workers": 12,
-        "stream_workers": 12
-    },
-    "quality": {
-        "min_grade": "B",
-        "drop_unverified": true,
-        "dynamic_grade_thresholds": false,
-        "min_bitrate_kbps": 800,
-        "min_bpp": 0.05,
-        "min_speed_ratio": 0.7,
-        "max_startup_ms": 12000,
-        "bitrate_thresholds": {
-            "3840": 6000,
-            "2560": 3500,
-            "1920": 2000,
-            "1280": 2000,
-            "854": 1000,
-            "640": 700
-        },
-        "max_lines": 4,
-        "bitrate_allow": [],
-        "speed_allow": [],
-        "line_prune": {
-            "enabled": true,
-            "dead_status_min": 0,
-            "blacklist": {}
-        },
-        "resource_station": {
-            "enabled": true,
-            "drop_pure_source": true,
-            "drop_lines": true,
-            "allow": []
-        }
-    },
-    "local_spider_dir": "脚本",
-    "safety": {
-        "min_previous_ratio": 0.5,
-        "max_download_failure_ratio": 0.2
-    },
-    "request": {
-        "timeout": 10,
-        "retries": 1,
-        "workers": 20,
-        "download_workers": 12,
-        "accept_4xx": true,
-        "accept_5xx": false,
-        "max_hosts_per_script": 8,
-        "max_fallback_hosts": 3
-    },
-    "notify": {
-        "webhook": "",
-        "telegram": {
-            "bot_token": "",
-            "chat_id": ""
-        }
+    {
+      "owner": "maoystv",
+      "repo": "6",
+      "branch": "main",
+      "path": "PY"
     }
+  ],
+  "output": "接口.json",
+  "accelerators": [
+    "https://gh-proxy.com/",
+    "https://ghfast.top/",
+    "https://gh-proxy.net/",
+    "https://ghproxy.net/",
+    "https://gh.ddlc.top/"
+  ],
+  "self_repo": {
+    "owner": "dxyc0922",
+    "repo": "Tvbox4.x_api",
+    "branch": "main"
+  },
+  "jsm_sync": {
+    "enabled": true,
+    "url": "{accelerator}https://raw.githubusercontent.com/qist/tvbox/master/jsm.json",
+    "fields": [
+      "hosts",
+      "doh",
+      "rules",
+      "ads"
+    ]
+  },
+  "auto_key_prefix": "wzxxcz_",
+  "preserve_api_prefixes": [
+    "./"
+  ],
+  "preserve_non_http": true,
+  "exclude_scripts": [],
+  "exclude_names": [],
+  "filters": {
+    "require_spider_class": true,
+    "dedupe_identical_scripts": true,
+    "exclude_adult": true,
+    "adult_keywords": [],
+    "adult_title_keywords": [],
+    "adult_allow": [],
+    "ad_hosts": []
+  },
+  "functional": {
+    "enabled": true,
+    "report": "reports/functional-report.json",
+    "min_score": 0,
+    "keyword": "庆余年",
+    "keywords": [
+      "庆余年",
+      "斗罗大陆",
+      "流浪地球"
+    ],
+    "prefer_keywords": [
+      "仙逆"
+    ],
+    "adult_probe_keywords": [
+      "麻豆传媒",
+      "被家长调教的女教师"
+    ],
+    "timeout": 30,
+    "workers": 12,
+    "stream_workers": 12
+  },
+  "quality": {
+    "min_grade": "B",
+    "drop_unverified": true,
+    "dynamic_grade_thresholds": false,
+    "min_bitrate_kbps": 800,
+    "min_bpp": 0.05,
+    "min_speed_ratio": 0.7,
+    "max_startup_ms": 12000,
+    "bitrate_thresholds": {
+      "3840": 6000,
+      "2560": 3500,
+      "1920": 2000,
+      "1280": 2000,
+      "854": 1000,
+      "640": 700
+    },
+    "max_lines": 4,
+    "bitrate_allow": [],
+    "speed_allow": [],
+    "line_prune": {
+      "enabled": true,
+      "dead_status_min": 0,
+      "blacklist": {
+        "猎手.py": [
+          "高清-官方线路B",
+          "高清-官方线路D",
+          "尊享4k",
+          "1080P-官方Y"
+        ]
+      }
+    },
+    "resource_station": {
+      "enabled": true,
+      "drop_pure_source": true,
+      "drop_lines": true,
+      "allow": []
+    }
+  },
+  "local_spider_dir": "脚本",
+  "safety": {
+    "min_previous_ratio": 0.5,
+    "max_download_failure_ratio": 0.2
+  },
+  "request": {
+    "timeout": 10,
+    "retries": 1,
+    "workers": 20,
+    "download_workers": 12,
+    "accept_4xx": true,
+    "accept_5xx": false,
+    "max_hosts_per_script": 8,
+    "max_fallback_hosts": 3
+  },
+  "notify": {
+    "webhook": "",
+    "telegram": {
+      "bot_token": "",
+      "chat_id": ""
+    }
+  }
 }
