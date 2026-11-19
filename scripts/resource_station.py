@@ -31,8 +31,9 @@ ZY_API_RE = re.compile(
 )
 
 # --- 2) 资源站播放 CDN host 特征（按资源站名拼音）---
-# 只收录命名明确的资源站 CDN；混淆域名（qqqrst / rstu6 / ppqrrs / hhuus 等）不收录，
-# 避免把非资源站线路误判（宁可漏判也不错判，签名表可配置扩展）。
+# 只收录命名明确的资源站 CDN。少数混淆域名在用户确认归属后才收录（rstu6=索尼）；
+# 其余仍不收录（qqqrst / ppqrrs / hhuus 等），避免把非资源站线路误判。
+# 签名表可配置扩展（宁可漏判也不错判）。
 ZY_CDN_PATTERNS: tuple[str, ...] = (
     "ffzy", "feifei",        # 非凡资源
     "yzzy", "cdnlz", "lzzy",  # 量子资源（lz=量子）/ 最大资源
@@ -48,6 +49,7 @@ ZY_CDN_PATTERNS: tuple[str, ...] = (
     "gsuus", "guangsuzy",    # 光速资源
     "maowushi",              # 猫屋资源
     "ukuzi", "niuniuzy",     # uku / 牛牛资源
+    "rstu6",                 # 索尼（混淆域名，用户确认归属）
 )
 # 只要求**左边界**（host 开头或 `.`/`-` 之后）：资源站 CDN 常带数字后缀
 # （rrcdnbf6 / yzzy31 / fengbao13 / modujx10 / cdnlz14 / ruiplay18），若也要求右
@@ -66,6 +68,7 @@ ZY_FLAG_KEYWORDS: tuple[str, ...] = (
     "量子", "非凡", "暴风", "魔都", "极速", "最大", "蜗牛", "影库",
     "红牛", "新浪", "光速", "如意", "卧龙", "无界", "人尽", "牛牛",
     "猫屋", "电影天堂", "天堂", "360", "1080", "4K资源",
+    "索尼",
 )
 # 两字母资源站缩写（LZ=量子 FF=非凡 BF=暴风 YZ=云智 DY=DYTT），只匹配「缩写+线路/线」
 # 组合，避免 OFF / FFF 之类误报。
