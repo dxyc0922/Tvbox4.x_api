@@ -130,6 +130,26 @@ c = rs.classify_source(
 check("音频源 n_video=0 pure=False", c["n_video"] == 0 and c["pure"] is False)
 check("空线路 pure=False", rs.classify_source([])["pure"] is False)
 
+print("\n=== kind=unknown（采样超时）按 CDN 证据判定 ===")
+unknown_lines = [
+    {"flag": "超清线路", "url": "https://s1.fengbao9.com/a.m3u8",
+     "stream": {"kind": "unknown"}},  # 采样超时，CDN 是暴风资源
+    {"flag": "天堂线路", "url": "https://play.phimgood.com/a.m3u8",
+     "stream": {"kind": "unknown"}},  # 采样超时，CDN 是电影天堂
+    {"flag": "普通线路", "url": "https://cdn.example.com/a.m3u8",
+     "stream": {"kind": "unknown"}},  # 无 CDN 证据 → 不算
+]
+c = rs.classify_source(unknown_lines)
+check("CDN 证据命中超清线路/天堂线路",
+      "超清线路" in c["z_flags"] and "天堂线路" in c["z_flags"])
+check("无证据的 unknown 不命中", "普通线路" not in c["z_flags"])
+check("unknown 不计入 n_video", c["n_video"] == 0)
+c = rs.classify_source([
+    {"flag": "无损资源", "url": "https://music.example.com/a.mp3",
+     "stream": {"kind": "audio"}},
+])
+check("kind=audio 不判资源站", "无损资源" not in c["z_flags"])
+
 # --- 5) declared_flags：采样只看前 4 条时的整源判定 ---
 print("\n=== declared_flags：整源判定看全部声明线路 ===")
 # 声明 24 条，其中混有自有线路 → 不能判纯（否则把混合源误剔）。

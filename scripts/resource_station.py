@@ -191,17 +191,25 @@ def classify_source(
     for entry in entries:
         stream = entry.get("stream") or {}
         kind = str(stream.get("kind") or "")
-        if kind and kind not in kinds:
+        flag = str(entry.get("flag") or "").strip()
+        url = str(entry.get("url") or "")
+        sig = match_resource_station(url, flag)
+        if kind and kind not in kinds and kind != "unknown":
+            # 明确非视频（audio）：不判资源站。
             continue
-        if not kind:
-            # kind 未知（未测出）：不统计，避免把未验证线路算成视频线路。
+        if not kind or kind == "unknown":
+            # kind 未知（如线路采样时连接超时）：仍可用 URL/CDN 证据判定。
+            # 猎手.py「超清线路」采样超时 kind=unknown，但 CDN 是 s1.fengbao9.com
+            # （暴风资源），此前被跳过导致漏剔。只认 URL 证据（CDN/API），
+            # 不认名称——名字叫「资源」的未验证线路可能是音频。
+            if sig.startswith("资源站CDN") or sig == "采集站API":
+                n_z += 1
+                if flag:
+                    z_flags.append(flag)
+                detail.append((flag, sig))
             continue
         n_video += 1
-        flag = str(entry.get("flag") or "").strip()
         video_flags.append(flag)
-        sig = match_resource_station(
-            str(entry.get("url") or ""), flag
-        )
         if sig:
             n_z += 1
             if flag:
