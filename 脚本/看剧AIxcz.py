@@ -879,7 +879,7 @@ _TVBOX_DROP_LINES = ["360资源", "U酷资源", "ikun资源", "iqiyi资源", "�
 _TVBOX_LINE_ORDER = ["豆瓣资源", "豪华资源", "极速资源", "魔都资源"]
 
 _TVBOX_ZY_ENABLED = True
-_TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6"]
+_TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8"]
 _TVBOX_ZY_API = "/api\\.php/(provide|providedown)|/inc/api_mac|provide/vod|providedown/vod"
 
 def _tvbox_is_zy_url(url):
@@ -887,15 +887,26 @@ def _tvbox_is_zy_url(url):
     u = str(url or '')
     if re.search(_TVBOX_ZY_API, u, re.I):
         return True
-    try:
-        h = (urllib.parse.urlparse(u).hostname or '').lower()
-    except Exception:
-        h = ''
-    for p in _TVBOX_ZY_CDN:
-        if re.search(r'(^|[.\-_])' + re.escape(p), h, re.I):
+    # 播放地址可能是多集拼接串：'第01集$https://a.com/x.m3u8#第02集$https://b.com/y.m3u8'
+    # 必须逐段提取 URL 再取 host，不能对整个串 urlparse（取不到 host）。
+    hosts = set()
+    for seg in re.split(r'[#$]', u):
+        seg = seg.strip()
+        if seg.startswith('http://') or seg.startswith('https://'):
+            try:
+                h = (urllib.parse.urlparse(seg).hostname or '').lower()
+            except Exception:
+                h = ''
+            if h:
+                hosts.add(h)
+    if not hosts:
+        return False
+    for h in hosts:
+        for p in _TVBOX_ZY_CDN:
+            if re.search(r'(^|[.\-_])' + re.escape(p), h, re.I):
+                return True
+        if re.search(r'(^|[.\-_])lzv\d+', h, re.I):
             return True
-    if re.search(r'(^|[.\-_])lzv\d+', h, re.I):
-        return True
     return False
 
 def _tvbox_filter_lines(result, drop):

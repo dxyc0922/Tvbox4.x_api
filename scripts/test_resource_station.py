@@ -41,6 +41,7 @@ pos = [
     ("https://cdn1.yzzyhd-play.com/x.m3u8", "", "量子CDN"),
     ("https://v.lzv40.com/x.m3u8", "", "量子CDN(lzv40)"),
     ("https://lzv34.com/x.m3u8", "", "量子CDN(lzv34)"),
+    ("https://mzm3u8.vip/x.m3u8", "", "魔爪CDN"),
     ("https://api.example.com/api.php/provide/vod", "", "采集站API"),
     ("https://caiji.example.com/api.php/providedown/vod/", "", "采集站API(down)"),
     ("https://api.example.com/inc/api_mac10.php", "", "采集站API(maccms)"),

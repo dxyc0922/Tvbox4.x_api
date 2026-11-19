@@ -96,6 +96,25 @@ exec(compile(code5, "injected5", "exec"), ns5)  # noqa: S102
 check("不注入过滤代码", "_tvbox_filter_lines" not in ns5)
 check("仅保留标记", "TVBox 本地线路过滤" in code5)
 
+print("\n=== 多集拼接串（集名$URL#集名$URL）按 CDN 剔除 ===")
+result7 = {
+    "list": [{
+        "vod_play_from": "暴风线路$$$魔都线路$$$索尼线路$$$自有线路",
+        "vod_play_url": (
+            "第01集$https://c1.rrcdnbf6.com/a.m3u8#第02集$https://c1.rrcdnbf6.com/b.m3u8$$$"
+            "第01集$https://play.modujx10.com/a.m3u8#第02集$https://play.modujx10.com/b.m3u8$$$"
+            "第01集$https://v3.rstu6.com/a.m3u8#第02集$https://v3.rstu6.com/b.m3u8$$$"
+            "第01集$https://cdn.example.com/own.m3u8#第02集$https://cdn.example.com/own2.m3u8"
+        ),
+    }]
+}
+ns["_tvbox_filter_lines"](result7, ns["_TVBOX_DROP_LINES"])
+kept7 = result7["list"][0]["vod_play_from"].split("$$$")
+check("多集串暴风线路剔除", "暴风线路" not in kept7)
+check("多集串魔都线路剔除", "魔都线路" not in kept7)
+check("多集串索尼线路剔除", "索尼线路" not in kept7)
+check("多集串自有线路保留", "自有线路" in kept7)
+
 print("\n=== 不剔空源：全是资源站线路时保留原样 ===")
 result6 = {
     "list": [{

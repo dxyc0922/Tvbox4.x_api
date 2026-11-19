@@ -52,6 +52,7 @@ ZY_CDN_PATTERNS: tuple[str, ...] = (
     "maowushi",              # 猫屋资源
     "ukuzi", "niuniuzy",     # uku / 牛牛资源
     "rstu6",                 # 索尼（混淆域名，用户确认归属）
+    "mzm3u8",                          # 魔爪（mzm3u8.vip，与魔都并列的资源站）
 )
 # 只要求**左边界**（host 开头或 `.`/`-` 之后）：资源站 CDN 常带数字后缀
 # （rrcdnbf6 / yzzy31 / fengbao13 / modujx10 / cdnlz14 / ruiplay18），若也要求右
