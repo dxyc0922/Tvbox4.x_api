@@ -1,22 +1,21 @@
 # 注册/卸载本机定时更新任务（Windows 任务计划程序）
 #
-# 默认：每周一 02:00 运行，使用当前登录用户（已登录即可，锁屏也能跑）。
+# 默认：每周一 02:00 运行**完整功能校验 + 生成**（当前登录用户，已登录即可，锁屏也能跑）。
+# 项目只保留这一套定时任务；每日快速刷新已取消（会用过期功能报告反复覆盖接口）。
 # 需要「未登录也运行」时，用管理员 PowerShell 加 -RunWhenLoggedOff（会要求输入该用户密码）。
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -Time 03:30 -Day Monday
-#   powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -Daily          # 每天跑 update_api
-#   powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -Daily -Functional  # 每天 update_api + 每周功能校验
 #   powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -Unregister
 
 [CmdletBinding()]
 param(
-    [string]$TaskName = "TVBox-UpdateApi",
+    [string]$TaskName = "TVBox-UpdateApi-Functional",
     [string]$Time = "02:00",
     [ValidateSet("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")]
     [string]$Day = "Monday",
     [string]$Python = "",
-    [switch]$Functional,
+    [switch]$Functional = $true,
     [switch]$Daily,
     [switch]$Notify,
     [switch]$RunWhenLoggedOff,

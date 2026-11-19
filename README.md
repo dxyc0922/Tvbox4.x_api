@@ -27,14 +27,12 @@
 python scripts/run_local.py --dry-run     # 只校验，不写文件
 python scripts/run_local.py               # 校验 + 生成 + 提交推送
 
-# 注册每周任务（默认每周一 02:00）
+# 注册每周任务（默认每周一 02:00，完整功能校验 + 生成）
 powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1
 
-# 注册两套任务：每天 update_api 快速刷新 + 每周完整功能校验
-#  - TVBox-UpdateApi：每天 02:00 跑 update_api（不执行第三方脚本，用已有功能报告过滤）
-#  - TVBox-UpdateApi-Functional：每周一 02:30 跑 --functional（完整校验，执行第三方脚本）
-powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -Daily -Time 02:00
-powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1 -TaskName TVBox-UpdateApi-Functional -Functional -Time 02:30 -Day Monday
+# 只用一套任务：每周一 02:00 跑 --functional（执行第三方脚本做完整校验）
+# 不再注册每日快速刷新，避免用过期功能报告反复覆盖接口。
+# 若需要临时手动刷新：python scripts/run_local.py（不带 --functional）
 ```
 
 `run_local.py` 每次：`git pull` → 可选功能校验（`--functional`）→ 重建 `接口.json` →
