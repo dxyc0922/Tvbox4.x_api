@@ -39,6 +39,8 @@ pos = [
     ("http://v3.rstu6.com/x.m3u8", "", "索尼CDN"),
     ("https://v13.wsyzym3u8.com/x.m3u8", "", "蜗牛CDN"),
     ("https://cdn1.yzzyhd-play.com/x.m3u8", "", "量子CDN"),
+    ("https://v.lzv40.com/x.m3u8", "", "量子CDN(lzv40)"),
+    ("https://lzv34.com/x.m3u8", "", "量子CDN(lzv34)"),
     ("https://api.example.com/api.php/provide/vod", "", "采集站API"),
     ("https://caiji.example.com/api.php/providedown/vod/", "", "采集站API(down)"),
     ("https://api.example.com/inc/api_mac10.php", "", "采集站API(maccms)"),
@@ -66,6 +68,7 @@ for url, flag, label in pos:
 print("\n=== 不应命中（误报防护）===")
 neg = [
     ("https://myffzyshop.com/x.m3u8", "", "myffzyshop（左边界）"),
+    ("https://v.lzvideo.com/x.m3u8", "", "lzvideo（lzv 须跟数字）"),
     ("https://www.example.com/x.m3u8", "官方线路", "普通官方线路"),
     ("https://127.0.0.1:8080/x.m3u8", "直链", "本地代理"),
     ("https://music.example.com/a.mp3", "无损", "音频"),

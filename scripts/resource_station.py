@@ -37,6 +37,8 @@ ZY_API_RE = re.compile(
 ZY_CDN_PATTERNS: tuple[str, ...] = (
     "ffzy", "feifei",        # 非凡资源
     "yzzy", "cdnlz", "lzzy",  # 量子资源（lz=量子）/ 最大资源
+    # lzv+数字（v.lzv40.com / lzv34.com）单独用 ZY_CDN_LZV_RE 匹配，避免过宽
+    # 命中 lzvideo.com 之类普通域名。
     "bfzy", "rrcdnbf", "fengbao",  # 暴风资源 / 疯包
     "modujx", "modudm", "mujizybf",  # 魔都
     "jisuzy", "jisuzyv",     # 极速资源
@@ -58,6 +60,10 @@ ZY_CDN_RE = re.compile(
     r"(^|[.\-_])(?:%s)" % "|".join(re.escape(p) for p in ZY_CDN_PATTERNS),
     re.I,
 )
+# 量子资源的 lzv 系列 CDN（v.lzv40.com / lzv34.com）：必须跟数字，
+# 否则 lzvideo.com 之类普通域名会被误判。此前只靠线路名（LZ/量子）识别，
+# 名字是「F线」这类普通名时会漏判。
+ZY_CDN_LZV_RE = re.compile(r"(^|[.\-_])lzv\d+", re.I)
 
 # --- 3) 线路名（flag）资源站关键词 ---
 # 资源站线路常直接以资源站命名（1080资源 / 极速资源 / 蜗牛资源 / 影库资源 /
@@ -124,6 +130,8 @@ def match_resource_station(url: str, flag: str = "") -> str:
         return "采集站API"
     host = _host(url)
     if host and ZY_CDN_RE.search(host):
+        return f"资源站CDN({host})"
+    if host and ZY_CDN_LZV_RE.search(host):
         return f"资源站CDN({host})"
     for kw in ZY_FLAG_NEGATIVE_KEYWORDS:
         if kw in flag:
