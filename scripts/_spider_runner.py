@@ -232,6 +232,7 @@ class Reporter:
             "stream_parse": -1,
             "stream_header": {},
             "lines": [],
+            "declared_flags": [],
             "classes": [],
             "probe_hits": 0,
             "probe_labels": [],
@@ -415,11 +416,21 @@ def main() -> int:
                 if videos:
                     vod = videos[0]
                     froms, episodes, sample, flag = play_stats(vod)
+                    # declared_flags = **全部**声明线路名（vod_play_from 按 $$$ 拆开）。
+                    # 采样（lines/line_streams）只取前 max_lines 条，但「纯资源站源」
+                    # 的整源剔除判定必须看全部声明线路——漏看的线路里若有官方/自营线，
+                    # 会把混合源误判成纯资源站整源剔掉。故把完整名字落盘。
+                    declared = [
+                        part.strip()
+                        for part in str(vod.get("vod_play_from") or "").split("$$$")
+                        if part.strip()
+                    ]
                     reporter.set(
                         play_from=froms,
                         play_episodes=episodes,
                         sample_play_url=sample[:200],
                         play_flag=str(flag)[:40],
+                        declared_flags=[str(x)[:40] for x in declared[:64]],
                         detail_ok=episodes > 0,
                     )
                 else:

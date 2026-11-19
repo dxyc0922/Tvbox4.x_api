@@ -2013,8 +2013,11 @@ def write_local_spiders(
             # 纯资源站源已在源级被剔（status=resource_station），不会走到这里；
             # 这里再加一道护栏：剔完不能把所有视频线路都删空（保留最优一条）。
             if zs_drop_lines and filename not in zs_allow:
+                _q = quality_map.get(filename) or {}
                 zs_cls = resource_station.classify_source(
-                    (quality_map.get(filename) or {}).get("line_streams") or []
+                    _q.get("line_streams") or [],
+                    declared_flags=_q.get("declared_flags"),
+                    declared_total=int(_q.get("play_from") or 0),
                 )
                 zs_flags = {f for f in zs_cls["z_flags"] if f}
                 video_flags = {f for f in zs_cls["video_flags"] if f}
@@ -2593,14 +2596,25 @@ def main(argv: list[str] | None = None) -> int:
             # 纯资源站源（所有视频线路都是资源站）→ 整源剔除；混合源 → 只剔资源站线路。
             if zs_enabled and result.status == "valid" and result.filename not in zs_allow:
                 zs_cls = resource_station.classify_source(
-                    quality.get("line_streams") or []
+                    quality.get("line_streams") or [],
+                    declared_flags=quality.get("declared_flags"),
+                    declared_total=int(quality.get("play_from") or 0),
                 )
                 quality["resource_station"] = zs_cls
                 if zs_drop_pure and zs_cls["pure"]:
                     result.status = "resource_station"
+                    if zs_cls["n_declared"]:
+                        # 有声明线路名单时按「全部声明线路」口径说明原因。
+                        shown = (
+                            f"{zs_cls['n_declared_z']}/{zs_cls['n_declared']} 条声明线路"
+                        )
+                    else:
+                        shown = (
+                            f"{zs_cls['n_z']}/{zs_cls['n_video']} 条采样线路"
+                        )
                     result.error = (
-                        f"资源站聚合源（{zs_cls['n_z']}/{zs_cls['n_video']} 条视频线路"
-                        f"全是资源站：{'、'.join(zs_cls['z_flags'][:6])}）"
+                        f"资源站聚合源（{shown}全是资源站："
+                        f"{'、'.join(zs_cls['z_flags'][:6])}）"
                     )
         scores = Counter(
             int(result.quality.get("score") or 0)
