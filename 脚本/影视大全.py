@@ -858,6 +858,26 @@ class Spider(Spider):
 _TVBOX_DROP_LINES = ["B线", "E线", "F线"]
 _TVBOX_LINE_ORDER = ["E线", "F线", "A线", "B线"]
 
+_TVBOX_ZY_ENABLED = True
+_TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6"]
+_TVBOX_ZY_API = "/api\\.php/(provide|providedown)|/inc/api_mac|provide/vod|providedown/vod"
+
+def _tvbox_is_zy_url(url):
+    import re, urllib.parse
+    u = str(url or '')
+    if re.search(_TVBOX_ZY_API, u, re.I):
+        return True
+    try:
+        h = (urllib.parse.urlparse(u).hostname or '').lower()
+    except Exception:
+        h = ''
+    for p in _TVBOX_ZY_CDN:
+        if re.search(r'(^|[.\-_])' + re.escape(p), h, re.I):
+            return True
+    if re.search(r'(^|[.\-_])lzv\d+', h, re.I):
+        return True
+    return False
+
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):
         return result
@@ -880,7 +900,11 @@ def _tvbox_filter_item(item, drop):
     parts_url = urls.split('$$$')
     if len(parts_from) != len(parts_url):
         return
-    keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]
+    if _TVBOX_ZY_ENABLED:
+        keep = [(f, u) for f, u in zip(parts_from, parts_url)
+                if f not in drop and not _tvbox_is_zy_url(u)]
+    else:
+        keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]
     if not keep or len(keep) == len(parts_from):
         return
     item['vod_play_from'] = '$$$'.join(f for f, _ in keep)

@@ -898,6 +898,8 @@ class Spider(Spider):
 _TVBOX_DROP_LINES = []
 _TVBOX_LINE_ORDER = ["RY线路", "DD线路"]
 
+_TVBOX_ZY_ENABLED = False
+
 def _tvbox_filter_lines(result, drop):
     if not isinstance(result, dict):
         return result
@@ -920,7 +922,11 @@ def _tvbox_filter_item(item, drop):
     parts_url = urls.split('$$$')
     if len(parts_from) != len(parts_url):
         return
-    keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]
+    if _TVBOX_ZY_ENABLED:
+        keep = [(f, u) for f, u in zip(parts_from, parts_url)
+                if f not in drop and not _tvbox_is_zy_url(u)]
+    else:
+        keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]
     if not keep or len(keep) == len(parts_from):
         return
     item['vod_play_from'] = '$$$'.join(f for f, _ in keep)

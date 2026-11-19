@@ -1847,25 +1847,61 @@ def line_prune_drops(
 
 
 def inject_line_filter(
-    source: str, drop_flags: list[str], line_order: list[str] | None = None
+    source: str,
+    drop_flags: list[str],
+    line_order: list[str] | None = None,
+    zy_sigs: dict[str, Any] | None = None,
 ) -> str:
     """在脚本末尾注入线路过滤 + 重排代码。
 
     不带 drop 时只打标记（方便后续清理）；line_order 非空时按画质速度重排
     线路（最优在前，TVBox 默认播第一条），未知线路保持原序后置。
+    zy_sigs 非空时，额外内联资源站 URL 签名，运行时按播放 URL 实时判定——
+    动态 API 脚本（如猎手）的线路名每次请求都可能变，静态名字名单挡不住，
+    但资源站 CDN host 是固定的，按 URL 判定可覆盖所有动态线路。
     """
     marker = LINE_FILTER_MARKER
     if marker in source:
         source = source.split(marker)[0].rstrip("\n")
     header = f"\n\n{marker}\n"
     order = [str(f) for f in (line_order or []) if str(f).strip()]
-    if not drop_flags and not order:
+    if not drop_flags and not order and not zy_sigs:
         return source + header
     lines: list[str] = [
         header.rstrip("\n"),
         f"_TVBOX_DROP_LINES = {json.dumps(sorted(drop_flags), ensure_ascii=False)}",
         f"_TVBOX_LINE_ORDER = {json.dumps(order, ensure_ascii=False)}",
         "",
+    ]
+    if zy_sigs:
+        # 内联资源站签名：CDN host 关键词 + 采集 API 正则 + lzv 数字规则。
+        # 只按 URL 判定，不按名字（名字动态变化）；音频源走本地代理/音乐 CDN，
+        # 不会命中资源站签名，天然豁免。
+        lines.extend([
+            "_TVBOX_ZY_ENABLED = True",
+            "_TVBOX_ZY_CDN = " + json.dumps(zy_sigs.get("cdn") or [], ensure_ascii=False),
+            "_TVBOX_ZY_API = " + json.dumps(zy_sigs.get("api") or "", ensure_ascii=False),
+            "",
+            "def _tvbox_is_zy_url(url):",
+            "    import re, urllib.parse",
+            "    u = str(url or '')",
+            "    if re.search(_TVBOX_ZY_API, u, re.I):",
+            "        return True",
+            "    try:",
+            "        h = (urllib.parse.urlparse(u).hostname or '').lower()",
+            "    except Exception:",
+            "        h = ''",
+            "    for p in _TVBOX_ZY_CDN:",
+            "        if re.search(r'(^|[.\\-_])' + re.escape(p), h, re.I):",
+            "            return True",
+            "    if re.search(r'(^|[.\\-_])lzv\\d+', h, re.I):",
+            "        return True",
+            "    return False",
+            "",
+        ])
+    else:
+        lines.extend(["_TVBOX_ZY_ENABLED = False", ""])
+    lines.extend([
         "def _tvbox_filter_lines(result, drop):",
         "    if not isinstance(result, dict):",
         "        return result",
@@ -1888,7 +1924,11 @@ def inject_line_filter(
         "    parts_url = urls.split('$$$')",
         "    if len(parts_from) != len(parts_url):",
         "        return",
-        "    keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]",
+        "    if _TVBOX_ZY_ENABLED:",
+        "        keep = [(f, u) for f, u in zip(parts_from, parts_url)",
+        "                if f not in drop and not _tvbox_is_zy_url(u)]",
+        "    else:",
+        "        keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]",
         "    if not keep or len(keep) == len(parts_from):",
         "        return",
         "    item['vod_play_from'] = '$$$'.join(f for f, _ in keep)",
@@ -1934,7 +1974,7 @@ def inject_line_filter(
         "",
         "_tvbox_apply(Spider)",
         "",
-    ]
+    ])
     return source + "\n" + "\n".join(lines)
 
 
@@ -2119,10 +2159,18 @@ def write_local_spiders(
                 + "、".join(dead_candidates)
             )
         if write:
+            # 仅对已识别出资源站线路的源内联运行时 URL 判定：这类源的线路是
+            # 上游 API 动态返回的（如猎手换集就变线路名），静态名单挡不住，
+            # 但资源站 CDN host 固定，按播放 URL 判定可覆盖所有动态线路。
+            # 音频源/纯自有源不注入，完全不受影响。
+            has_zy = any(
+                "资源站" in str(reason) for reason in drops.values()
+            )
             text = inject_line_filter(
                 result.source,
                 sorted(drops),
                 line_grade_order(quality_map.get(result.filename)),
+                zy_sigs=resource_station.runtime_url_signatures() if has_zy else None,
             )
             # 冒烟检查：注入后必须是合法 Python（线路过滤是运行时包装，不应破坏语法）。
             try:

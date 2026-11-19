@@ -104,6 +104,20 @@ ZY_FLAG_NEGATIVE_KEYWORDS: tuple[str, ...] = (
 )
 
 
+# --- 运行时注入签名（供 update_api 内联到 TVBox 脚本）---
+def runtime_url_signatures() -> dict[str, Any]:
+    """返回可内联到脚本的资源站 URL 签名（CDN host 关键词 + 采集 API 正则）。
+
+    注入代码只按 **URL/CDN** 判定，不按线路名——名字是上游动态返回的（猎手
+    换集就变），而 CDN host 固定。音频线路走本地代理/音乐 CDN，不会命中这些
+    签名，天然豁免。
+    """
+    return {
+        "cdn": list(ZY_CDN_PATTERNS),
+        "api": ZY_API_RE.pattern,
+    }
+
+
 def _host(url: str) -> str:
     """取 URL 的 host（去端口、小写）。"""
     m = re.match(r"https?://([^/]+)", url or "")
