@@ -714,7 +714,7 @@ GRADE_THRESHOLDS: dict[str, float] = {
     "bpp_a": 0.10, "speed_a": 0.7,   # A：画质密度 + 快（密度线参考 720p，随像素自适应）
     "bpp_b": 0.05, "speed_b": 0.3,   # B：画质速度达标
     "bpp_c": 0.03,                   # C：偏低
-    "res_a": 1280, "res_b": 854, "res_c": 640,  # 物理分辨率（长边）：480x270 长边 480 模糊
+    "res_a": 720, "res_b": 480, "res_c": 360,  # 物理分辨率（短边）：1920x1080 短边 1080=1080p；1280x544 短边 544=540p
     "ref_pixels": 1280 * 720,        # bpp 阈值参考分辨率（720p）：像素越少密度要求越高
     "audio_bitrate_a": 320, "audio_speed_a": 0.5, "audio_bitrate_b": 128,
 }
@@ -774,9 +774,10 @@ def grade_of(
     if not (0 < fps <= 120):
         fps = 25.0
     bpp = bitrate * 1000.0 / (width * height * fps)
-    # 物理分辨率（长边）：480x270 长边 480 模糊；1280x544 长边 1280（2.35:1 电影）HD 清晰。
-    # bpp 只反映密度（低分辨率高密度也高），必须加分辨率门槛才不把模糊源误判 A/B。
-    long_edge = max(width, height)
+    # 清晰度按**短边**判（用户标准：1920x1080 短边 1080 = 1080p；1280x720 短边 720 = 720p）。
+    # 用长边会把横向遮幅/2.35:1 电影**虚高判档**：1280x544 长边 1280 被当 720p，
+    # 但短边 544 实际是 540p——这是索尼 1280x544@1831kbps 被误判 A 的根源。
+    short_edge = min(width, height)
     # bpp 阈值随像素数自适应：低分辨率（像素少）需更高密度补偿（放大后伪影明显），
     # 高分辨率（像素多）可稍低。否则 1280x544@1831kbps（bpp 0.105）和
     # 1920x1080@8443kbps（bpp 0.163）同判 A，但前者放大后质量明显差。
@@ -784,12 +785,12 @@ def grade_of(
     bpp_a = scaled_bpp_threshold(t["bpp_a"], pixels, t["ref_pixels"])
     bpp_b = scaled_bpp_threshold(t["bpp_b"], pixels, t["ref_pixels"])
     bpp_c = scaled_bpp_threshold(t["bpp_c"], pixels, t["ref_pixels"])
-    # 画质 = 物理分辨率（长边）+ 密度（bpp 自适应）+ 速度（speed_ratio）
-    if long_edge >= t["res_a"] and bpp >= bpp_a and speed >= t["speed_a"]:
+    # 画质 = 物理分辨率（短边：720p/480p/360p 档）+ 密度（bpp 自适应）+ 速度（speed_ratio）
+    if short_edge >= t["res_a"] and bpp >= bpp_a and speed >= t["speed_a"]:
         return "A"
-    if long_edge >= t["res_b"] and bpp >= bpp_b and speed >= t["speed_b"]:
+    if short_edge >= t["res_b"] and bpp >= bpp_b and speed >= t["speed_b"]:
         return "B"
-    if long_edge >= t["res_c"] and bpp >= bpp_c:
+    if short_edge >= t["res_c"] and bpp >= bpp_c:
         return "C"
     return "D"
 
