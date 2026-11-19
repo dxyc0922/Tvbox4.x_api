@@ -2019,8 +2019,22 @@ def write_local_spiders(
                     declared_flags=_q.get("declared_flags"),
                     declared_total=int(_q.get("play_from") or 0),
                 )
+                declared = [
+                    str(f).strip()
+                    for f in (_q.get("declared_flags") or [])
+                    if str(f).strip()
+                ]
+                # 资源站线路 = 采样识别（CDN/URL 证据）+ 声明线路名识别。
+                # 猎手.py 采样 4 条全是资源站，但完整 17 条声明里还有官方线——
+                # 只按采样算「剩余」会以为剔完没线路可留，从而放过天堂线路。
                 zs_flags = {f for f in zs_cls["z_flags"] if f}
-                video_flags = {f for f in zs_cls["video_flags"] if f}
+                if zs_cls["n_z"] > 0:
+                    # 仅当采样确实命中资源站线路时才扩展声明名，避免音频源误伤。
+                    zs_flags |= {
+                        f for f in declared
+                        if resource_station.match_resource_station("", f)
+                    }
+                video_flags = set(declared) or {f for f in zs_cls["video_flags"] if f}
                 remaining = video_flags - zs_flags
                 if zs_flags and remaining:
                     for flag in sorted(zs_flags):
@@ -2033,7 +2047,14 @@ def write_local_spiders(
             # 「所有线路都是资源站」的纯聚合源已在源级被剔（status=resource_station），
             # 不会走到这里。
             entries_all = (quality_map.get(filename) or {}).get("line_streams") or []
-            all_flags = {
+            declared_all = [
+                str(f).strip()
+                for f in ((quality_map.get(filename) or {}).get("declared_flags") or [])
+                if str(f).strip()
+            ]
+            # 用完整声明线路名判断「是否全被剔」：猎手采样 4 条全被剔，但完整
+            # 17 条里还有官方线，不该触发兜底保留资源站线路。
+            all_flags = set(declared_all) or {
                 str(e.get("flag") or "").strip()
                 for e in entries_all
                 if str(e.get("flag") or "").strip()
