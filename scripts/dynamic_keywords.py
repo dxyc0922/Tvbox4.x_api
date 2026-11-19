@@ -133,14 +133,25 @@ def fetch_latest_names(anime_count: int = 3, drama_count: int = 3) -> list[str]:
     return names
 
 
-def keyword_chains(names: list[str] | None = None, anime_count: int = 3, drama_count: int = 3) -> list[list[str]]:
+def keyword_chains(
+    names: list[str] | None = None,
+    anime_count: int = 3,
+    drama_count: int = 3,
+    prefer: list[str] | None = None,
+) -> list[list[str]]:
     """生成降级搜索链：[[原词, 降级词...], ...]。
 
-    优先用传入 names（调试），否则动态从豆瓣拿。每个作品名展开 degrade_chain。
+    优先用 `prefer`（配置的周更年番，如仙逆——周日 20 点更新，周一 2 点跑
+    功能校验时测**最新集**，验证源是否更到最新）→ 传入 names（调试）→
+    动态从豆瓣拿最新动漫/剧集。每个作品名展开 degrade_chain。
     """
+    chains: list[list[str]] = []
+    for name in prefer or []:
+        chain = degrade_chain(name)
+        if chain:
+            chains.append(chain)
     if not names:
         names = fetch_latest_names(anime_count, drama_count)
-    chains: list[list[str]] = []
     for name in names:
         chain = degrade_chain(name)
         if chain:

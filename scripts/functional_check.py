@@ -666,7 +666,8 @@ def main(argv: list[str] | None = None) -> int:
         keywords = [k.strip() for k in args.keyword.split(",") if k.strip()]
         keyword_chains = [[k] for k in keywords]
     else:
-        keyword_chains = dynamic_keywords.keyword_chains()
+        prefer = [str(k).strip() for k in (settings.get("prefer_keywords") or []) if str(k).strip()]
+        keyword_chains = dynamic_keywords.keyword_chains(prefer=prefer)
         keywords = [chain[0] for chain in keyword_chains]
     keyword = keywords[0] if keywords else "庆余年"
     if not keyword_chains:

@@ -45,15 +45,22 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = ROOT / "scripts" / "config.json"
 
 # 按分辨率（短边）定最低码率，单位 kbps。阈值取在实测数据的空档里：
-# 1080p 1600（1569/1583 档算低、1609+ 保留）、720p 920（893 档算低、947+ 保留）、
-# 480p 600（481 档算低、752+ 保留）。分辨率未知时用 quality.min_bitrate_kbps。
+# 按分辨率返回「最低达标码率」档位表。
+# 键 = **长边（宽）**，与画质分级（grade_of 用长边判档）一致：
+#   3840 = 4K 宽、2560 = 1440p 宽、1920 = 1080p 宽、1280 = 720p 宽、
+#   854 = 480p 宽、640 = 360p 宽。
+# 用长边而非短边/垂直高度：2.35:1 电影（1280x544）长边 1280 是 720p 类，
+# 短边 544 会误判成 480p（只要求 600kbps，1831kbps 虚高达标）；
+# 竖屏短剧（720x1280）长边 1280 是 720p 类，垂直高度会误判成 1440p。
+# 值 = 「好画质」最低线（用户实测 1280x544@1831 不达标，故 1280 宽档 ≥2000）。
+# 再叠加 min_bpp（每像素密度）挡「1080p 但码率低」的廉价转码。
 DEFAULT_BITRATE_THRESHOLDS: dict[str, int] = {
-    "2160": 6000,
-    "1440": 3500,
-    "1080": 1600,
-    "720": 920,
-    "480": 600,
-    "360": 400,
+    "3840": 6000,
+    "2560": 3500,
+    "1920": 2000,
+    "1280": 2000,
+    "854": 1000,
+    "640": 700,
 }
 
 # 每像素每帧最低码率（bits per pixel）。分辨率分档只能挡住「低分辨率高码率」，
@@ -1361,6 +1368,7 @@ def dynamic_grade_thresholds(
         "speed_b": clamp(pct(speeds, 0.50), base["speed_b"]),
         "bpp_c": base["bpp_c"],
         "res_a": base["res_a"], "res_b": base["res_b"], "res_c": base["res_c"],
+        "ref_pixels": base["ref_pixels"],
         "audio_bitrate_a": base["audio_bitrate_a"],
         "audio_speed_a": base["audio_speed_a"],
         "audio_bitrate_b": base["audio_bitrate_b"],
@@ -1396,16 +1404,18 @@ def resolution_threshold(
     default_kbps: float,
     thresholds: dict[str, Any] | None = None,
 ) -> float:
-    """按分辨率返回最低码率。
+    """按分辨率返回最低达标码率。
 
-    竖屏短剧会出现 720x1280 这种分辨率，所以用短边（min(宽,高)）判档，
-    否则 720x1280 会被当成 1440p。分辨率未知时退回 default_kbps。
+    用**长边**（max(宽,高)）判档，与画质分级（grade_of 长边）一致：
+    - 2.35:1 电影 1280x544 长边 1280 → 720p 档（短边 544 会误判成 480p）；
+    - 竖屏短剧 720x1280 长边 1280 → 720p 档（垂直高度 1280 会误判成 1440p）。
+    分辨率未知时退回 default_kbps。
     """
     table = thresholds or DEFAULT_BITRATE_THRESHOLDS
     width = int(stream.get("width") or 0)
     height = int(stream.get("height") or 0)
-    short = min(width, height) if width and height else height
-    if short <= 0:
+    long_edge = max(width, height) if width and height else height
+    if long_edge <= 0:
         return float(default_kbps)
     best: tuple[int, float] | None = None
     for key, value in table.items():
@@ -1413,7 +1423,7 @@ def resolution_threshold(
             level = int(key)
         except (TypeError, ValueError):
             continue
-        if short >= level and (best is None or level > best[0]):
+        if long_edge >= level and (best is None or level > best[0]):
             best = (level, float(value))
     if best is not None:
         return best[1]
@@ -1681,11 +1691,12 @@ def line_prune_drops(
 ) -> tuple[dict[str, str], set[str], set[str]]:
     """计算线路裁减，返回 (要剔除的 {线路名: 原因}, 本轮低质量集合, 本轮疑似不通集合)。
 
-    剔除规则（两振出局）：
+    剔除规则：
     - **不可用**：HTTP >= 400，且**上一轮同样是 4xx/5xx**（连续两轮）才剔除。
       单集 token 过期是 403/404 误报（华谊 K蓝光某集 403、换集就 200），一振不删。
-    - **低质量**：码率低于阈值、或加载速度低于阈值（且同源另有达标/快速线路），
-      且**连续两轮**低质量才剔除。
+    - **低码率**：码率低于阈值（且同源另有达标线路），**一振即剔**——码率是
+      稳定属性（不像速度/HTTP 抖动），实测确认的低码率源不再等两振。
+    - **慢速**：加载速度低于阈值（且同源另有快速线路），**连续两轮**慢速才剔。
     - 手动黑名单在调用方直接加入，不经过两振。
     """
     drops: dict[str, str] = {}
@@ -1725,7 +1736,7 @@ def line_prune_drops(
             if (immediate or key(flag) in prev_dead) and flag not in drops:
                 drops[flag] = f"HTTP {status}" + ("" if immediate else "（连续两轮）")
 
-    # 2) 低质量线路：仅当同源存在至少一条达标线路时删；连续两轮低质量才删。
+    # 2) 低码率线路：仅当同源存在至少一条达标线路时删（一振即剔，码率稳定）。
     if not skip_quality:
         passing: list[str] = []
         failing: list[tuple[str, int, float]] = []
@@ -1757,8 +1768,10 @@ def line_prune_drops(
         if passing and failing:
             for flag, bitrate, limit in failing:
                 current_low.add(flag)
-                if key(flag) in prev_low and flag not in drops:
-                    drops[flag] = f"{bitrate}kbps<{round(limit)}kbps（连续两轮）"
+                # 码率是稳定属性（不像速度/HTTP 会抖动），且同源另有达标线路，
+                # 一振即剔：实测确认的低码率源不应再等一轮（用户反馈优先）。
+                if flag not in drops:
+                    drops[flag] = f"{bitrate}kbps<{round(limit)}kbps"
 
         # 2b) 慢速线路：与码率同逻辑——同源另有快速线路才删；连续两轮慢速才删。
         # 只对测到速度的线路判定；没测到的按未知处理，不删也不会被当作「快速」。
@@ -1794,6 +1807,35 @@ def line_prune_drops(
                         if startup > max_startup_ms:
                             reason += f"/{startup}ms"
                         drops[flag] = f"{reason}（连续两轮）"
+
+    # 不剔空源：若全部线路都被剔，保留最优一条（最高码率、非不可用优先），
+    # 避免源无可播线路。码率检查的「达标线」可能被速度检查剔、速度检查的
+    # 「快速线」可能被码率检查剔——两套检查互不感知，需最后兜底。
+    if drops and entries:
+        flags = [
+            str(e.get("flag") or "").strip()
+            for e in entries
+            if str(e.get("flag") or "").strip()
+        ]
+        if flags and all(f in drops for f in flags):
+            alive = [
+                e
+                for e in entries
+                if int((e.get("stream") or {}).get("status") or 0) < 400
+                and str(e.get("flag") or "").strip() in drops
+            ]
+            pool = alive or [
+                e for e in entries if str(e.get("flag") or "").strip() in drops
+            ]
+            if pool:
+                best = max(
+                    pool,
+                    key=lambda e: int((e.get("stream") or {}).get("bitrate_kbps") or 0),
+                )
+                best_flag = str(best.get("flag") or "").strip()
+                if best_flag in drops:
+                    drops.pop(best_flag)
+                    current_low.discard(best_flag)
     return drops, current_low, current_dead
 
 

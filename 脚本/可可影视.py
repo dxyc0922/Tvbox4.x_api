@@ -410,7 +410,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["蓝光1", "蓝光1-1"]
+_TVBOX_DROP_LINES = ["FF线路", "蓝光1", "蓝光1-1"]
 _TVBOX_LINE_ORDER = ["蓝光1", "FF线路", "蓝光1-1", "超清2"]
 
 def _tvbox_filter_lines(result, drop):

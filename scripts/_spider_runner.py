@@ -167,9 +167,11 @@ def play_stats(vod: dict[str, Any]) -> tuple[int, int, str, str]:
 def line_samples(vod: dict[str, Any], limit: int) -> list[dict[str, Any]]:
     """每条线路取播放地址样本，最多取 limit 条。
 
-    每条线路收集前两个不同集的播放地址：`url` 是第 1 集、`alt_url` 是第 2 集。
-    alt_url 用于「临界线路二次确认」——单集波动（某集恰好是低码率转码）会让
-    一次采样误判成低质，加测第 2 集能区分「线路真的差」和「只是这一集差」。
+    每条线路收集**最后**两个不同集的播放地址：`url` 是**最新一集**、
+    `alt_url` 是倒数第二集。用户标准：测**最新集**（周更年番周日 20 点更新、
+    周一 2 点跑），验证源是否更到最新，而不是只测旧集（第 1 集放了几个月，
+    任何源都有）。alt_url 用于「临界线路二次确认」——单集波动（某集恰好是
+    低码率转码）会让一次采样误判成低质，加测倒数第二集能区分。
 
     vod_play_url 用 `$$$` 分隔线路、`#` 分隔集数、`$` 分隔名称和地址，
     vod_play_from 用 `$$$` 分隔线路名，两者顺序一一对应。
@@ -183,13 +185,17 @@ def line_samples(vod: dict[str, Any], limit: int) -> list[dict[str, Any]]:
     samples: list[dict[str, Any]] = []
     for index, line in enumerate(lines):
         urls: list[str] = []
-        for item in line.split("#"):
-            if "$" in item:
-                value = item.split("$", 1)[1]
-                if value and value not in urls:
-                    urls.append(value)
-                if len(urls) >= 2:
-                    break
+        # 反转剧集列表：最新集在前，保证 url=最新、alt_url=倒数第二。
+        episodes = [
+            item.split("$", 1)[1]
+            for item in line.split("#")
+            if "$" in item and item.split("$", 1)[1]
+        ]
+        for value in reversed(episodes):
+            if value and value not in urls:
+                urls.append(value)
+            if len(urls) >= 2:
+                break
         if not urls:
             continue
         sample: dict[str, Any] = {

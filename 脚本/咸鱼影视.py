@@ -750,7 +750,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["ffzy高清", "modum3u8", "xiguam3u8"]
+_TVBOX_DROP_LINES = []
 _TVBOX_LINE_ORDER = ["wsy高清", "ffzy高清", "modum3u8", "xiguam3u8"]
 
 def _tvbox_filter_lines(result, drop):
