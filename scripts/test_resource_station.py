@@ -203,5 +203,20 @@ c = rs.classify_source(pure_lines, declared_flags=lie)
 check(f"猎手 pure={c['pure']}（须 False）", c["pure"] is False)
 check(f"n_declared_z={c['n_declared_z']}/17", c["n_declared_z"] < 17)
 
+print("\n=== 资源站聚合脚本：纯缩写 flag 占多数 → 整源判纯 ===")
+aggregator = ["WJ", "FF", "LZ", "YZ", "HH", "JS", "UK", "MT", "JY",
+              "SD", "KC", "BD", "NN", "XL", "HN", "XXAPP"]
+c = rs.classify_source([], declared_flags=aggregator)
+check("聚合脚本 16/16 全是资源站 → pure=True", c["pure"] is True)
+check("n_declared_z=16", c["n_declared_z"] == 16)
+# 反例：普通源里个别线路叫 BD/JY，不应误判整源（缩写占比低）
+normal = ["官方线路", "自营线路", "BD", "腾讯视频"]
+c = rs.classify_source([], declared_flags=normal)
+check("普通源含少量缩写 → 不误判 pure", c["pure"] is False)
+# 聚合脚本里有明确官方线路名时不算
+agg_with_official = aggregator[:-1] + ["官方线路"]
+c = rs.classify_source([], declared_flags=agg_with_official)
+check("聚合脚本含官方字样线路 → pure=False", c["pure"] is False)
+
 print(f"\n{'ALL PASS' if not fails else 'FAILED: ' + ', '.join(fails)}")
 sys.exit(1 if fails else 0)

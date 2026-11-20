@@ -86,6 +86,16 @@ ZY_FLAG_NUM_RE = re.compile(r"(?i)\b(1080|360)(?!p)")
 ZY_FLAG_CODE_RE = re.compile(
     r"(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|DYTT|LZL|YZL|FFL|BFL)(?:线路|线)\b"
 )
+# 纯缩写 flag（占位符型脚本：detail 只给 id|name|0，没有真实 URL，运行时 CDN
+# 签名失效，只能靠名字判定）。实测「一起看」这些缩写对应的全是资源站 CDN：
+#   WJ=ppqrrs SD=qqqrst HH=hhuus MT=tix8opu JY=kuktxu（混淆资源站域名）
+#   BF=暴风 SN=索尼 FF=非凡 LZ=量子 YZ=云智 JS=极速 UK=uku XL=新浪 HN=红牛
+#   KC=快车 BD=百度 NN=牛牛
+# 用**精确相等**（upper 后整串匹配），不做子串，避免 JY/BD 出现在长名字里误报。
+ZY_FLAG_EXACT_CODES: frozenset[str] = frozenset({
+    "WJ", "SD", "HH", "MT", "JY", "BF", "SN", "FF", "LZ", "YZ",
+    "JS", "UK", "XL", "HN", "KC", "BD", "NN",
+})
 # 括号代码形式（线路2(lz) / 线路3(ff) / 线路1(nby) / 线路4(bf)）：线路名后跟括号内
 # 的两字母资源站缩写。只收录**已确认**的缩写：
 #   lz=量子 ff=非凡 bf=暴风 hf/hn=红牛 dy=dytt yz=云智。
@@ -160,6 +170,9 @@ def match_resource_station(url: str, flag: str = "") -> str:
     if ZY_FLAG_CODE_RE.search(flag):
         return f"资源站缩写({flag.strip()})"
     if ZY_FLAG_PAREN_RE.search(flag):
+        return f"资源站缩写({flag.strip()})"
+    # 纯缩写精确匹配（占位符型脚本，CDN 签名在 detail 阶段不可用）。
+    if flag.strip().upper() in ZY_FLAG_EXACT_CODES:
         return f"资源站缩写({flag.strip()})"
     return ""
 
@@ -236,7 +249,18 @@ def classify_source(
     n_declared_z = sum(1 for name in declared if match_resource_station("", name))
     n_sampled = len(entries)
     if declared:
-        # 只看线路名信号（没有 URL）；识别不出的保留为「可能是自有线路」。
+        # 纯缩写占比 ≥60% → 资源站聚合型脚本（占位符线路，全是采集站缩写）。
+        # 这类脚本不混官方线，未识别的少数线路（如「XXAPP」）也是资源站。
+        n_exact = sum(1 for name in declared if name.strip().upper() in ZY_FLAG_EXACT_CODES)
+        is_aggregator = len(declared) >= 3 and n_exact / len(declared) >= 0.6
+        if is_aggregator:
+            # 未识别线路若带官方/自营字样则不算（保守），否则算资源站。
+            for name in declared:
+                if match_resource_station("", name):
+                    continue
+                if any(kw in name for kw in ZY_FLAG_NEGATIVE_KEYWORDS):
+                    continue
+                n_declared_z += 1
         pure = n_declared_z == len(declared) > 0
     elif int(declared_total or 0) > n_sampled:
         # 声明了更多线路但没采到 → 存在未验证线路，不能断言「全资源站」。
