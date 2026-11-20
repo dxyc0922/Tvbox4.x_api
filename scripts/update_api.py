@@ -2112,12 +2112,14 @@ def write_local_spiders(
                 # 猎手.py 采样 4 条全是资源站，但完整 17 条声明里还有官方线——
                 # 只按采样算「剩余」会以为剔完没线路可留，从而放过天堂线路。
                 zs_flags = {f for f in zs_cls["z_flags"] if f}
-                if zs_cls["n_z"] > 0:
-                    # 仅当采样确实命中资源站线路时才扩展声明名，避免音频源误伤。
-                    zs_flags |= {
-                        f for f in declared
-                        if resource_station.match_resource_station("", f)
-                    }
+                # 声明名单里按名字识别出的资源站线路（如「站外-量子」「1080资源」）
+                # 也要剔除——不管采样有没有采到它们。占位符型脚本（如 dd）采样时
+                # 拿不到真实 CDN，但线路名已明确是资源站。名字信号本身即证据，
+                # 音频线路名（无损/音质）不会匹配，天然安全。
+                zs_flags |= {
+                    f for f in declared
+                    if resource_station.match_resource_station("", f)
+                }
                 video_flags = set(declared) or {f for f in zs_cls["video_flags"] if f}
                 remaining = video_flags - zs_flags
                 if zs_flags and remaining:

@@ -254,4 +254,144 @@ class Spider(Spider):
     def localProxy(self, param): pass
     def liveContent(self, url): pass
 
+
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
+_TVBOX_DROP_LINES = ["FF线路", "LZ线路", "极速蓝光"]
+_TVBOX_LINE_ORDER = []
+
+_TVBOX_ZY_ENABLED = True
+_TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8", "ppqrrs", "qqqrst", "hhuus", "bdzybf"]
+_TVBOX_ZY_API = "/api\\.php/(provide|providedown)|/inc/api_mac|provide/vod|providedown/vod"
+_TVBOX_ZY_CODES = ["BD", "BF", "FF", "HH", "HN", "JS", "JY", "KC", "LZ", "MT", "MY", "NN", "SD", "SN", "UK", "WJ", "XL", "YZ"]
+_TVBOX_ZY_KW = ["量子", "非凡", "暴风", "魔都", "极速", "最大", "蜗牛", "影库", "红牛", "新浪", "光速", "如意", "卧龙", "无界", "人尽", "牛牛", "猫屋", "电影天堂", "天堂", "4K资源", "索尼", "无尽", "魔爪", "猫眼", "快车", "百度", "ikun", "速播", "站外"]
+_TVBOX_ZY_NEG = ["官方", "自营", "自有", "正版"]
+
+def _tvbox_is_zy_url(url, flag=''):
+    import re, urllib.parse
+    u = str(url or '')
+    f = str(flag or '').strip()
+    if re.search(_TVBOX_ZY_API, u, re.I):
+        return True
+    # 播放地址可能是多集拼接串：'第01集$https://a.com/x.m3u8#第02集$https://b.com/y.m3u8'
+    # 必须逐段提取 URL 再取 host，不能对整个串 urlparse（取不到 host）。
+    hosts = set()
+    for seg in re.split(r'[#$]', u):
+        seg = seg.strip()
+        if seg.startswith('http://') or seg.startswith('https://'):
+            try:
+                parsed = urllib.parse.urlparse(seg)
+                h = (parsed.hostname or '').lower()
+            except Exception:
+                h = ''; parsed = None
+            # 本地代理型脚本（如 APP影院1）：真实地址藏在 url= 参数里，
+            # 需解码后再提取 host，否则只会拿到 127.0.0.1 而漏判。
+            if parsed and h in ('127.0.0.1', 'localhost', '::1'):
+                qs = urllib.parse.parse_qs(parsed.query)
+                real = (qs.get('url') or [''])[0]
+                if real.startswith('//'): real = 'https:' + real
+                if real.startswith('http://') or real.startswith('https://'):
+                    try:
+                        rh = (urllib.parse.urlparse(real).hostname or '').lower()
+                    except Exception:
+                        rh = ''
+                    if rh: hosts.add(rh)
+            if h:
+                hosts.add(h)
+            # 中转缓存型：真实 URL 拼在路径里（/cache/https://cdn/...），
+            # 取内层 host（如 47电影天堂 dl.gybkw.com/cache/https://c1.7bbffvip.com）。
+            im = re.search(r'/(https?://[^/?#]+)', seg)
+            if im:
+                ih = re.match(r'https?://([^/?]+)', im.group(1))
+                if ih:
+                    hosts.add(ih.group(1).split(':')[0].lower())
+    for h in hosts:
+        for p in _TVBOX_ZY_CDN:
+            if re.search(r'(^|[.\-_])' + re.escape(p), h, re.I):
+                return True
+        if re.search(r'(^|[.\-_])lzv\d+', h, re.I):
+            return True
+    if hosts:
+        return False  # 有真实 host 但没命中 CDN → 自有线路，不靠名字
+    # 无 host（占位符型脚本，detail 给相对路径/id）：回退到线路名判定。
+    # 官方/自营字样优先豁免，避免误伤。
+    if any(neg in f for neg in _TVBOX_ZY_NEG):
+        return False
+    if f.upper() in _TVBOX_ZY_CODES:
+        return True
+    if any(kw in f for kw in _TVBOX_ZY_KW):
+        return True
+    if re.search(r'(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|MY)(?:线路|线)', f):
+        return True
+    return False
+
+def _tvbox_filter_lines(result, drop):
+    if not isinstance(result, dict):
+        return result
+    items = result.get('list')
+    if isinstance(items, list):
+        for item in items:
+            _tvbox_filter_item(item, drop)
+    else:
+        _tvbox_filter_item(result, drop)
+    return result
+
+def _tvbox_filter_item(item, drop):
+    froms = item.get('vod_play_from') or ''
+    urls = item.get('vod_play_url') or ''
+    if not isinstance(froms, str) or not isinstance(urls, str):
+        return
+    if '$$$' not in froms:
+        return
+    parts_from = [f.strip() for f in froms.split('$$$')]
+    parts_url = urls.split('$$$')
+    if len(parts_from) != len(parts_url):
+        return
+    if _TVBOX_ZY_ENABLED:
+        keep = [(f, u) for f, u in zip(parts_from, parts_url)
+                if f not in drop and not _tvbox_is_zy_url(u, f)]
+    else:
+        keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]
+    if not keep or len(keep) == len(parts_from):
+        return
+    item['vod_play_from'] = '$$$'.join(f for f, _ in keep)
+    item['vod_play_url'] = '$$$'.join(u for _, u in keep)
+
+def _tvbox_sort_lines(result, order):
+    if not order or not isinstance(result, dict):
+        return result
+    items = result.get('list')
+    if isinstance(items, list):
+        for item in items:
+            _tvbox_sort_item(item, order)
+    else:
+        _tvbox_sort_item(result, order)
+    return result
+
+def _tvbox_sort_item(item, order):
+    froms = item.get('vod_play_from') or ''
+    urls = item.get('vod_play_url') or ''
+    if not isinstance(froms, str) or not isinstance(urls, str):
+        return
+    if '$$$' not in froms:
+        return
+    parts_from = [f.strip() for f in froms.split('$$$')]
+    parts_url = urls.split('$$$')
+    if len(parts_from) != len(parts_url):
+        return
+    known = {f: i for i, f in enumerate(order)}
+    pairs = list(zip(parts_from, parts_url))
+    # 已知线路按 order（画质速度最优在前），未知线路稳定保持原序后置。
+    pairs.sort(key=lambda p: known.get(p[0], len(order)))
+    item['vod_play_from'] = '$$$'.join(f for f, _ in pairs)
+    item['vod_play_url'] = '$$$'.join(u for _, u in pairs)
+
+def _tvbox_apply(cls):
+    fn = getattr(cls, 'detailContent', None)
+    if fn is None:
+        return
+    def wrapper(self, *a, _fn=fn, **k):
+        res = _tvbox_filter_lines(_fn(self, *a, **k), _TVBOX_DROP_LINES)
+        return _tvbox_sort_lines(res, _TVBOX_LINE_ORDER)
+    setattr(cls, 'detailContent', wrapper)
+
+_tvbox_apply(Spider)
