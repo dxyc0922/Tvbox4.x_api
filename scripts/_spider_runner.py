@@ -468,7 +468,12 @@ def main() -> int:
                         try:
                             resolved = call(player, [sample["flag"], sample["url"], []])
                             if isinstance(resolved, dict):
-                                row["url"] = str(resolved.get("url") or sample["url"])[:600]
+                                # 脚本返回字段不统一：有的用 url，有的用 playUrl。
+                                # 都要读，否则拿不到真实播放地址，域名层过滤失效。
+                                resolved_url = (
+                                    resolved.get("url") or resolved.get("playUrl") or sample["url"]
+                                )
+                                row["url"] = str(resolved_url)[:600]
                                 try:
                                     row["parse"] = int(resolved.get("parse", 0) or 0)
                                 except (TypeError, ValueError):

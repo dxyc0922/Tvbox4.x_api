@@ -59,12 +59,6 @@
             "api": "./脚本/dd.py"
         },
         {
-            "key": "wzxxcz_eeae3817b297",
-            "name": "fofo11",
-            "type": 3,
-            "api": "./脚本/fofo11.py"
-        },
-        {
             "key": "wzxxcz_3b024f6ec473",
             "name": "huadouyingshi",
             "type": 3,
