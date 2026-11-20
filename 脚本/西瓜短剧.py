@@ -458,7 +458,7 @@ class Spider(_BaseSpider):
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
 _TVBOX_DROP_LINES = []
-_TVBOX_LINE_ORDER = ["西瓜短剧·原链v4", "西瓜短剧·代理v4", "西瓜短剧·直连v4"]
+_TVBOX_LINE_ORDER = ["西瓜短剧·代理v4", "西瓜短剧·原链v4", "西瓜短剧·直连v4"]
 
 _TVBOX_ZY_ENABLED = False
 

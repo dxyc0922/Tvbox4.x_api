@@ -509,18 +509,15 @@ def analyze_streams(
             url = str(line.get("url") or "")
             if not url:
                 continue
-            try:
-                parse = int(line.get("parse") or 0)
-            except (TypeError, ValueError):
-                parse = -1
-            if parse != 0:
-                continue
+            # parse≠0（需二次解析）的线路也要纳入：detail 返回的 URL 本身
+            # 已是完整 m3u8（有真实 CDN），资源站判定需要它。此前跳过导致
+            # 荐片等源 line_streams=0，源级/线路级过滤全部失效。
             picked.append(
                 (index, str(line.get("flag") or ""), url, str(line.get("alt_url") or ""))
             )
         if not picked:
             url = str(row.get("stream_url") or "")
-            if url and int(row.get("stream_parse") or 0) == 0:
+            if url:
                 picked = [(0, str(row.get("play_flag") or ""), url, "")]
         if not picked:
             continue

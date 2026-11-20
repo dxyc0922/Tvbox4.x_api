@@ -764,7 +764,7 @@ class Spider(BaseSpider):
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
 _TVBOX_DROP_LINES = []
-_TVBOX_LINE_ORDER = ["官方B", "官方S", "官方Z", "官方R"]
+_TVBOX_LINE_ORDER = ["官方B", "官方Z", "官方S", "官方R"]
 
 _TVBOX_ZY_ENABLED = False
 

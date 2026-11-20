@@ -100,6 +100,9 @@ ZY_FLAG_CODE_RE = re.compile(
 ZY_FLAG_EXACT_CODES: frozenset[str] = frozenset({
     "WJ", "SD", "HH", "MT", "JY", "BF", "SN", "FF", "LZ", "YZ",
     "JS", "UK", "XL", "HN", "KC", "BD", "NN", "MY",
+    # 荐片缩写（实测对应资源站 CDN）：SN=索尼 WJ=玩剧 IK=ikun PL=拍律
+    # WL=卧龙 MZ=魔爪 BD=百度 TK=天空 IQY=爱奇艺 RY=如意
+    "IK", "PL", "WL", "MZ", "TK", "IQY", "RY",
 })
 # 括号代码形式（线路2(lz) / 线路3(ff) / 线路1(nby) / 线路4(bf)）：线路名后跟括号内
 # 的两字母资源站缩写。只收录**已确认**的缩写：
@@ -291,13 +294,19 @@ def classify_source(
         if name in z_flag_set and not match_resource_station("", name):
             n_declared_z += 1
     n_sampled = len(entries)
-    # 采样线路的真实 CDN 是硬证据（用户原则：名字会被改写，域名不会）。
+    # 采样线路的真实 CDN/名字是硬证据（用户原则：名字会被改写，域名不会）。
     # 判整源为资源站聚合源需同时满足：
-    #   1. 所有采样视频线路都命中资源站 CDN
-    #   2. 声明名单完整存在（declared_flags）——只有 declared_total 无名单时
-    #      无法确认未采样线路，保持保守不判纯
+    #   1. 所有采样线路都命中资源站（名字或 CDN 信号）——只要有一条可确认自有
+    #      的采样线路（名字无信号且 host 非资源站 CDN）就不整源剔，
+    #      避免荐片这类「部分自有+部分资源站」的混合源被误剔
+    #   2. 声明名单完整存在（declared_flags）
     #   3. 声明名单里没有明确的自有线路（官方/自营/自有/正版）
-    sampled_all_zy = bool(n_video > 0 and n_z >= n_video > 0)
+    sampled_sigs = [
+        match_resource_station(str(e.get("url") or ""), str(e.get("flag") or ""))
+        for e in entries
+    ]
+    sampled_has_own = any(not sig for sig in sampled_sigs)
+    sampled_all_zy = bool(entries and not sampled_has_own)
     declared_has_own = any(
         any(kw in name for kw in ZY_FLAG_NEGATIVE_KEYWORDS) for name in declared
     )

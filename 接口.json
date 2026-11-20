@@ -35,6 +35,12 @@
             "api": "./脚本/VIP兔.py"
         },
         {
+            "key": "wzxxcz_1dfc353a82d6",
+            "name": "caoliushipinqu",
+            "type": 3,
+            "api": "./脚本/caoliushipinqu.py"
+        },
+        {
             "key": "wzxxcz_37cd4b0f2ea9",
             "name": "cntv央视",
             "type": 3,
@@ -81,12 +87,6 @@
             "name": "yt",
             "type": 3,
             "api": "./脚本/yt.py"
-        },
-        {
-            "key": "wzxxcz_9f92e2951814",
-            "name": "一起影视",
-            "type": 3,
-            "api": "./脚本/一起影视.py"
         },
         {
             "key": "wzxxcz_1160fb4e6b2f",
@@ -161,6 +161,12 @@
             "api": "./脚本/剧透社.py"
         },
         {
+            "key": "wzxxcz_b3ca09b39432",
+            "name": "千千影视",
+            "type": 3,
+            "api": "./脚本/千千影视.py"
+        },
+        {
             "key": "wzxxcz_d882a09af99b",
             "name": "千千音乐",
             "type": 3,
@@ -209,22 +215,10 @@
             "api": "./脚本/哔哩哔哩.py"
         },
         {
-            "key": "wzxxcz_0113337e94c2",
-            "name": "嘀嗒影视",
-            "type": 3,
-            "api": "./脚本/嘀嗒影视.py"
-        },
-        {
             "key": "wzxxcz_7e26c1c3ed88",
             "name": "四级老片",
             "type": 3,
             "api": "./脚本/四级老片.py"
-        },
-        {
-            "key": "wzxxcz_82a9cbe6809c",
-            "name": "壹影视",
-            "type": 3,
-            "api": "./脚本/综/壹影视.py"
         },
         {
             "key": "wzxxcz_bbed5965d583",
@@ -299,6 +293,12 @@
             "api": "./脚本/影探聚合.py"
         },
         {
+            "key": "wzxxcz_d68ac251a6fc",
+            "name": "影视大全",
+            "type": 3,
+            "api": "./脚本/影视大全.py"
+        },
+        {
             "key": "wzxxcz_32aaf84342f3",
             "name": "影迷4K",
             "type": 3,
@@ -335,16 +335,22 @@
             "api": "./脚本/极速追剧.py"
         },
         {
+            "key": "wzxxcz_80cf2a0e698c",
+            "name": "森林影院",
+            "type": 3,
+            "api": "./脚本/森林影院.py"
+        },
+        {
             "key": "wzxxcz_c9ca16acb7cf",
             "name": "橙果",
             "type": 3,
             "api": "./脚本/橙果.py"
         },
         {
-            "key": "wzxxcz_bd19e795495f",
-            "name": "毒蛇",
+            "key": "wzxxcz_f8d1ac53b6b9",
+            "name": "毒舌影视",
             "type": 3,
-            "api": "./脚本/综/毒蛇.py"
+            "api": "./脚本/毒舌影视.py"
         },
         {
             "key": "wzxxcz_1701585ea278",
@@ -357,6 +363,18 @@
             "name": "河马剧场",
             "type": 3,
             "api": "./脚本/河马剧场.py"
+        },
+        {
+            "key": "wzxxcz_debace9449e1",
+            "name": "洛雪TV",
+            "type": 3,
+            "api": "./脚本/洛雪TV.py"
+        },
+        {
+            "key": "wzxxcz_6f3ca5f6a65f",
+            "name": "热播",
+            "type": 3,
+            "api": "./脚本/热播.py"
         },
         {
             "key": "wzxxcz_7af6ff43efff",
@@ -405,12 +423,6 @@
             "name": "电影人生",
             "type": 3,
             "api": "./脚本/电影人生.py"
-        },
-        {
-            "key": "wzxxcz_5bf72f5af13e",
-            "name": "电影侠",
-            "type": 3,
-            "api": "./脚本/电影侠.py"
         },
         {
             "key": "wzxxcz_4cb04cb64ffd",
