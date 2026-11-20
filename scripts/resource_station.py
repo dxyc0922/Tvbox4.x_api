@@ -257,11 +257,16 @@ def classify_source(
             # 明确非视频（audio）：不判资源站。
             continue
         if not kind or kind == "unknown":
-            # kind 未知（如线路采样时连接超时）：仍可用 URL/CDN 证据判定。
-            # 猎手.py「超清线路」采样超时 kind=unknown，但 CDN 是 s1.fengbao9.com
-            # （暴风资源），此前被跳过导致漏剔。只认 URL 证据（CDN/API），
-            # 不认名称——名字叫「资源」的未验证线路可能是音频。
-            if sig.startswith("资源站CDN") or sig == "采集站API":
+            # kind 未知（如线路采样时连接超时）：URL/CDN 证据和明确的资源站
+            # 名字信号都认。猎手「超清线路」超时但 CDN 是暴风；分享咕噜「蚂蚁
+            # 资源」超时但名字含资源——此前只认 URL 证据导致这类漏剔。
+            # 音频线路名不会叫「XX资源/暴风/量子」，名字信号可安全采信。
+            if (
+                sig.startswith("资源站CDN")
+                or sig == "采集站API"
+                or sig.startswith("资源站名")
+                or sig.startswith("资源站缩写")
+            ):
                 n_z += 1
                 if flag:
                     z_flags.append(flag)
@@ -285,7 +290,19 @@ def classify_source(
         if name in z_flag_set and not match_resource_station("", name):
             n_declared_z += 1
     n_sampled = len(entries)
-    if declared:
+    # 采样线路的真实 CDN 是硬证据（用户原则：名字会被改写，域名不会）。
+    # 判整源为资源站聚合源需同时满足：
+    #   1. 所有采样视频线路都命中资源站 CDN
+    #   2. 声明名单完整存在（declared_flags）——只有 declared_total 无名单时
+    #      无法确认未采样线路，保持保守不判纯
+    #   3. 声明名单里没有明确的自有线路（官方/自营/自有/正版）
+    sampled_all_zy = bool(n_video > 0 and n_z >= n_video > 0)
+    declared_has_own = any(
+        any(kw in name for kw in ZY_FLAG_NEGATIVE_KEYWORDS) for name in declared
+    )
+    if sampled_all_zy and declared and not declared_has_own:
+        pure = True
+    elif declared:
         # 纯缩写占比 ≥60% → 资源站聚合型脚本（占位符线路，全是采集站缩写）。
         # 这类脚本不混官方线，未识别的少数线路（如「XXAPP」）也是资源站。
         n_exact = sum(1 for name in declared if name.strip().upper() in ZY_FLAG_EXACT_CODES)
