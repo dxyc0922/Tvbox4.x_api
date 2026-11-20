@@ -29,12 +29,6 @@
             "api": "./脚本/OK看剧网.py"
         },
         {
-            "key": "wzxxcz_1dfc353a82d6",
-            "name": "caoliushipinqu",
-            "type": 3,
-            "api": "./脚本/caoliushipinqu.py"
-        },
-        {
             "key": "wzxxcz_37cd4b0f2ea9",
             "name": "cntv央视",
             "type": 3,
@@ -81,12 +75,6 @@
             "name": "yt",
             "type": 3,
             "api": "./脚本/yt.py"
-        },
-        {
-            "key": "wzxxcz_1160fb4e6b2f",
-            "name": "不卡影视",
-            "type": 3,
-            "api": "./脚本/不卡影视.py"
         },
         {
             "key": "wzxxcz_e8d279df2881",

@@ -59,6 +59,7 @@ ZY_CDN_PATTERNS: tuple[str, ...] = (
     "bdzybf",              # 百度资源（b3.bdzybf22.com，99短剧网实测）
     # 抽查实测补录：缩写聚合脚本的资源站 CDN
     "bfikuncdn", "wlcdn88", "dious", "ly166", "xgplay13", "taopianplay",
+    "kuktxu", "2767.org", "892539",  # 抽查实测：不卡影视/花都影视/caoliushipinqu 资源站
 )
 # 只要求**左边界**（host 开头或 `.`/`-` 之后）：资源站 CDN 常带数字后缀
 # （rrcdnbf6 / yzzy31 / fengbao13 / modujx10 / cdnlz14 / ruiplay18），若也要求右
