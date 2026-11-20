@@ -38,7 +38,7 @@ ZY_API_RE = re.compile(
 # CDN，均为无语义随机字母域名，正常官方源不会使用，已确认归属资源站。
 ZY_CDN_PATTERNS: tuple[str, ...] = (
     "ffzy", "feifei",        # 非凡资源
-    "yzzy", "cdnlz", "lzzy",  # 量子资源（lz=量子）/ 最大资源
+    "yzzy", "cdnlz", "lzzy", "lzcdn",  # 量子资源（lz=量子）/ 最大资源
     # lzv+数字（v.lzv40.com / lzv34.com）单独用 ZY_CDN_LZV_RE 匹配，避免过宽
     # 命中 lzvideo.com 之类普通域名。
     "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip",  # 暴风资源 / 疯包（ffvip/7bbffvip=暴风FF资源）

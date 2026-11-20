@@ -203,18 +203,6 @@
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%A4%9A%E7%91%99%E5%BD%B1%E9%99%A2.py"
         },
         {
-            "key": "wzxxcz_e03fcc0498a4",
-            "name": "大马猴",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/zzq1234567890/tvbox1/main/py/%E5%A4%A7%E9%A9%AC%E7%8C%B4.py"
-        },
-        {
-            "key": "wzxxcz_3f5ce72740f6",
-            "name": "大马猴影视",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E5%A4%A7%E9%A9%AC%E7%8C%B4%E5%BD%B1%E8%A7%86.py"
-        },
-        {
             "key": "wzxxcz_a3550acdbc71",
             "name": "央库云",
             "type": 3,
@@ -303,12 +291,6 @@
             "name": "极速追剧",
             "type": 3,
             "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E6%9E%81%E9%80%9F%E8%BF%BD%E5%89%A7.py"
-        },
-        {
-            "key": "wzxxcz_80cf2a0e698c",
-            "name": "森林影院",
-            "type": 3,
-            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/wzxxcz/wzxxcz/maing/py/%E6%A3%AE%E6%9E%97%E5%BD%B1%E9%99%A2.py"
         },
         {
             "key": "wzxxcz_c9ca16acb7cf",

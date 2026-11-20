@@ -203,18 +203,6 @@
             "api": "./脚本/多瑙影院.py"
         },
         {
-            "key": "wzxxcz_e03fcc0498a4",
-            "name": "大马猴",
-            "type": 3,
-            "api": "./脚本/大马猴.py"
-        },
-        {
-            "key": "wzxxcz_3f5ce72740f6",
-            "name": "大马猴影视",
-            "type": 3,
-            "api": "./脚本/大马猴影视.py"
-        },
-        {
             "key": "wzxxcz_a3550acdbc71",
             "name": "央库云",
             "type": 3,
@@ -303,12 +291,6 @@
             "name": "极速追剧",
             "type": 3,
             "api": "./脚本/极速追剧.py"
-        },
-        {
-            "key": "wzxxcz_80cf2a0e698c",
-            "name": "森林影院",
-            "type": 3,
-            "api": "./脚本/森林影院.py"
         },
         {
             "key": "wzxxcz_c9ca16acb7cf",
