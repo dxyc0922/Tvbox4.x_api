@@ -263,8 +263,8 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
-_TVBOX_LINE_ORDER = ["备用线路2", "超前线路2", "高清线路"]
+_TVBOX_DROP_LINES = ["高清线路"]
+_TVBOX_LINE_ORDER = ["超前线路2", "备用线路2", "暴走线路", "高清线路"]
 
 _TVBOX_ZY_ENABLED = False
 

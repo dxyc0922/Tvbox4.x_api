@@ -878,7 +878,7 @@ class Spider(Spider):
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
 _TVBOX_DROP_LINES = []
-_TVBOX_LINE_ORDER = ["PAN1", "NBY"]
+_TVBOX_LINE_ORDER = ["zijianm3u8", "NBY", "PAN1"]
 
 _TVBOX_ZY_ENABLED = False
 

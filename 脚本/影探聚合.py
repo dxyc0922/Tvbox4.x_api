@@ -13758,8 +13758,8 @@ spider = Spider
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
-_TVBOX_LINE_ORDER = ["咕噜·新咕噜4K", "橘汁新·自建4K-3", "影探·移动云", "影探·联通云"]
+_TVBOX_DROP_LINES = ["影探·移动云"]
+_TVBOX_LINE_ORDER = ["影探·联通云", "影探·移动云", "橘汁·新咕噜4K", "橘汁·鲸宝4K"]
 
 _TVBOX_ZY_ENABLED = False
 

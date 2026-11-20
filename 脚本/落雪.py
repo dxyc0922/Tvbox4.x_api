@@ -2365,8 +2365,8 @@ def destroy():
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["🔥 直链"]
-_TVBOX_LINE_ORDER = ["🔥 直链", "自营🔥 网页", "官采蓝光·洛雪4K"]
+_TVBOX_DROP_LINES = ["360资源", "电影天堂", "🔥 直链"]
+_TVBOX_LINE_ORDER = ["360资源", "电影天堂", "🔥 直链", "自营🔥 直链"]
 
 _TVBOX_ZY_ENABLED = True
 _TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8"]

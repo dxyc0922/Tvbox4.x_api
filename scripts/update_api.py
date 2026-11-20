@@ -2052,9 +2052,6 @@ def write_local_spiders(
         kept_files.add(filename)
         drops: dict[str, str] = {}
         if enabled:
-            # 手动黑名单优先（用户确认，不经过两振）；码率豁免的源不做质量自动剔除。
-            for flag in blacklist.get(filename, ()):
-                drops.setdefault(flag, "手动配置")
             # quality.enabled=false 时关掉码率/速度线路裁剪，只留黑名单+资源站。
             skip_quality = not quality_enabled or filename in bitrate_allow
             skip_speed = not quality_enabled or filename in speed_allow
@@ -2106,6 +2103,9 @@ def write_local_spiders(
                 if zs_flags and remaining:
                     for flag in sorted(zs_flags):
                         drops.setdefault(flag, "资源站线路")
+            # 黑名单剔除：放在资源站之后执行（用户要求的过滤顺序）。
+            for flag in blacklist.get(filename, ()):
+                drops.setdefault(flag, "手动配置")
             # 不剔空源（通用护栏）：上面三套检查（码率/速度/资源站）各自为政，
             # 可能把同源线路全删空（如猎手.py：暴风/魔都/索尼被码率剔、天堂线路被
             # 资源站剔，4 条全没了）。删空源等于给 TVBox 一个打不开的空源，比留一条
@@ -2637,10 +2637,6 @@ def main(argv: list[str] | None = None) -> int:
                 adult_hits.append((result.filename, hits))
             if result.status != "valid":
                 continue
-            if hits and exclude_adult and result.filename not in adult_allow:
-                result.status = "excluded_adult"
-                result.error = "成人内容: " + "、".join(hits[:5])
-                continue
             # 三方法硬门槛：searchContent+detailContent+playerContent 任一失败 = 源废。
             # functional_ok 由 _spider_runner 写入（True=三方法全通）。旧报告无该字段
             # 视为通过（None 不误剔）；新报告有则必须为 True，否则剔除。
@@ -2733,6 +2729,13 @@ def main(argv: list[str] | None = None) -> int:
                         f"资源站聚合源（{shown}全是资源站："
                         f"{'、'.join(zs_cls['z_flags'][:6])}）"
                     )
+            # 成人过滤：放在功能→资源站之后执行（用户要求的过滤顺序）。
+            if (
+                hits and exclude_adult and result.status == "valid"
+                and result.filename not in adult_allow
+            ):
+                result.status = "excluded_adult"
+                result.error = "成人内容: " + "、".join(hits[:5])
         scores = Counter(
             int(result.quality.get("score") or 0)
             for result in results
@@ -2851,13 +2854,13 @@ def main(argv: list[str] | None = None) -> int:
         if result.entry is not None and result.status == "valid"
     }
 
-    def _entry_sort_key(entry: dict[str, Any]) -> tuple:
-        result = result_by_entry.get(id(entry))
-        if result is None:
-            return (4, 0, 0.0, 0.0, str(entry.get("name") or ""))
-        return quality_sort_key(result, dyn_thresholds)
-
-    entries.sort(key=_entry_sort_key)
+    # 排序已按用户要求去除：保持上游/去重后的原始顺序，不再按画质 bpp/速度重排。
+    # def _entry_sort_key(entry: dict[str, Any]) -> tuple:
+    #     result = result_by_entry.get(id(entry))
+    #     if result is None:
+    #         return (4, 0, 0.0, 0.0, str(entry.get("name") or ""))
+    #     return quality_sort_key(result, dyn_thresholds)
+    # entries.sort(key=_entry_sort_key)
 
     print("-" * 60)
     print(
@@ -2911,34 +2914,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    if not args.force and not args.dry_run and args.limit == 0:
-        safety = config.get("safety", {})
-        max_failure_ratio = float(safety.get("max_download_failure_ratio", 0.2))
-        min_previous_ratio = float(safety.get("min_previous_ratio", 0.5))
-        download_failed = counts.get("download_failed", 0)
-        if filenames and download_failed / len(filenames) > max_failure_ratio:
-            print(
-                f"下载失败 {download_failed}/{len(filenames)}，超过安全阈值 "
-                f"{max_failure_ratio:.0%}，本次不写入。",
-                file=sys.stderr,
-            )
-            return 1
-        # 质量过滤是我们主动删源，不算「上游异常」，回加后再比较。
-        intentional = (
-            counts.get("low_quality", 0)
-            + counts.get("low_bitrate", 0)
-            + counts.get("slow_stream", 0)
-        )
-        if (
-            len(removed) >= 10
-            and len(entries) + intentional < len(removed) * min_previous_ratio
-        ):
-            print(
-                f"本次可用站点 {len(entries) + intentional} 个，比上次的 {len(removed)} 个少了一半以上，"
-                "为避免误删，本次不写入。确认无误可加 --force。",
-                file=sys.stderr,
-            )
-            return 1
+    # 安全护栏已按用户要求去除：不再因站点数骤降/下载失败率而拒绝写入。
 
     # 同步脚本到本地目录并注入线路过滤（接口指向本地文件）。
     local_spider_dir = str(config.get("local_spider_dir") or "").strip().strip("/")

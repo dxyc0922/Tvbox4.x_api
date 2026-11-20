@@ -438,7 +438,7 @@ class Spider(Spider):
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
 _TVBOX_DROP_LINES = []
-_TVBOX_LINE_ORDER = ["FX线路", "YZ线路", "GS线路", "FF线路"]
+_TVBOX_LINE_ORDER = ["ZD线路", "YZ线路", "LZ线路"]
 
 _TVBOX_ZY_ENABLED = False
 

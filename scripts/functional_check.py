@@ -42,7 +42,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import update_api  # noqa: E402
-import dynamic_keywords  # noqa: E402
 
 RUNNER = Path(__file__).resolve().with_name("_spider_runner.py")
 SHIM = Path(__file__).resolve().with_name("spider_shim")
@@ -659,16 +658,21 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     config = update_api.load_config(Path(args.config))
     settings = config.get("functional") or {}
-    # 动态关键词：从豆瓣.py categoryContent 拿最新动漫/剧集名，生成降级搜索链。
-    # 固定测旧片（庆余年）等于没测——源新旧影视画质/卡顿不同，必须测最新作品。
-    # --keyword 可覆盖（调试）：逗号分隔，每个词单独成链（不降级）。
+    # 固定关键词：config.functional.fixed_keyword 设了就只用这一个词（不追加豆瓣
+    # 动态词，也不降级）——用户要求固定测仙逆。
+    # --keyword 命令行参数优先级最高（调试用）。
+    fixed = str(settings.get("fixed_keyword") or "").strip()
     if args.keyword:
         keywords = [k.strip() for k in args.keyword.split(",") if k.strip()]
         keyword_chains = [[k] for k in keywords]
+    elif fixed:
+        keywords = [fixed]
+        keyword_chains = [[fixed]]
     else:
-        prefer = [str(k).strip() for k in (settings.get("prefer_keywords") or []) if str(k).strip()]
-        keyword_chains = dynamic_keywords.keyword_chains(prefer=prefer)
-        keywords = [chain[0] for chain in keyword_chains]
+        # 豆瓣动态词已按用户要求去除：没有 fixed_keyword 时用 config.keyword 兜底。
+        fallback = str(settings.get("keyword") or "仙逆").strip() or "仙逆"
+        keywords = [fallback]
+        keyword_chains = [[fallback]]
     keyword = keywords[0] if keywords else "庆余年"
     if not keyword_chains:
         keyword_chains = [[keyword]]

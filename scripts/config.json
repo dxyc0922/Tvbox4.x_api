@@ -68,6 +68,7 @@
     "enabled": true,
     "report": "reports/functional-report.json",
     "min_score": 0,
+    "fixed_keyword": "仙逆",
     "keyword": "庆余年",
     "keywords": [
       "庆余年",
@@ -108,14 +109,7 @@
     "line_prune": {
       "enabled": true,
       "dead_status_min": 0,
-      "blacklist": {
-        "猎手.py": [
-          "高清-官方线路B",
-          "高清-官方线路D",
-          "尊享4k",
-          "1080P-官方Y"
-        ]
-      }
+      "blacklist": {}
     },
     "resource_station": {
       "enabled": true,
@@ -125,6 +119,9 @@
     }
   },
   "local_spider_dir": "脚本",
+  "verification": {
+    "skip_host_when_functional": true
+  },
   "safety": {
     "min_previous_ratio": 0.5,
     "max_download_failure_ratio": 0.2

@@ -914,8 +914,8 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["小橙子官1", "小橙子官3"]
-_TVBOX_LINE_ORDER = ["小橙子官2", "小橙子官3", "小橙子官1"]
+_TVBOX_DROP_LINES = ["小橙子官1", "小橙子官2", "小橙子官4"]
+_TVBOX_LINE_ORDER = ["小橙子官4", "小橙子官1", "小橙子官2", "小橙子官3"]
 
 _TVBOX_ZY_ENABLED = True
 _TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8"]
