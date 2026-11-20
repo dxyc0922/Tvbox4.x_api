@@ -481,7 +481,7 @@ _TVBOX_DROP_LINES = ["线路1", "线路2", "线路3", "线路5"]
 _TVBOX_LINE_ORDER = ["线路1", "线路3", "线路5", "线路2"]
 
 _TVBOX_ZY_ENABLED = True
-_TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8", "ppqrrs", "qqqrst", "hhuus"]
+_TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8", "ppqrrs", "qqqrst", "hhuus"]
 _TVBOX_ZY_API = "/api\\.php/(provide|providedown)|/inc/api_mac|provide/vod|providedown/vod"
 _TVBOX_ZY_CODES = ["BD", "BF", "FF", "HH", "HN", "JS", "JY", "KC", "LZ", "MT", "MY", "NN", "SD", "SN", "UK", "WJ", "XL", "YZ"]
 _TVBOX_ZY_KW = ["量子", "非凡", "暴风", "魔都", "极速", "最大", "蜗牛", "影库", "红牛", "新浪", "光速", "如意", "卧龙", "无界", "人尽", "牛牛", "猫屋", "电影天堂", "天堂", "4K资源", "索尼"]
@@ -518,6 +518,13 @@ def _tvbox_is_zy_url(url, flag=''):
                     if rh: hosts.add(rh)
             if h:
                 hosts.add(h)
+            # 中转缓存型：真实 URL 拼在路径里（/cache/https://cdn/...），
+            # 取内层 host（如 47电影天堂 dl.gybkw.com/cache/https://c1.7bbffvip.com）。
+            im = re.search(r'/(https?://[^/?#]+)', seg)
+            if im:
+                ih = re.match(r'https?://([^/?]+)', im.group(1))
+                if ih:
+                    hosts.add(ih.group(1).split(':')[0].lower())
     for h in hosts:
         for p in _TVBOX_ZY_CDN:
             if re.search(r'(^|[.\-_])' + re.escape(p), h, re.I):

@@ -41,7 +41,7 @@ ZY_CDN_PATTERNS: tuple[str, ...] = (
     "yzzy", "cdnlz", "lzzy",  # 量子资源（lz=量子）/ 最大资源
     # lzv+数字（v.lzv40.com / lzv34.com）单独用 ZY_CDN_LZV_RE 匹配，避免过宽
     # 命中 lzvideo.com 之类普通域名。
-    "bfzy", "rrcdnbf", "fengbao",  # 暴风资源 / 疯包
+    "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip",  # 暴风资源 / 疯包（ffvip/7bbffvip=暴风FF资源）
     "modujx", "modudm", "mujizybf",  # 魔都
     "jisuzy", "jisuzyv",     # 极速资源
     "zuidazy",               # 最大资源
@@ -156,6 +156,14 @@ def _host(url: str) -> str:
         rm = re.match(r"https?://([^/?]+)", real)
         if rm:
             return rm.group(1).split(":")[0].lower()
+    # 中转缓存型：真实资源站 URL 拼在路径里，如
+    # https://dl.gybkw.com/cache/https://c1.7bbffvip.com/video/x.m3u8
+    # 外层是中转域名，内层才是真实 CDN。取内层 host。
+    inner = re.search(r"/(https?://[^/?#]+)", url)
+    if inner:
+        ih = re.match(r"https?://([^/?]+)", inner.group(1))
+        if ih:
+            return ih.group(1).split(":")[0].lower()
     return host
 
 
@@ -201,7 +209,7 @@ def match_resource_station(url: str, flag: str = "") -> str:
 
 def classify_source(
     line_streams: Iterable[dict[str, Any]],
-    video_kinds: Iterable[str] = ("m3u8", "mp4", "hls", "flv", "local"),
+    video_kinds: Iterable[str] = ("m3u8", "mp4", "hls", "flv", "local", "page"),
     declared_flags: Iterable[str] | None = None,
     declared_total: int = 0,
 ) -> dict[str, Any]:
