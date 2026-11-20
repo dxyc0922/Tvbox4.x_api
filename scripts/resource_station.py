@@ -21,6 +21,7 @@ gsuus ...）。这类线路内容来自第三方采集站聚合，质量不可�
 from __future__ import annotations
 
 import re
+import urllib.parse
 from typing import Any, Iterable
 
 # --- 1) 采集站 API 签名（macCMS/苹果CMS 资源站采集接口）---
@@ -32,8 +33,9 @@ ZY_API_RE = re.compile(
 
 # --- 2) 资源站播放 CDN host 特征（按资源站名拼音）---
 # 只收录命名明确的资源站 CDN。少数混淆域名在用户确认归属后才收录（rstu6=索尼）；
-# 其余仍不收录（qqqrst / ppqrrs / hhuus 等），避免把非资源站线路误判。
 # 签名表可配置扩展（宁可漏判也不错判）。
+# 混淆域名：以下为实测在资源站聚合脚本（一起看/APP影院1）播放线路上确认的
+# CDN，均为无语义随机字母域名，正常官方源不会使用，已确认归属资源站。
 ZY_CDN_PATTERNS: tuple[str, ...] = (
     "ffzy", "feifei",        # 非凡资源
     "yzzy", "cdnlz", "lzzy",  # 量子资源（lz=量子）/ 最大资源
@@ -52,7 +54,8 @@ ZY_CDN_PATTERNS: tuple[str, ...] = (
     "maowushi",              # 猫屋资源
     "ukuzi", "niuniuzy",     # uku / 牛牛资源
     "rstu6",                 # 索尼（混淆域名，用户确认归属）
-    "mzm3u8",                          # 魔爪（mzm3u8.vip，与魔都并列的资源站）
+    "mzm3u8",              # 魔爪（mzm3u8.vip，与魔都并列的资源站）
+    "ppqrrs", "qqqrst", "hhuus",  # 混淆资源站 CDN（一起看/APP影院1 实测确认）
 )
 # 只要求**左边界**（host 开头或 `.`/`-` 之后）：资源站 CDN 常带数字后缀
 # （rrcdnbf6 / yzzy31 / fengbao13 / modujx10 / cdnlz14 / ruiplay18），若也要求右
@@ -133,11 +136,27 @@ def runtime_url_signatures() -> dict[str, Any]:
 
 
 def _host(url: str) -> str:
-    """取 URL 的 host（去端口、小写）。"""
-    m = re.match(r"https?://([^/]+)", url or "")
+    """取 URL 的 host（去端口、小写）。
+
+    本地代理型脚本（APP影院1 等）真实地址藏在 ``url=`` 参数里，外层 host 是
+    127.0.0.1 —— 解码 url 参数取真实 host，否则资源站 CDN 被代理地址掩盖。
+    """
+    m = re.match(r"https?://([^/?]+)", url or "")
     if not m:
         return ""
-    return m.group(1).split(":")[0].lower()
+    host = m.group(1).split(":")[0].lower()
+    if host in ("127.0.0.1", "localhost", "::1"):
+        # 解码 url= 参数里的真实播放地址
+        real = ""
+        qs = re.search(r"[?&]url=([^&]+)", url)
+        if qs:
+            real = urllib.parse.unquote(qs.group(1))
+        if real.startswith("//"):
+            real = "https:" + real
+        rm = re.match(r"https?://([^/?]+)", real)
+        if rm:
+            return rm.group(1).split(":")[0].lower()
+    return host
 
 
 def match_resource_station(url: str, flag: str = "") -> str:
@@ -182,7 +201,7 @@ def match_resource_station(url: str, flag: str = "") -> str:
 
 def classify_source(
     line_streams: Iterable[dict[str, Any]],
-    video_kinds: Iterable[str] = ("m3u8", "mp4", "hls", "flv"),
+    video_kinds: Iterable[str] = ("m3u8", "mp4", "hls", "flv", "local"),
     declared_flags: Iterable[str] | None = None,
     declared_total: int = 0,
 ) -> dict[str, Any]:
@@ -250,6 +269,12 @@ def classify_source(
         str(x).strip() for x in (declared_flags or []) if str(x or "").strip()
     ]
     n_declared_z = sum(1 for name in declared if match_resource_station("", name))
+    # 采样里已被 CDN/URL 证据判为资源站的线路，即使名字普通（如「无尽云播」）
+    # 也要计入 declared 的 z 数——代理型脚本真实 CDN 藏在 url 参数里，名字看不出。
+    z_flag_set = {f for f in z_flags if f}
+    for name in declared:
+        if name in z_flag_set and not match_resource_station("", name):
+            n_declared_z += 1
     n_sampled = len(entries)
     if declared:
         # 纯缩写占比 ≥60% → 资源站聚合型脚本（占位符线路，全是采集站缩写）。

@@ -351,7 +351,7 @@ _TVBOX_DROP_LINES = ["暴风云", "索尼云", "红牛云", "量子云"]
 _TVBOX_LINE_ORDER = ["量子云", "红牛云", "索尼云", "暴风云"]
 
 _TVBOX_ZY_ENABLED = True
-_TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8"]
+_TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8", "ppqrrs", "qqqrst", "hhuus"]
 _TVBOX_ZY_API = "/api\\.php/(provide|providedown)|/inc/api_mac|provide/vod|providedown/vod"
 _TVBOX_ZY_CODES = ["BD", "BF", "FF", "HH", "HN", "JS", "JY", "KC", "LZ", "MT", "MY", "NN", "SD", "SN", "UK", "WJ", "XL", "YZ"]
 _TVBOX_ZY_KW = ["量子", "非凡", "暴风", "魔都", "极速", "最大", "蜗牛", "影库", "红牛", "新浪", "光速", "如意", "卧龙", "无界", "人尽", "牛牛", "猫屋", "电影天堂", "天堂", "4K资源", "索尼"]
@@ -370,9 +370,22 @@ def _tvbox_is_zy_url(url, flag=''):
         seg = seg.strip()
         if seg.startswith('http://') or seg.startswith('https://'):
             try:
-                h = (urllib.parse.urlparse(seg).hostname or '').lower()
+                parsed = urllib.parse.urlparse(seg)
+                h = (parsed.hostname or '').lower()
             except Exception:
-                h = ''
+                h = ''; parsed = None
+            # 本地代理型脚本（如 APP影院1）：真实地址藏在 url= 参数里，
+            # 需解码后再提取 host，否则只会拿到 127.0.0.1 而漏判。
+            if parsed and h in ('127.0.0.1', 'localhost', '::1'):
+                qs = urllib.parse.parse_qs(parsed.query)
+                real = (qs.get('url') or [''])[0]
+                if real.startswith('//'): real = 'https:' + real
+                if real.startswith('http://') or real.startswith('https://'):
+                    try:
+                        rh = (urllib.parse.urlparse(real).hostname or '').lower()
+                    except Exception:
+                        rh = ''
+                    if rh: hosts.add(rh)
             if h:
                 hosts.add(h)
     for h in hosts:

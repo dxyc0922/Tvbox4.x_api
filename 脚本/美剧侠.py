@@ -265,7 +265,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = []
+_TVBOX_DROP_LINES = ["超清m"]
 _TVBOX_LINE_ORDER = ["超清m", "超清y"]
 
 _TVBOX_ZY_ENABLED = False
