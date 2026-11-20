@@ -23,12 +23,6 @@
             "api": "./脚本/1234影视.py"
         },
         {
-            "key": "wzxxcz_d2c369bfee55",
-            "name": "99短剧网",
-            "type": 3,
-            "api": "./脚本/99短剧网.py"
-        },
-        {
             "key": "wzxxcz_fc0568b2bb6b",
             "name": "AI搜剧",
             "type": 3,
