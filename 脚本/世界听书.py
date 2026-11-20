@@ -770,7 +770,7 @@ def _tvbox_filter_item(item, drop):
         return
     if _TVBOX_ZY_ENABLED:
         keep = [(f, u) for f, u in zip(parts_from, parts_url)
-                if f not in drop and not _tvbox_is_zy_url(u)]
+                if f not in drop and not _tvbox_is_zy_url(u, f)]
     else:
         keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]
     if not keep or len(keep) == len(parts_from):

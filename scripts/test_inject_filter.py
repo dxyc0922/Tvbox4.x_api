@@ -115,6 +115,26 @@ check("多集串魔都线路剔除", "魔都线路" not in kept7)
 check("多集串索尼线路剔除", "索尼线路" not in kept7)
 check("多集串自有线路保留", "自有线路" in kept7)
 
+print("\n=== 占位符型线路（相对路径/id，无 CDN）按名字判定 ===")
+result8 = {
+    "list": [{
+        "vod_play_from": "BF线路$$$MY线路$$$腾讯$$$官方线路-C",
+        "vod_play_url": (
+            "第1集$/vodplay/248-3-1.html$$$"   # BF线路：占位符，名字是资源站缩写
+            "第1集$/vodplay/248-5-1.html$$$"   # MY线路：猫眼资源缩写
+            "第1集$/vodplay/248-6-1.html$$$"   # 腾讯：未识别缩写，保留
+            "第1集$/vodplay/248-7-1.html"      # 官方线路-C：否定词，保留
+        ),
+    }]
+}
+ns["_tvbox_filter_lines"](result8, ns["_TVBOX_DROP_LINES"])
+kept8 = result8["list"][0]["vod_play_from"].split("$$$")
+print("  保留:", kept8)
+check("BF线路剔除(占位符+名字)", "BF线路" not in kept8)
+check("MY线路剔除(占位符+名字)", "MY线路" not in kept8)
+check("腾讯保留", "腾讯" in kept8)
+check("官方线路-C保留(否定词)", "官方线路-C" in kept8)
+
 print("\n=== 不剔空源：全是资源站线路时保留原样 ===")
 result6 = {
     "list": [{

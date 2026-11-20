@@ -84,7 +84,7 @@ ZY_FLAG_NUM_RE = re.compile(r"(?i)\b(1080|360)(?!p)")
 # 两字母资源站缩写（LZ=量子 FF=非凡 BF=暴风 HF/HN=红牛 YZ=云智 DY=DYTT），
 # 只匹配「缩写+线路/线」组合，避免 OFF / FFF 之类误报。
 ZY_FLAG_CODE_RE = re.compile(
-    r"(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|DYTT|LZL|YZL|FFL|BFL)(?:线路|线)\b"
+    r"(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|DYTT|LZL|YZL|FFL|BFL|MY)(?:线路|线)\b"
 )
 # 纯缩写 flag（占位符型脚本：detail 只给 id|name|0，没有真实 URL，运行时 CDN
 # 签名失效，只能靠名字判定）。实测「一起看」这些缩写对应的全是资源站 CDN：
@@ -94,7 +94,7 @@ ZY_FLAG_CODE_RE = re.compile(
 # 用**精确相等**（upper 后整串匹配），不做子串，避免 JY/BD 出现在长名字里误报。
 ZY_FLAG_EXACT_CODES: frozenset[str] = frozenset({
     "WJ", "SD", "HH", "MT", "JY", "BF", "SN", "FF", "LZ", "YZ",
-    "JS", "UK", "XL", "HN", "KC", "BD", "NN",
+    "JS", "UK", "XL", "HN", "KC", "BD", "NN", "MY",
 })
 # 括号代码形式（线路2(lz) / 线路3(ff) / 线路1(nby) / 线路4(bf)）：线路名后跟括号内
 # 的两字母资源站缩写。只收录**已确认**的缩写：
@@ -126,6 +126,9 @@ def runtime_url_signatures() -> dict[str, Any]:
     return {
         "cdn": list(ZY_CDN_PATTERNS),
         "api": ZY_API_RE.pattern,
+        "exact_codes": sorted(ZY_FLAG_EXACT_CODES),
+        "keywords": [k for k in ZY_FLAG_KEYWORDS if k != "资源"],  # 资源太宽，单独处理
+        "negatives": list(ZY_FLAG_NEGATIVE_KEYWORDS),
     }
 
 

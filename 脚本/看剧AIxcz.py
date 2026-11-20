@@ -881,10 +881,14 @@ _TVBOX_LINE_ORDER = ["豆瓣资源", "豪华资源", "极速资源", "魔都资�
 _TVBOX_ZY_ENABLED = True
 _TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "bfzy", "rrcdnbf", "fengbao", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8"]
 _TVBOX_ZY_API = "/api\\.php/(provide|providedown)|/inc/api_mac|provide/vod|providedown/vod"
+_TVBOX_ZY_CODES = ["BD", "BF", "FF", "HH", "HN", "JS", "JY", "KC", "LZ", "MT", "MY", "NN", "SD", "SN", "UK", "WJ", "XL", "YZ"]
+_TVBOX_ZY_KW = ["量子", "非凡", "暴风", "魔都", "极速", "最大", "蜗牛", "影库", "红牛", "新浪", "光速", "如意", "卧龙", "无界", "人尽", "牛牛", "猫屋", "电影天堂", "天堂", "4K资源", "索尼"]
+_TVBOX_ZY_NEG = ["官方", "自营", "自有", "正版"]
 
-def _tvbox_is_zy_url(url):
+def _tvbox_is_zy_url(url, flag=''):
     import re, urllib.parse
     u = str(url or '')
+    f = str(flag or '').strip()
     if re.search(_TVBOX_ZY_API, u, re.I):
         return True
     # 播放地址可能是多集拼接串：'第01集$https://a.com/x.m3u8#第02集$https://b.com/y.m3u8'
@@ -899,14 +903,24 @@ def _tvbox_is_zy_url(url):
                 h = ''
             if h:
                 hosts.add(h)
-    if not hosts:
-        return False
     for h in hosts:
         for p in _TVBOX_ZY_CDN:
             if re.search(r'(^|[.\-_])' + re.escape(p), h, re.I):
                 return True
         if re.search(r'(^|[.\-_])lzv\d+', h, re.I):
             return True
+    if hosts:
+        return False  # 有真实 host 但没命中 CDN → 自有线路，不靠名字
+    # 无 host（占位符型脚本，detail 给相对路径/id）：回退到线路名判定。
+    # 官方/自营字样优先豁免，避免误伤。
+    if any(neg in f for neg in _TVBOX_ZY_NEG):
+        return False
+    if f.upper() in _TVBOX_ZY_CODES:
+        return True
+    if any(kw in f for kw in _TVBOX_ZY_KW):
+        return True
+    if re.search(r'(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|MY)(?:线路|线)', f):
+        return True
     return False
 
 def _tvbox_filter_lines(result, drop):
@@ -933,7 +947,7 @@ def _tvbox_filter_item(item, drop):
         return
     if _TVBOX_ZY_ENABLED:
         keep = [(f, u) for f, u in zip(parts_from, parts_url)
-                if f not in drop and not _tvbox_is_zy_url(u)]
+                if f not in drop and not _tvbox_is_zy_url(u, f)]
     else:
         keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]
     if not keep or len(keep) == len(parts_from):
