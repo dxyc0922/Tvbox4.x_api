@@ -281,7 +281,7 @@ class Spider(Spider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["暴风线路", "索尼线路", "魔都线路"]
+_TVBOX_DROP_LINES = []
 _TVBOX_LINE_ORDER = ["索尼线路", "暴风线路", "天堂线路", "魔都线路"]
 
 _TVBOX_ZY_ENABLED = False

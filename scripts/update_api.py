@@ -2020,6 +2020,7 @@ def write_local_spiders(
     """
     script_out.mkdir(parents=True, exist_ok=True)
     quality_cfg = config.get("quality") or {}
+    quality_enabled = bool(quality_cfg.get("enabled", True))
     line_prune_cfg = quality_cfg.get("line_prune") or {}
     enabled = bool(line_prune_cfg.get("enabled"))
     blacklist = {
@@ -2054,8 +2055,9 @@ def write_local_spiders(
             # 手动黑名单优先（用户确认，不经过两振）；码率豁免的源不做质量自动剔除。
             for flag in blacklist.get(filename, ()):
                 drops.setdefault(flag, "手动配置")
-            skip_quality = filename in bitrate_allow
-            skip_speed = filename in speed_allow
+            # quality.enabled=false 时关掉码率/速度线路裁剪，只留黑名单+资源站。
+            skip_quality = not quality_enabled or filename in bitrate_allow
+            skip_speed = not quality_enabled or filename in speed_allow
             auto, low_flags, dead_flags = line_prune_drops(
                 quality_map.get(filename),
                 line_prune_cfg,
@@ -2510,11 +2512,44 @@ def main(argv: list[str] | None = None) -> int:
             if index % 25 == 0 or index == len(futures):
                 print(f"  已处理 {index}/{len(futures)}")
 
-    all_hosts = [host for result in results for host in result.hosts]
-    checks = validate_hosts(all_hosts, config)
+    # 功能报告：现在既用于质量门槛，也用于替代 host 校验——功能三方法全通
+    # 必然 host 可达，无需再探测一遍（用户要求：只留功能门槛+资源站+成人）。
+    quality_map: dict[str, dict[str, Any]] = {}
+    functional_cfg = config.get("functional") or {}
+    quality_path: Path | None = None
+    if args.functional_report:
+        quality_path = Path(args.functional_report).resolve()
+    elif functional_cfg.get("enabled"):
+        quality_path = (
+            ROOT / str(functional_cfg.get("report") or "reports/functional-report.json")
+        ).resolve()
+    if quality_path is not None and quality_path.exists():
+        quality_map = load_functional_report(quality_path)
+        print(f"功能校验报告: {quality_path}（{len(quality_map)} 条）")
+
+    def _quality_for(name: str) -> dict[str, Any] | None:
+        return quality_map.get(name) or quality_map.get(Path(name).name)
+
+    # 跳过 host 探测：功能报告存在时，functional_ok=True 的源直接判 valid；
+    # 报告里没有的源（未测功能）才退回 host 校验兜底，避免误剔。
+    skip_host = bool(quality_map) and bool(
+        (config.get("verification") or {}).get("skip_host_when_functional", True)
+    )
+    checks: dict[str, ProbeResult] = {}
+    if not skip_host:
+        all_hosts = [host for result in results for host in result.hosts]
+        checks = validate_hosts(all_hosts, config)
 
     for result in results:
         if result.status != "pending":
+            continue
+        q = _quality_for(result.filename)
+        if skip_host and q is not None and q.get("functional_ok") is True:
+            # 功能三方法全通 = host 可达，无需重复探测。
+            result.status = "valid"
+            result.checked_host = (q.get("lines") or [{}])[0].get("url", "")[:200]
+            result.http_status = 200
+            result.entry = build_entry(config, result.filename, filenames.get(result.filename, 0))
             continue
         hits = [
             (host, checks[host])
@@ -2537,22 +2572,10 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     reasons.append(f"{host} -> {check.error}")
             result.error = "; ".join(reasons)
-
-    quality_map: dict[str, dict[str, Any]] = {}
-    functional_cfg = config.get("functional") or {}
-    quality_path: Path | None = None
-    if args.functional_report:
-        quality_path = Path(args.functional_report).resolve()
-    elif functional_cfg.get("enabled"):
-        quality_path = (
-            ROOT / str(functional_cfg.get("report") or "reports/functional-report.json")
-        ).resolve()
-    if quality_path is not None and quality_path.exists():
-        quality_map = load_functional_report(quality_path)
-        print(f"功能校验报告: {quality_path}（{len(quality_map)} 条）")
     # 动态分级阈值（方向4）：quality_map 块内计算，块外（build_report/排序）也要用。
     dyn_thresholds: dict[str, float] | None = None
     if quality_map:
+        quality_enabled = bool((config.get("quality") or {}).get("enabled", True))
         min_score = int(functional_cfg.get("min_score") or 0)
         quality_cfg = config.get("quality") or {}
         filter_cfg = config.get("filters") or {}
@@ -2628,11 +2651,11 @@ def main(argv: list[str] | None = None) -> int:
                     f"detail={quality.get('detail_ok')} play={quality.get('play_ok')}"
                 )
                 continue
-            if min_score > 0 and int(quality.get("score") or 0) < min_score:
+            if quality_enabled and min_score > 0 and int(quality.get("score") or 0) < min_score:
                 result.status = "low_quality"
                 result.error = f"功能校验 {quality.get('score')}/3 < {min_score}"
                 continue
-            if min_grade in grade_rank:
+            if quality_enabled and min_grade in grade_rank:
                 grade = effective_grade(quality, dyn_thresholds)
                 if stream_check.is_audio_source(quality, result.filename):
                     # 音频源（听书/音乐）：本质不同（无分辨率，画质按码率评），
@@ -2647,7 +2670,7 @@ def main(argv: list[str] | None = None) -> int:
                     result.status = "low_quality"
                     result.error = f"源质量 {grade} 低于 {min_grade}"
             if (
-                min_bitrate > 0
+                quality_enabled and min_bitrate > 0
                 and result.status == "valid"
                 and result.filename not in bitrate_allow
             ):
@@ -2666,7 +2689,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     result.error = f"所有线路码率低于阈值（{detail}）"
             if (
-                min_speed_ratio > 0
+                quality_enabled and min_speed_ratio > 0
                 and result.status == "valid"
                 and result.filename not in speed_allow
             ):

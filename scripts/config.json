@@ -86,6 +86,7 @@
     "stream_workers": 12
   },
   "quality": {
+    "enabled": false,
     "min_grade": "B",
     "drop_unverified": true,
     "dynamic_grade_thresholds": false,
