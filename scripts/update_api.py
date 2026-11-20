@@ -1939,7 +1939,7 @@ def inject_line_filter(
             "        return True",
             "    if any(kw in f for kw in _TVBOX_ZY_KW):",
             "        return True",
-            "    if re.search(r'(?i)\\b(LZ|FF|BF|HF|HN|YZ|DY|MY)(?:线路|线)', f):",
+            "    if re.search(r'(?i)\\b(LZ|FF|BF|HF|HN|YZ|DY|MY|IK|WL|TK|IQY|XL|WJ|BD|DB|SB|SN|MZ|PL)(?:线路|线)', f):",
             "        return True",
             "    return False",
             "",
@@ -2215,6 +2215,13 @@ def write_local_spiders(
             has_zy = any(
                 "资源站" in str(reason) for reason in drops.values()
             )
+            # 声明线路比采样多 → 可能有未采样到的资源站线路（如分享者华谊采样4条
+            # 没采到 B超高清=rrcdnbf6），也启用运行时 URL 签名按 CDN 兜底。
+            _qz = quality_map.get(result.filename) or {}
+            _declared_n = len(_qz.get("declared_flags") or [])
+            _sampled_n = len(_qz.get("line_streams") or [])
+            if not has_zy and _declared_n > _sampled_n:
+                has_zy = True
             text = inject_line_filter(
                 result.source,
                 sorted(drops),

@@ -57,6 +57,8 @@ ZY_CDN_PATTERNS: tuple[str, ...] = (
     "mzm3u8",              # 魔爪（mzm3u8.vip，与魔都并列的资源站）
     "ppqrrs", "qqqrst", "hhuus",  # 混淆资源站 CDN（一起看/APP影院1 实测确认）
     "bdzybf",              # 百度资源（b3.bdzybf22.com，99短剧网实测）
+    # 抽查实测补录：缩写聚合脚本的资源站 CDN
+    "bfikuncdn", "wlcdn88", "dious", "ly166", "xgplay13", "taopianplay",
 )
 # 只要求**左边界**（host 开头或 `.`/`-` 之后）：资源站 CDN 常带数字后缀
 # （rrcdnbf6 / yzzy31 / fengbao13 / modujx10 / cdnlz14 / ruiplay18），若也要求右
@@ -81,6 +83,8 @@ ZY_FLAG_KEYWORDS: tuple[str, ...] = (
     "猫屋", "电影天堂", "天堂", "4K资源",
     "索尼", "无尽", "魔爪", "猫眼", "快车", "百度",  # 资源站名（实测改名脚本）
     "ikun", "速播", "站外",  # ikun资源/速播资源/站外(第三方采集站，dd脚本实测)
+    "西瓜", "淘宝片", "天空", "卧龙", "拍律",  # 抽查实测资源站名
+    "xiguam3u8", "ikm3u8", "tpm3u8", "rym3u8", "taopian",  # 拼音资源站名(咸鱼/电影人生实测)
 )
 # 裸数字（1080zyk=1080资源库 / 360=360资源）：只匹配「数字后不是 P」的情形。
 # 1080P / 360P 是**分辨率标注**（如「蓝光1080P(登录专享)」是自有线路），不是资源站；
@@ -89,7 +93,8 @@ ZY_FLAG_NUM_RE = re.compile(r"(?i)\b(1080|360)(?!p)")
 # 两字母资源站缩写（LZ=量子 FF=非凡 BF=暴风 HF/HN=红牛 YZ=云智 DY=DYTT），
 # 只匹配「缩写+线路/线」组合，避免 OFF / FFF 之类误报。
 ZY_FLAG_CODE_RE = re.compile(
-    r"(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|DYTT|LZL|YZL|FFL|BFL|MY)(?:线路|线)\b"
+    r"(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|DYTT|LZL|YZL|FFL|BFL|MY|"
+    r"IK|WL|TK|IQY|XL|WJ|BD|DB|SB|SN|MZ|PL)(?:线路|线)\b"
 )
 # 纯缩写 flag（占位符型脚本：detail 只给 id|name|0，没有真实 URL，运行时 CDN
 # 签名失效，只能靠名字判定）。实测「一起看」这些缩写对应的全是资源站 CDN：

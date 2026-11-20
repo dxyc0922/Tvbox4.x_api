@@ -29,12 +29,6 @@
             "api": "./脚本/OK看剧网.py"
         },
         {
-            "key": "wzxxcz_254e28944b8d",
-            "name": "VIP兔",
-            "type": 3,
-            "api": "./脚本/VIP兔.py"
-        },
-        {
             "key": "wzxxcz_1dfc353a82d6",
             "name": "caoliushipinqu",
             "type": 3,
@@ -185,12 +179,6 @@
             "api": "./脚本/南瓜.py"
         },
         {
-            "key": "wzxxcz_2a26af9d3da0",
-            "name": "厂长影视",
-            "type": 3,
-            "api": "./脚本/厂长影视.py"
-        },
-        {
             "key": "wzxxcz_1c6b0fd055d7",
             "name": "可可影视",
             "type": 3,
@@ -201,12 +189,6 @@
             "name": "咕噜咕噜",
             "type": 3,
             "api": "./脚本/咕噜咕噜.py"
-        },
-        {
-            "key": "wzxxcz_2b79c02cc400",
-            "name": "咸鱼影视",
-            "type": 3,
-            "api": "./脚本/咸鱼影视.py"
         },
         {
             "key": "wzxxcz_a6ee670ae623",
@@ -489,12 +471,6 @@
             "name": "蓝光资源",
             "type": 3,
             "api": "./脚本/蓝光资源.py"
-        },
-        {
-            "key": "wzxxcz_0d943d60c89d",
-            "name": "西瓜短剧",
-            "type": 3,
-            "api": "./脚本/西瓜短剧.py"
         },
         {
             "key": "wzxxcz_f56e0b17ca7a",
