@@ -38,7 +38,7 @@ ZY_API_RE = re.compile(
 # CDN，均为无语义随机字母域名，正常官方源不会使用，已确认归属资源站。
 ZY_CDN_PATTERNS: tuple[str, ...] = (
     "ffzy", "feifei",        # 非凡资源
-    "yzzy", "cdnlz", "lzzy", "lzcdn",  # 量子资源（lz=量子）/ 最大资源
+    "yzzy", "cdnlz", "lzzy", "lzcdn", "lz-cdn",  # 量子资源（lz=量子）/ 最大资源
     # lzv+数字（v.lzv40.com / lzv34.com）单独用 ZY_CDN_LZV_RE 匹配，避免过宽
     # 命中 lzvideo.com 之类普通域名。
     "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip",  # 暴风资源 / 疯包（ffvip/7bbffvip=暴风FF资源）
@@ -97,6 +97,8 @@ ZY_FLAG_CODE_RE = re.compile(
     r"(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|DYTT|LZL|YZL|FFL|BFL|MY|"
     r"IK|WL|TK|IQY|XL|WJ|BD|DB|SB|SN|MZ|PL)(?:线路|线)\b"
 )
+# lzm3u8 这类「缩写+m3u8」变体（云播(lzm3u8)），单独匹配避免误伤 lzvideo。
+ZY_FLAG_M3U8_RE = re.compile(r"(?i)\b(?:lz|ff|bf|yz|sn|ik|bd|ry)m3u8\b")
 # 纯缩写 flag（占位符型脚本：detail 只给 id|name|0，没有真实 URL，运行时 CDN
 # 签名失效，只能靠名字判定）。实测「一起看」这些缩写对应的全是资源站 CDN：
 #   WJ=ppqrrs SD=qqqrst HH=hhuus MT=tix8opu JY=kuktxu（混淆资源站域名）
@@ -211,6 +213,8 @@ def match_resource_station(url: str, flag: str = "") -> str:
     if ZY_FLAG_CODE_RE.search(flag):
         return f"资源站缩写({flag.strip()})"
     if ZY_FLAG_PAREN_RE.search(flag):
+        return f"资源站缩写({flag.strip()})"
+    if ZY_FLAG_M3U8_RE.search(flag):
         return f"资源站缩写({flag.strip()})"
     # 纯缩写精确匹配（占位符型脚本，CDN 签名在 detail 阶段不可用）。
     if flag.strip().upper() in ZY_FLAG_EXACT_CODES:
