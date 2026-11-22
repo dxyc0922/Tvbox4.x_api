@@ -641,7 +641,7 @@ if __name__ == "__main__":
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
 _TVBOX_DROP_LINES = []
-_TVBOX_LINE_ORDER = ["720P", "1080P", "540P"]
+_TVBOX_LINE_ORDER = ["1080P", "720P", "540P"]
 
 _TVBOX_ZY_ENABLED = False
 

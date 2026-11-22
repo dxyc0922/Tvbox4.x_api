@@ -13758,8 +13758,8 @@ spider = Spider
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["影探·移动云", "橘汁·新咕噜4K", "橘汁·鲸宝4K"]
-_TVBOX_LINE_ORDER = ["影探·移动云", "影探·联通云", "橘汁·新咕噜4K", "橘汁·鲸宝4K"]
+_TVBOX_DROP_LINES = ["影探·移动云", "橘汁·鲸宝4K"]
+_TVBOX_LINE_ORDER = ["橘汁·新咕噜4K", "影探·移动云", "影探·联通云", "橘汁·鲸宝4K"]
 
 _TVBOX_ZY_ENABLED = True
 _TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "lzcdn", "lz-cdn", "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8", "ppqrrs", "qqqrst", "hhuus", "bdzybf", "bfikuncdn", "wlcdn88", "dious", "ly166", "xgplay13", "taopianplay", "kuktxu", "2767.org", "892539"]

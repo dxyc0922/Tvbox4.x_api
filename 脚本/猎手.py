@@ -282,7 +282,7 @@ class Spider(Spider):
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
 _TVBOX_DROP_LINES = ["天堂线路", "如意线路", "新浪线路", "暴风线路", "极速线路", "索尼线路", "速播线路", "量子线路", "非凡线路", "魔爪线路", "魔都线路"]
-_TVBOX_LINE_ORDER = ["暴风线路", "魔都线路", "索尼线路", "天堂线路"]
+_TVBOX_LINE_ORDER = ["暴风线路", "天堂线路", "魔都线路", "索尼线路"]
 
 _TVBOX_ZY_ENABLED = True
 _TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "lzcdn", "lz-cdn", "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8", "ppqrrs", "qqqrst", "hhuus", "bdzybf", "bfikuncdn", "wlcdn88", "dious", "ly166", "xgplay13", "taopianplay", "kuktxu", "2767.org", "892539"]

@@ -812,7 +812,7 @@ class Spider(Spider):
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
 _TVBOX_DROP_LINES = ["1080资源", "rym3u8", "xiguam3u8", "暴风资源", "极速M3U8", "电影天堂", "量子M3U8", "非凡M3U8", "魔都M3U8"]
-_TVBOX_LINE_ORDER = ["1080资源", "暴风资源", "VIP线路", "王者TV"]
+_TVBOX_LINE_ORDER = ["暴风资源", "1080资源", "王者TV", "VIP线路"]
 
 _TVBOX_ZY_ENABLED = True
 _TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "lzcdn", "lz-cdn", "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8", "ppqrrs", "qqqrst", "hhuus", "bdzybf", "bfikuncdn", "wlcdn88", "dious", "ly166", "xgplay13", "taopianplay", "kuktxu", "2767.org", "892539"]
