@@ -686,8 +686,8 @@ def _opt(name, values):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["Y蓝光 (Dong)", "蓝光4K (zijianm3u8)"]
-_TVBOX_LINE_ORDER = ["K蓝光 (Ksvideo)", "Z蓝光 (bytedance)", "Y蓝光 (Dong)", "蓝光4K (zijianm3u8)"]
+_TVBOX_DROP_LINES = ["Y蓝光 (Dong)"]
+_TVBOX_LINE_ORDER = ["K蓝光 (Ksvideo)", "Z蓝光 (bytedance)", "蓝光4K (zijianm3u8)", "Y蓝光 (Dong)"]
 
 _TVBOX_ZY_ENABLED = True
 _TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "lzcdn", "lz-cdn", "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8", "ppqrrs", "qqqrst", "hhuus", "bdzybf", "bfikuncdn", "wlcdn88", "dious", "ly166", "xgplay13", "taopianplay", "kuktxu", "2767.org", "892539"]

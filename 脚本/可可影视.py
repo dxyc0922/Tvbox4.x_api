@@ -411,7 +411,7 @@ class Spider(Spider):
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
 _TVBOX_DROP_LINES = ["BD线路", "BD线路-1", "DB线路", "FF线路", "HN线路", "IK线路", "LZ线路", "SB线路", "WJ线路", "XL线路", "蓝光1", "蓝光1-1"]
-_TVBOX_LINE_ORDER = ["蓝光1-1", "FF线路", "蓝光1", "超清2"]
+_TVBOX_LINE_ORDER = ["FF线路", "蓝光1-1", "蓝光1", "超清2"]
 
 _TVBOX_ZY_ENABLED = True
 _TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "lzcdn", "lz-cdn", "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8", "ppqrrs", "qqqrst", "hhuus", "bdzybf", "bfikuncdn", "wlcdn88", "dious", "ly166", "xgplay13", "taopianplay", "kuktxu", "2767.org", "892539"]

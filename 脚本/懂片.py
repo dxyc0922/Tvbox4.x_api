@@ -1,0 +1,904 @@
+# -*- coding: utf-8 -*-
+# 懂片帝 - TVBox / 追剧影视 通用 Python 爬虫
+# 站点：https://dongpian17.com
+# 接口：/v1/* REST API（HMAC-SHA256 请求签名，换行分隔）
+# 分类：大家都在看（全部/电影/剧集/短剧/动漫/综艺 × 日榜/周榜/月榜/总榜）
+#
+# 2026-11-14 修复：
+#   1) 搜索接口（/v1/browse/catalog?q=）会间歇性返回 source_statuses=failed / cards 空，
+#      原代码不判状态也不重试 → 偶尔/经常搜出空白。现在按状态自动重试（实测失败率约 1/3，
+#      重试 5 次成功率 ≈ 99%），并带短时缓存，避免边输入边搜索连打把接口打空。
+#   2) 搜索关键词统一规范化（全角转半角、去书名号/引号、折叠空格）+ 失败降级重搜
+#      （去掉"第X季""2023""在线观看"这类尾巴再搜一次）。
+#   3) 关键词编码改为 quote(safe="")，含 / & # ? + 的关键词不再破坏 URL 和签名。
+#   4) _get 增加状态码判断：401 自动同步服务器时间 + 重建游客会话，429/5xx 自动退避重试。
+#   5) 分类页 / 首页 / 详情剧集补齐 / 线路解析 同样加弱重试，防站点抖动导致空列表。
+#   6) 官方线路过滤后若为空，回退为全部线路（不少片只有普通 m3u8 线路，原逻辑会把线路全删）。
+#   7) isVideoFormat / manualVideoCheck / localProxy 返回合法值，避免部分 TVBox 版本实例化或播放报错。
+import sys
+import json
+import time
+import hmac
+import hashlib
+import os
+import re
+import requests
+from urllib.parse import quote
+
+# ↓↓↓ TVBox Python 插件必需：base 包在上一级目录，这一行不能删 ↓↓↓
+sys.path.append('..')
+
+try:
+    from base.spider import Spider as BaseSpider
+except Exception:
+    BaseSpider = None
+
+requests.packages.urllib3.disable_warnings()
+
+if BaseSpider is None:
+    class BaseSpider(object):
+        def __init__(self):
+            self.extend = ''
+
+        def init(self, extend=""):
+            pass
+
+        def getName(self):
+            return ""
+
+        def isVideoFormat(self, url):
+            return False
+
+        def manualVideoCheck(self):
+            return False
+
+        def destroy(self):
+            pass
+
+        def localProxy(self, param):
+            return None
+
+        def fetch(self, url, params=None, headers=None, cookies=None,
+                  timeout=15, verify=False, encoding="utf-8", **kwargs):
+            resp = requests.get(url, params=params, headers=headers,
+                                cookies=cookies, timeout=timeout,
+                                verify=verify, **kwargs)
+            resp.encoding = encoding
+            return resp
+
+
+class Spider(BaseSpider):
+
+    # 请求签名密钥（硬编码于前端 movie-card-runtime，HMAC-SHA256，消息为 方法\n路径+查询\n时间戳\n随机数）
+    SIGN_KEY = "8b9a908a05eac640e1ee06f52acaa741bfe4ba9e004eeffdbeb635e532e06666"
+
+    # 分类映射：tab名 → kind 参数
+    KINDS = [
+        ("all", "全部"),
+        ("movie", "电影"),
+        ("series", "剧集"),
+        ("short_drama", "短剧"),
+        ("anime", "动漫"),
+        ("variety", "综艺"),
+    ]
+
+    # 榜单映射
+    WINDOWS = [
+        ("day", "日榜"),
+        ("week", "周榜"),
+        ("month", "月榜"),
+        ("total", "总榜"),
+    ]
+
+    # 重试参数：接口抖动时按这个节奏退避（秒）
+    RETRY_BASE = 0.4
+    SEARCH_TRIES = 5
+    FEED_TRIES = 4
+    DETAIL_TRIES = 3
+
+    def __init__(self):
+        try:
+            super().__init__()
+        except Exception:
+            pass
+        self.host = "https://dongpian17.com"
+        self.name = "懂片帝"
+        self.ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+        self.session = requests.Session()
+        self.account = ""
+        self.password = ""
+        self.cookie_str = ""
+        self._logged_in = False
+        self._time_offset = 0.0          # 本机与服务器时间差（秒）
+        self._cache = {}                 # 极简内存缓存 {key: (过期时间, 值)}
+        self._last_anon_at = 0.0
+
+    def init(self, extend=""):
+        try:
+            super().init(extend)
+        except Exception:
+            pass
+        try:
+            if not extend:
+                extend = getattr(self, 'extend', '')
+            if isinstance(extend, str):
+                try:
+                    ext = json.loads(extend) if extend.strip() else {}
+                except Exception:
+                    ext = {}
+            elif isinstance(extend, dict):
+                ext = extend
+            else:
+                ext = {}
+            self.host = ext.get("host", self.host).rstrip("/")
+            self.name = ext.get("name", self.name)
+            self.ua = ext.get("ua", self.ua)
+            # 账号配置：官方线路需登录播放，支持 account/password 或直接给 cookie
+            self.account = ext.get("account", self.account)
+            self.password = ext.get("password", self.password)
+            self.cookie_str = ext.get("cookie", self.cookie_str)
+            if self.cookie_str:
+                self._apply_cookie(self.cookie_str)
+                self._logged_in = True
+            print("懂片帝 init: host={}, name={}".format(self.host, self.name))
+        except Exception as e:
+            print("懂片帝 init error: {}".format(e))
+
+    # ================= 缓存 =================
+
+    def _cache_get(self, key):
+        try:
+            item = self._cache.get(key)
+            if not item:
+                return None
+            expire_at, value = item
+            if expire_at < time.time():
+                self._cache.pop(key, None)
+                return None
+            return value
+        except Exception:
+            return None
+
+    def _cache_put(self, key, value, ttl=180):
+        try:
+            now = time.time()
+            if len(self._cache) > 120:
+                for k in [k for k, v in self._cache.items() if v[0] < now]:
+                    self._cache.pop(k, None)
+                if len(self._cache) > 120:
+                    self._cache.clear()
+            self._cache[key] = (now + ttl, value)
+        except Exception:
+            pass
+
+    # ================= 登录会话 =================
+
+    def _apply_cookie(self, cookie_str):
+        try:
+            for kv in cookie_str.split(";"):
+                kv = kv.strip()
+                if "=" in kv:
+                    k, v = kv.split("=", 1)
+                    self.session.cookies.set(k.strip(), v.strip())
+        except Exception as e:
+            print("懂片帝 apply cookie error: {}".format(e))
+
+    def _login(self):
+        """账号密码登录，成功后会话cookie保存在 session 中"""
+        if not self.account or not self.password:
+            return False
+        try:
+            path = "/v1/users/password/login"
+            headers = self._headers("POST", path, "")
+            headers["Content-Type"] = "application/json"
+            resp = self.session.post(self.host + path, headers=headers,
+                                     json={"account": self.account, "password": self.password},
+                                     timeout=15, verify=False)
+            data = self._json(resp)
+            if resp.status_code == 200 and not data.get("error"):
+                self._logged_in = True
+                print("懂片帝 login ok: {}".format(self.account))
+                return True
+            print("懂片帝 login fail: {}".format(resp.text[:200]))
+        except Exception as e:
+            print("懂片帝 login error: {}".format(e))
+        return False
+
+    def _anonymous_login(self):
+        """注册匿名(游客)会话：POST /v1/users/anonymous，服务端种 ai_movie_session cookie。
+        官方线路按游客账号配额计费，有游客会话即可免登录播放。"""
+        try:
+            import uuid
+            # 短时间内不重复注册，防止被站点风控
+            if time.time() - self._last_anon_at < 20:
+                return self._logged_in
+            path = "/v1/users/anonymous"
+            headers = self._headers("POST", path, "")
+            headers["Content-Type"] = "application/json"
+            anon_id = "web_{}".format(uuid.uuid4())
+            resp = self.session.post(self.host + path, headers=headers,
+                                     json={"anonymous_id": anon_id},
+                                     timeout=15, verify=False)
+            self._last_anon_at = time.time()
+            if resp.status_code in (200, 201):
+                self._logged_in = True
+                print("懂片帝 anonymous session ok: {}".format(anon_id))
+                return True
+            print("懂片帝 anonymous fail: {} {}".format(resp.status_code, resp.text[:200]))
+        except Exception as e:
+            print("懂片帝 anonymous error: {}".format(e))
+        return False
+
+    def _ensure_login(self):
+        if self._logged_in:
+            return True
+        # 优先账号密码登录（配额更高），否则注册匿名游客会话
+        if self.account and self.password:
+            return self._login()
+        return self._anonymous_login()
+
+    def _sync_clock(self, resp):
+        """用响应头 Date 校准本机时间，签名里的时间戳偏差过大服务端会 401"""
+        try:
+            from email.utils import parsedate_to_datetime
+            date_str = resp.headers.get("Date", "")
+            if not date_str:
+                return
+            server_ts = parsedate_to_datetime(date_str).timestamp()
+            offset = server_ts - time.time()
+            if abs(offset) > 5:
+                self._time_offset = offset
+                print("懂片帝 clock sync: offset={:.1f}s".format(offset))
+        except Exception:
+            pass
+
+    # ================= 签名请求 =================
+
+    def _headers(self, method, path, search):
+        ts = str(int((time.time() + self._time_offset) * 1000))
+        nonce = os.urandom(16).hex()
+        msg = "{}\n{}{}\n{}\n{}".format(method, path, search, ts, nonce)
+        sign = hmac.new(self.SIGN_KEY.encode(), msg.encode(), hashlib.sha256).hexdigest()
+        return {
+            "User-Agent": self.ua,
+            "Accept": "application/json",
+            "x-ai-movie-client-name": "movie-search-frontend",
+            "x-ai-movie-client-version": "1.0.0",
+            "x-ai-movie-build-version": "dongpiandi-v2026.10.04.1-episode-resume-efd9a7f2e87e-web",
+            "x-ai-movie-protocol-version": "2026-07-05.library-v2.playback-v1",
+            "x-ai-movie-timestamp": ts,
+            "x-ai-movie-nonce": nonce,
+            "x-ai-movie-signature": sign,
+        }
+
+    def _json(self, resp):
+        try:
+            text = resp.text
+            if not text or text.lstrip()[:1] not in ("{", "["):
+                return {}
+            return json.loads(text)
+        except Exception:
+            return {}
+
+    def _get(self, path, search="", retry_auth=True):
+        try:
+            resp = self.session.get(self.host + path + search,
+                                    headers=self._headers("GET", path, search),
+                                    timeout=20, verify=False)
+        except Exception as e:
+            print("懂片帝 _get error {}: {}".format(path, e))
+            return {}
+
+        # 401：多半是会话失效或时间戳偏差 → 校时 + 重建会话后重试一次
+        if resp.status_code == 401 and retry_auth:
+            self._sync_clock(resp)
+            print("懂片帝 401 on {}: {}".format(path, resp.text[:160]))
+            self._logged_in = False
+            self._last_anon_at = 0.0
+            if self._ensure_login():
+                return self._get(path, search, retry_auth=False)
+            return {}
+
+        if resp.status_code >= 400:
+            print("懂片帝 _get http {} on {}: {}".format(resp.status_code, path, resp.text[:160]))
+            return {}
+        return self._json(resp)
+
+    def _post(self, path, search, body):
+        try:
+            headers = self._headers("POST", path, search)
+            headers["Content-Type"] = "application/json"
+            resp = self.session.post(self.host + path + search, headers=headers,
+                                     json=body, timeout=20, verify=False)
+            if resp.status_code == 401:
+                self._sync_clock(resp)
+                self._logged_in = False
+                self._last_anon_at = 0.0
+                if self._ensure_login():
+                    headers = self._headers("POST", path, search)
+                    headers["Content-Type"] = "application/json"
+                    resp = self.session.post(self.host + path + search, headers=headers,
+                                             json=body, timeout=20, verify=False)
+            return self._json(resp)
+        except Exception as e:
+            print("懂片帝 _post error {}: {}".format(path, e))
+            return {}
+
+    # ================= 抖动重试 =================
+
+    def _source_failed(self, data):
+        """站点把上游数据源状态放在 source_statuses 里，failed 时 HTTP 仍是 200 但 cards 为空"""
+        if not isinstance(data, dict):
+            return True
+        if data.get("error") or data.get("statusCode"):
+            return True
+        for item in (data.get("source_statuses") or []):
+            status = str(item.get("status", "")).lower()
+            if status in ("failed", "error", "unavailable", "timeout", "rate_limited"):
+                return True
+        return False
+
+    def _get_retry(self, path, search="", tries=3, need_cards=True, base=None):
+        """catalog 类接口会在上游数据源抖动时返回空列表，这里自动重试。
+        need_cards=False 用于详情/feed 这类没有 cards 字段的接口，只看请求本身成不成功。"""
+        base = self.RETRY_BASE if base is None else base
+        tries = max(1, int(tries))
+        last = {}
+        for i in range(tries):
+            data = self._get(path, search)
+            if isinstance(data, dict) and data:
+                last = data
+                if not need_cards:
+                    return data
+                failed = self._source_failed(data)
+                if failed:
+                    pass  # 数据源挂了，继续重试
+                elif data.get("cards"):
+                    return data
+                elif i >= 1:
+                    # 源状态正常但确实没有结果：再确认一次就收手，避免无谓等待
+                    return data
+            if i < tries - 1:
+                time.sleep(base * (i + 1))
+        return last
+
+    # ================= TVBox 接口 =================
+
+    def homeContent(self, filter):
+        classes = []
+        for tid, tname in self.KINDS:
+            classes.append({"type_id": tid, "type_name": tname})
+
+        filters = {}
+        if filter:
+            window_values = [{"n": n, "v": v} for v, n in self.WINDOWS]
+            for tid, _ in self.KINDS:
+                filters[tid] = [{
+                    "key": "window",
+                    "name": "榜单",
+                    "value": window_values,
+                }]
+        return {"class": classes, "filters": filters}
+
+    def homeVideoContent(self):
+        # 首页推荐：大家都在看（日榜快照）
+        cached = self._cache_get("home")
+        if cached is not None:
+            return cached
+        data = self._get_retry("/v1/feed/home",
+                               "?scope=public&mode=preview&sections=3&cards=12",
+                               tries=self.FEED_TRIES, need_cards=False)
+        videos = []
+        for sec in data.get("sections", []) or []:
+            if sec.get("id") == "feed_sec_everyone_watching" or sec.get("type") == "trend":
+                for card in sec.get("cards", []) or []:
+                    videos.append(self._parse_card(card))
+                break
+        if not videos:
+            for sec in data.get("sections", []) or []:
+                for card in sec.get("cards", []) or []:
+                    videos.append(self._parse_card(card))
+                if videos:
+                    break
+        result = {"list": videos}
+        if videos:
+            self._cache_put("home", result, ttl=300)
+        return result
+
+    def categoryContent(self, tid, pg, filter, extend):
+        window = "day"
+        if extend and extend.get("window"):
+            window = extend["window"]
+
+        search = "?sort=trending&window={}&page={}&limit=20".format(window, pg)
+        if tid and tid != "all":
+            search += "&kind=" + tid
+
+        cache_key = "cat:{}:{}:{}".format(tid, pg, window)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        data = self._get_retry("/v1/browse/catalog", search, tries=self.FEED_TRIES)
+        videos = self._cards_to_videos(data.get("cards"))
+
+        pagination = data.get("pagination", {}) or {}
+        has_more = bool(pagination.get("has_more"))
+        try:
+            page = int(pg)
+        except Exception:
+            page = 1
+        pagecount = page + 1 if has_more else page
+
+        result = {
+            "page": page,
+            "pagecount": pagecount,
+            "limit": 20,
+            "total": pagecount * 20,
+            "list": videos,
+        }
+        if videos:
+            self._cache_put(cache_key, result, ttl=120)
+        return result
+
+    def searchContent(self, key, quick, pg="1"):
+        """搜索：站点搜索源会间歇性返回空（source_statuses=failed），这里重试 + 降级重搜 + 缓存"""
+        raw = self._norm_key(key)
+        if not raw:
+            return {"list": []}
+        try:
+            page = max(1, int(pg))
+        except Exception:
+            page = 1
+
+        cache_key = "s:{}:{}".format(raw.lower(), page)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        videos = self._search_page(raw, page)
+        # 一次没搜到，试个宽松点的关键词（去季数/年份/后缀）再来一次
+        if not videos:
+            alt = self._fallback_key(raw)
+            if alt and alt != raw:
+                videos = self._search_page(alt, page)
+        # 还是空，等半秒再补一发（抖动型失败很常见）
+        if not videos:
+            time.sleep(0.8)
+            videos = self._search_page(raw, page)
+
+        result = {"list": videos}
+        if videos:
+            self._cache_put(cache_key, result, ttl=180)
+        return result
+
+    def detailContent(self, ids):
+        vid = ids[0] if isinstance(ids, list) else ids
+        vid = str(vid or "").strip()
+        data = self._get_retry("/v1/catalog/" + quote(vid, safe=""), "", tries=self.DETAIL_TRIES,
+                               need_cards=False)
+        card = data.get("card") if isinstance(data, dict) and isinstance(data.get("card"), dict) else data
+        if not isinstance(card, dict):
+            card = {}
+
+        episodes = card.get("episodes") or []
+        # 详情内嵌剧集不全时，走剧集分页接口补齐
+        episode_count = card.get("episode_count") or card.get("total_episode_count") or len(episodes)
+        try:
+            episode_count = int(episode_count)
+        except Exception:
+            episode_count = len(episodes)
+        if episode_count > len(episodes) and episodes:
+            episodes = self._fetch_all_episodes(vid, episodes)
+
+        play_urls = []
+        for ep in episodes:
+            title = ep.get("title") or ep.get("display_name") or "第{}集".format(ep.get("number", ""))
+            token = ep.get("token", "")
+            if token:
+                play_urls.append("{}${}".format(title, token))
+
+        vod = self._parse_card(card)
+        vod["vod_id"] = vid
+
+        # 用第1集 token 拉取线路列表，把官方线路写到播放来源，可切换播放
+        lines = []
+        if episodes:
+            first_token = episodes[0].get("token", "")
+            if first_token:
+                rdata = self._get_retry("/v1/playback/resolve/" + first_token, "?view=compact",
+                                        tries=self.DETAIL_TRIES, need_cards=False)
+                lines = rdata.get("line_options", []) or []
+        # 官方线路优先；若压根没有官方线路，就用全部线路（否则线路会被清空、没法切换）
+        official = [ln for ln in lines if self._is_official_line(ln)]
+        lines = official if official else lines
+        # 4K线路排到最前面（稳定排序，其余保持接口返回顺序）
+        lines.sort(key=lambda ln: 0 if "4K" in (ln.get("label") or "").upper() else 1)
+
+        if lines and play_urls:
+            froms = []
+            urls_per_line = []
+            used_names = {}
+            for ln in lines:
+                line_id = ln.get("id", "")
+                if not line_id:
+                    continue
+                label = ln.get("label") or ln.get("play_from") or ln.get("provider_id") or "线路"
+                label = self._short_line_name(label)
+                # 同名线路去重（加序号）
+                if label in used_names:
+                    used_names[label] += 1
+                    label = "{}{}".format(label, used_names[label])
+                else:
+                    used_names[label] = 1
+                froms.append(label)
+                eps_urls = []
+                for pu in play_urls:
+                    title, token = pu.split("$", 1)
+                    eps_urls.append("{}${}@@{}".format(title, token, line_id))
+                urls_per_line.append("#".join(eps_urls))
+            if froms:
+                vod["vod_play_from"] = "$$$".join(froms)
+                vod["vod_play_url"] = "$$$".join(urls_per_line)
+            else:
+                vod["vod_play_from"] = self.name
+                vod["vod_play_url"] = "#".join(play_urls)
+        else:
+            vod["vod_play_from"] = self.name
+            vod["vod_play_url"] = "#".join(play_urls)
+        return {"list": [vod]}
+
+    def playerContent(self, flag, id, vipFlags):
+        token = id
+        line_id = ""
+        # 详情页写入的格式：token@@线路ID（用于切换播放来源）
+        if "@@" in id:
+            token, line_id = id.split("@@", 1)
+
+        data = self._get_retry("/v1/playback/resolve/" + token, "?view=compact",
+                               tries=self.DETAIL_TRIES, need_cards=False)
+        lines = data.get("line_options", []) or []
+
+        play_url = ""
+        url_kind = ""
+
+        # 指定线路：按 line_id（或 flag 匹配 label）精确选中
+        target = None
+        if line_id:
+            for ln in lines:
+                if ln.get("id") == line_id:
+                    target = ln
+                    break
+        if target is None and flag and flag != self.name:
+            for ln in lines:
+                if (ln.get("label") or "") == flag or (ln.get("play_from") or "") == flag \
+                        or self._short_line_name(ln.get("label") or "") == flag:
+                    target = ln
+                    break
+
+        if target is not None:
+            if target.get("url_kind") == "m3u8" and not target.get("resolve_required") and target.get("url"):
+                play_url = target["url"]
+                url_kind = "m3u8"
+            else:
+                ticket = (target.get("url") or "").replace("resolve://", "")
+                if ticket:
+                    line = self._resolve_line(ticket)
+                    if line.get("url"):
+                        play_url = line["url"]
+                        url_kind = line.get("url_kind", "")
+
+        # 回退候选：官方线路优先，全部失败才轮到普通线路（保证能播）
+        official_lines = [ln for ln in lines if self._is_official_line(ln)]
+        fallback_lines = official_lines + [ln for ln in lines if ln not in official_lines]
+
+        # 未指定线路或指定线路失败：先试官方线路 resolve-line 二次解析
+        if not play_url:
+            candidates = [ln for ln in fallback_lines if ln.get("selected")] or fallback_lines
+            for ln in candidates:
+                ticket = (ln.get("url") or "").replace("resolve://", "")
+                if not ticket:
+                    continue
+                line = self._resolve_line(ticket)
+                if line.get("url"):
+                    play_url = line["url"]
+                    url_kind = line.get("url_kind", "")
+                    break
+
+        # 最后兜底：免解析的 m3u8 直链线路（普通线路，按返回顺序）
+        if not play_url:
+            for ln in fallback_lines:
+                if ln.get("url_kind") == "m3u8" and not ln.get("resolve_required") and ln.get("url"):
+                    play_url = ln["url"]
+                    url_kind = "m3u8"
+                    break
+
+        return {
+            "parse": 0,
+            "playUrl": "",
+            "url": play_url,
+            "header": {"User-Agent": self.ua},
+        }
+
+    # ↓↓↓ TVBox 框架 base.spider 抽象方法必须实现，缺失会导致实例化失败 ↓↓↓
+    def getName(self):
+        return self.name
+
+    def localProxy(self, param):
+        return None
+
+    def isVideoFormat(self, url):
+        # 本插件返回的都是 m3u8 直链/播放地址，交给播放器自己判断
+        return True
+
+    def manualVideoCheck(self):
+        return False
+
+    def destroy(self):
+        try:
+            self._cache.clear()
+            self.session.close()
+        except Exception:
+            pass
+
+    # ================= 工具方法 =================
+
+    def _resolve_line(self, ticket, retried=False):
+        """resolve-line 二次解析，遇登录要求时自动登录重试一次"""
+        d2 = self._post("/v1/playback/resolve-line", "?view=compact", {"ticket": ticket})
+        if d2.get("code") == "playback_user_session_required" and not retried:
+            if self._ensure_login():
+                d2 = self._post("/v1/playback/resolve-line", "?view=compact", {"ticket": ticket})
+        return d2.get("line", {}) or {}
+
+    def _norm_key(self, key):
+        """关键词规范化：去首尾空白、全角转半角、去书名号引号、折叠空格"""
+        s = str(key or "")
+        try:
+            s = "".join(chr(ord(c) - 0xFEE0) if 0xFF01 <= ord(c) <= 0xFF5E else c for c in s)
+        except Exception:
+            pass
+        s = s.replace("\u3000", " ")
+        for ch in ['《', '》', '<', '>', '"', '“', '”', "'", '‘', '’', '「', '」', '【', '】']:
+            s = s.replace(ch, "")
+        s = " ".join(s.split()).strip()
+        return s
+
+    def _fallback_key(self, q):
+        """宽松关键词：去掉"第X季 / 2023 / 在线观看 / 完整版"这类尾巴再搜一次"""
+        t = q
+        t = re.sub(r"(在线观看|完整版|高清|免费观看|全集|未删减|国语版|粤语版|国语|粤语)$", "", t).strip()
+        t = re.sub(r"第[0-9一二三四五六七八九十]+[季部]$", "", t).strip()
+        t = re.sub(r"[\(（]?(19|20)\d{2}[\)）]?$", "", t).strip()
+        t = re.sub(r"[第]?[0-9]+$", "", t).strip()
+        if t and t != q:
+            return t
+        # 多词关键词只取第一段（"三体 第二季 在线" → "三体"）
+        parts = [p for p in re.split(r"[\s]+", q) if p]
+        if len(parts) > 1:
+            return parts[0]
+        return ""
+
+    def _search_page(self, q, page=1, limit=20):
+        search = "?q={}&page={}&limit={}".format(quote(q, safe=""), page, limit)
+        data = self._get_retry("/v1/browse/catalog", search, tries=self.SEARCH_TRIES)
+        return self._cards_to_videos(data.get("cards") if isinstance(data, dict) else None)
+
+    def _cards_to_videos(self, cards):
+        videos = []
+        seen = set()
+        for card in cards or []:
+            try:
+                vod = self._parse_card(card)
+            except Exception:
+                continue
+            vid = vod.get("vod_id") or ""
+            if not vid or vid in seen:
+                continue
+            if not vod.get("vod_name"):
+                continue
+            seen.add(vid)
+            videos.append(vod)
+        return videos
+
+    def _short_line_name(self, label):
+        """线路显示名简化：'1080P-官方Z · 普通话' -> '官方Z'；
+        含4K的保留4K前缀以区分（'4K海外-官方C' -> '4K官方C'）；其他原样返回"""
+        if "官方" in label:
+            base = label.split("·")[0].strip()
+            for seg in reversed(base.split("-")):
+                if "官方" in seg:
+                    name = seg.strip()
+                    if "4K" in base.upper() and not name.upper().startswith("4K"):
+                        name = "4K" + name
+                    return name
+        return label
+
+    def _is_official_line(self, ln):
+        """官方线路：label含"官方"，或 provider_id 为 official-*/bytevod-*"""
+        label = ln.get("label") or ""
+        provider = (ln.get("provider_id") or "").lower()
+        if "官方" in label:
+            return True
+        if provider.startswith("official") or provider.startswith("bytevod"):
+            return True
+        return False
+
+    def _fetch_all_episodes(self, vid, inline_eps):
+        episodes = list(inline_eps)
+        try:
+            offset = len(episodes)
+            guard = 0
+            while guard < 60:
+                guard += 1
+                data = self._get_retry("/v1/catalog/{}/episodes".format(quote(vid, safe="")),
+                                       "?limit=48&offset={}".format(offset),
+                                       tries=self.DETAIL_TRIES, need_cards=False)
+                eps = data.get("episodes", []) or []
+                if not eps:
+                    break
+                episodes.extend(eps)
+                page_info = data.get("episode_pagination", {}) or {}
+                if not page_info.get("has_more"):
+                    break
+                offset += len(eps)
+        except Exception as e:
+            print("懂片帝 fetch episodes error: {}".format(e))
+        return episodes
+
+    def _parse_card(self, card):
+        remarks = card.get("remarks", "") or ""
+        return {
+            "vod_id": str(card.get("id", "")),
+            "vod_name": card.get("title", "") or card.get("normalized_title", ""),
+            "vod_pic": card.get("poster_url", "") or card.get("backdrop_url", ""),
+            "vod_remarks": remarks,
+            "vod_year": str(card.get("year", "") or ""),
+            "vod_area": card.get("area", "") or "",
+            "vod_director": "、".join(card.get("directors", []) or []),
+            "vod_actor": "、".join(card.get("actors", []) or []),
+            "vod_content": card.get("content", "") or card.get("description", "") or card.get("blurb", ""),
+        }
+
+
+
+# ---- TVBox 本地线路过滤（自动生成，勿改） ----
+_TVBOX_DROP_LINES = []
+_TVBOX_LINE_ORDER = ["官方B", "官方S", "官方Z", "官方R"]
+
+_TVBOX_ZY_ENABLED = True
+_TVBOX_ZY_CDN = ["ffzy", "feifei", "yzzy", "cdnlz", "lzzy", "lzcdn", "lz-cdn", "bfzy", "rrcdnbf", "fengbao", "ffvip", "7bbffvip", "modujx", "modudm", "mujizybf", "jisuzy", "jisuzyv", "zuidazy", "wsyzym3u8", "xluuss", "bfvvs", "dytt", "phimgood", "ryiplay", "ryplay", "ruyijx", "gsuus", "guangsuzy", "maowushi", "ukuzi", "niuniuzy", "rstu6", "mzm3u8", "ppqrrs", "qqqrst", "hhuus", "bdzybf", "bfikuncdn", "wlcdn88", "dious", "ly166", "xgplay13", "taopianplay", "kuktxu", "2767.org", "892539"]
+_TVBOX_ZY_API = "/api\\.php/(provide|providedown)|/inc/api_mac|provide/vod|providedown/vod"
+_TVBOX_ZY_CODES = ["BD", "BF", "FF", "HH", "HN", "IK", "IQY", "JS", "JY", "KC", "LZ", "MT", "MY", "MZ", "NN", "PL", "RY", "SD", "SN", "TK", "UK", "WJ", "WL", "XL", "YZ"]
+_TVBOX_ZY_KW = ["量子", "非凡", "暴风", "魔都", "极速", "最大", "蜗牛", "影库", "红牛", "新浪", "光速", "如意", "卧龙", "无界", "人尽", "牛牛", "猫屋", "电影天堂", "天堂", "4K资源", "索尼", "无尽", "魔爪", "猫眼", "快车", "百度", "ikun", "速播", "站外", "西瓜", "淘宝片", "天空", "卧龙", "拍律", "xiguam3u8", "ikm3u8", "tpm3u8", "rym3u8", "taopian"]
+_TVBOX_ZY_NEG = ["官方", "自营", "自有", "正版"]
+
+def _tvbox_is_zy_url(url, flag=''):
+    import re, urllib.parse
+    u = str(url or '')
+    f = str(flag or '').strip()
+    if re.search(_TVBOX_ZY_API, u, re.I):
+        return True
+    # 播放地址可能是多集拼接串：'第01集$https://a.com/x.m3u8#第02集$https://b.com/y.m3u8'
+    # 必须逐段提取 URL 再取 host，不能对整个串 urlparse（取不到 host）。
+    hosts = set()
+    for seg in re.split(r'[#$]', u):
+        seg = seg.strip()
+        if seg.startswith('http://') or seg.startswith('https://'):
+            try:
+                parsed = urllib.parse.urlparse(seg)
+                h = (parsed.hostname or '').lower()
+            except Exception:
+                h = ''; parsed = None
+            # 本地代理型脚本（如 APP影院1）：真实地址藏在 url= 参数里，
+            # 需解码后再提取 host，否则只会拿到 127.0.0.1 而漏判。
+            if parsed and h in ('127.0.0.1', 'localhost', '::1'):
+                qs = urllib.parse.parse_qs(parsed.query)
+                real = (qs.get('url') or [''])[0]
+                if real.startswith('//'): real = 'https:' + real
+                if real.startswith('http://') or real.startswith('https://'):
+                    try:
+                        rh = (urllib.parse.urlparse(real).hostname or '').lower()
+                    except Exception:
+                        rh = ''
+                    if rh: hosts.add(rh)
+            if h:
+                hosts.add(h)
+            # 中转缓存型：真实 URL 拼在路径里（/cache/https://cdn/...），
+            # 取内层 host（如 47电影天堂 dl.gybkw.com/cache/https://c1.7bbffvip.com）。
+            im = re.search(r'/(https?://[^/?#]+)', seg)
+            if im:
+                ih = re.match(r'https?://([^/?]+)', im.group(1))
+                if ih:
+                    hosts.add(ih.group(1).split(':')[0].lower())
+    for h in hosts:
+        for p in _TVBOX_ZY_CDN:
+            if re.search(r'(^|[.\-_])' + re.escape(p), h, re.I):
+                return True
+        if re.search(r'(^|[.\-_])lzv\d+', h, re.I):
+            return True
+    if hosts:
+        return False  # 有真实 host 但没命中 CDN → 自有线路，不靠名字
+    # 无 host（占位符型脚本，detail 给相对路径/id）：回退到线路名判定。
+    # 官方/自营字样优先豁免，避免误伤。
+    if any(neg in f for neg in _TVBOX_ZY_NEG):
+        return False
+    if f.upper() in _TVBOX_ZY_CODES:
+        return True
+    if any(kw in f for kw in _TVBOX_ZY_KW):
+        return True
+    if re.search(r'(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|MY|IK|WL|TK|IQY|XL|WJ|BD|DB|SB|SN|MZ|PL)(?:线路|线)', f):
+        return True
+    return False
+
+def _tvbox_filter_lines(result, drop):
+    if not isinstance(result, dict):
+        return result
+    items = result.get('list')
+    if isinstance(items, list):
+        for item in items:
+            _tvbox_filter_item(item, drop)
+    else:
+        _tvbox_filter_item(result, drop)
+    return result
+
+def _tvbox_filter_item(item, drop):
+    froms = item.get('vod_play_from') or ''
+    urls = item.get('vod_play_url') or ''
+    if not isinstance(froms, str) or not isinstance(urls, str):
+        return
+    if '$$$' not in froms:
+        return
+    parts_from = [f.strip() for f in froms.split('$$$')]
+    parts_url = urls.split('$$$')
+    if len(parts_from) != len(parts_url):
+        return
+    if _TVBOX_ZY_ENABLED:
+        keep = [(f, u) for f, u in zip(parts_from, parts_url)
+                if f not in drop and not _tvbox_is_zy_url(u, f)]
+    else:
+        keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]
+    if not keep or len(keep) == len(parts_from):
+        return
+    item['vod_play_from'] = '$$$'.join(f for f, _ in keep)
+    item['vod_play_url'] = '$$$'.join(u for _, u in keep)
+
+def _tvbox_sort_lines(result, order):
+    if not order or not isinstance(result, dict):
+        return result
+    items = result.get('list')
+    if isinstance(items, list):
+        for item in items:
+            _tvbox_sort_item(item, order)
+    else:
+        _tvbox_sort_item(result, order)
+    return result
+
+def _tvbox_sort_item(item, order):
+    froms = item.get('vod_play_from') or ''
+    urls = item.get('vod_play_url') or ''
+    if not isinstance(froms, str) or not isinstance(urls, str):
+        return
+    if '$$$' not in froms:
+        return
+    parts_from = [f.strip() for f in froms.split('$$$')]
+    parts_url = urls.split('$$$')
+    if len(parts_from) != len(parts_url):
+        return
+    known = {f: i for i, f in enumerate(order)}
+    pairs = list(zip(parts_from, parts_url))
+    # 已知线路按 order（画质速度最优在前），未知线路稳定保持原序后置。
+    pairs.sort(key=lambda p: known.get(p[0], len(order)))
+    item['vod_play_from'] = '$$$'.join(f for f, _ in pairs)
+    item['vod_play_url'] = '$$$'.join(u for _, u in pairs)
+
+def _tvbox_apply(cls):
+    fn = getattr(cls, 'detailContent', None)
+    if fn is None:
+        return
+    def wrapper(self, *a, _fn=fn, **k):
+        res = _tvbox_filter_lines(_fn(self, *a, **k), _TVBOX_DROP_LINES)
+        return _tvbox_sort_lines(res, _TVBOX_LINE_ORDER)
+    setattr(cls, 'detailContent', wrapper)
+
+_tvbox_apply(Spider)
