@@ -271,7 +271,7 @@ class ProbeResult:
 class ScriptResult:
     filename: str
     name: str
-    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / functional_fail / low_quality / low_bitrate / slow_stream / resource_station
+    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / functional_fail / low_quality / low_bitrate / slow_stream / resource_station / parse_required
     hosts: list[str] = field(default_factory=list)
     tier: str = ""
     checked_host: str | None = None
@@ -1220,6 +1220,7 @@ ADULT_TITLE_KEYWORDS = (
     "R18",
     "AV女优",
     "女优",
+    "怀孕性爱",  # 明确成人片名短语（1234影视实测），完整短语不误伤正常影视
 )
 
 
@@ -1259,6 +1260,15 @@ def detect_adult(
         for phrase in phrases:
             if phrase in text:
                 add(f"探针:{phrase}")
+
+    # 搜索结果片名：识别「搜任何词都返回同一批成人片」的源。
+    # 这类源分类名干净、成人探针不命中（因为探针靠 home_ok 触发），
+    # 但搜索片名含成人词——1234影视 搜「仙逆」也返回成人片即此类。
+    for title in quality.get("search_titles") or []:
+        text = str(title)
+        for keyword in title_keywords:
+            if keyword and keyword.lower() in text.lower():
+                add(keyword)
 
     return hits
 
@@ -1632,7 +1642,7 @@ LINE_FILTER_MARKER = "# ---- TVBox 本地线路过滤（自动生成，勿改）
 # 源级剔除状态：命中即剔除（立即生效，不走两振）。
 # 资源站（resource_station）是结构性属性——线路的 CDN/名字固定，不像速度会抖动，
 # 一轮就能确定，且项目定位是「剔除低质源」，严格过滤立即剔。
-HISTORY_REMOVE_STATUSES = {"low_quality", "low_bitrate", "slow_stream", "resource_station"}
+HISTORY_REMOVE_STATUSES = {"low_quality", "low_bitrate", "slow_stream", "resource_station", "parse_required"}
 HISTORY_MAX_ROUNDS = 8
 
 
@@ -2363,6 +2373,7 @@ def build_report(
             "low_bitrate": counts.get("low_bitrate", 0),
             "slow_stream": counts.get("slow_stream", 0),
             "resource_station": counts.get("resource_station", 0),
+            "parse_required": counts.get("parse_required", 0),
             "with_quality": sum(1 for result in results if result.quality),
             "grade_a": grades.get("A", 0),
             "grade_b": grades.get("B", 0),
@@ -2674,6 +2685,18 @@ def main(argv: list[str] | None = None) -> int:
                 result.error = (
                     f"功能门槛未过: search={quality.get('search_ok')} "
                     f"detail={quality.get('detail_ok')} play={quality.get('play_ok')}"
+                )
+                continue
+            # 内置解析线路剔除：parse=1 的线路依赖 TVBox 内置解析器（腾讯/芒果/
+            # 优酷等官方平台给的是网页 URL）。用户的 TVBox 未配置内置解析，这类
+            # 线路完全无法播放。若一个源所有线路都是 parse=1 → 整源剔除。
+            parsed_lines = quality.get("lines") or []
+            if parsed_lines and all(
+                int(l.get("parse") or 0) == 1 for l in parsed_lines
+            ):
+                result.status = "parse_required"
+                result.error = (
+                    f"所有线路需内置解析({len(parsed_lines)}条)，环境无内置解析器无法播放"
                 )
                 continue
             if quality_enabled and min_score > 0 and int(quality.get("score") or 0) < min_score:

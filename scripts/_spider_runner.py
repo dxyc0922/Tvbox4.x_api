@@ -361,6 +361,12 @@ def main() -> int:
                     search_items=len(search_items),
                     search_ok=bool(search_items),
                     search_keywords=search_hits,
+                    # 搜索结果片名：用于识别「搜什么关键词都返回同一批成人片」的源。
+                    # 这类源分类名干净、探针不命中，但片名含成人词。
+                    search_titles=[
+                        str((it or {}).get("vod_name") or (it or {}).get("name") or "")[:80]
+                        for it in search_items[:30]
+                    ],
                 )
             else:
                 reporter.set(search_items=0, search_ok=False, search_keywords={})
@@ -369,9 +375,11 @@ def main() -> int:
             reporter.set(error=f"{current}; search: {type(exc).__name__}: {exc}" if current else f"search: {type(exc).__name__}: {exc}")
         reporter.flush()
 
-        # 成人内容探针：只对首页正常的站点跑，且只取分类/标签，不判断标题。
+        # 成人内容探针：原来依赖 home_ok（首页有视频列表）才跑，但很多源首页只有
+        # 分类没视频（1234影视 home_items=0），导致探针没跑、成人源漏网。
+        # 改为只要有 searchContent 就跑（成人过滤是硬要求，值得这点耗时）。
         probes = [str(k) for k in (job.get("adult_probe") or []) if str(k).strip()]
-        if probes and reporter.data.get("home_ok"):
+        if probes:
             budget = float(job.get("timeout") or 0)
             reporter.set(stage="adult_probe")
             labels: list[str] = []
@@ -388,6 +396,11 @@ def main() -> int:
                         hits += len(items)
                         for item in items[:20]:
                             labels.extend(item_labels(item))
+                            # 片名也纳入探针标签：很多源成人内容只在片名里（如
+                            # 「每晚与隔壁男人怀孕性爱」），分类/标签是干净的。
+                            nm = str((item or {}).get("vod_name") or (item or {}).get("name") or "").strip()
+                            if nm:
+                                labels.append(nm)
                         if len(labels) >= 40:
                             break
             except Exception:  # noqa: BLE001
@@ -471,8 +484,13 @@ def main() -> int:
                                 # 脚本返回字段不统一：有的用 url，有的用 playUrl。
                                 # 都要读，否则拿不到真实播放地址，域名层过滤失效。
                                 resolved_url = (
-                                    resolved.get("url") or resolved.get("playUrl") or sample["url"]
+                                    resolved.get("url") or resolved.get("playUrl") or ""
                                 )
+                                if not resolved_url:
+                                    # playerContent 返回空 url = 解析失败（如解析接口挂了）。
+                                    # 回退原始地址只用于资源站域名判定，但不能算「播放成功」。
+                                    row["resolve_failed"] = True
+                                    resolved_url = sample["url"]
                                 row["url"] = str(resolved_url)[:600]
                                 try:
                                     row["parse"] = int(resolved.get("parse", 0) or 0)
@@ -512,7 +530,9 @@ def main() -> int:
                 if samples:
                     if callable(player):
                         play_ok = any(
-                            r.get("url") and not r.get("error") for r in rows
+                            r.get("url") and not r.get("error")
+                            and not r.get("resolve_failed")  # 解析失败(空url)不算播放成功
+                            for r in rows
                         )
                     else:
                         play_ok = bool(reporter.data.get("sample_play_url"))
