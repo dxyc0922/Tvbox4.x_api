@@ -35,12 +35,6 @@
             "api": "./脚本/dd.py"
         },
         {
-            "key": "wzxxcz_ed31a5f38894",
-            "name": "momo图鉴",
-            "type": 3,
-            "api": "./脚本/momo图鉴.py"
-        },
-        {
             "key": "wzxxcz_20199e825536",
             "name": "xhamster",
             "type": 3,
