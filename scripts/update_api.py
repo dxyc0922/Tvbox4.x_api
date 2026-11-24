@@ -1175,6 +1175,7 @@ ADULT_CATEGORY_KEYWORDS = (
     "福利片",
     "成人",
     "三级",
+    "无码",  # 成人分类前缀词（中字无码/步兵无码，花都影视实测）
     "AV片",
     "麻豆",
     "蜜桃",
@@ -1204,24 +1205,16 @@ ADULT_CATEGORY_KEYWORDS = (
 )
 
 # 标题只认工作室品牌和明确成人词；「调教」「人妻」这类词在正常短剧标题里也会出现。
-ADULT_TITLE_KEYWORDS = (
-    "麻豆传媒",
-    "星空传媒",
-    "果冻传媒",
-    "精东传媒",
-    "天美传媒",
-    "蜜桃传媒",
-    "91制片厂",
-    "无码",
-    "里番",
-    "三级片",
-    "成人片",
-    "18禁",
-    "R18",
-    "AV女优",
-    "女优",
-    "怀孕性爱",  # 明确成人片名短语（1234影视实测），完整短语不误伤正常影视
+# 明确成人短语：标题含这些几乎必是成人内容（新闻标题不会用）。用于标题子串匹配。
+ADULT_TITLE_STRICT = (
+    "无码", "里番", "三级片", "成人片", "18禁", "R18", "AV女优", "怀孕性爱",
 )
+# 成人品牌词：新闻/评论标题常提及（如「麻豆传媒落网」），只用于分类名精确匹配，
+# 不用于标题子串匹配，避免把新闻源误判成成人源。
+ADULT_TITLE_KEYWORDS = (
+    "麻豆传媒", "星空传媒", "果冻传媒", "精东传媒", "天美传媒", "蜜桃传媒",
+    "91制片厂", "女优",
+) + ADULT_TITLE_STRICT
 
 
 def detect_adult(
@@ -1229,6 +1222,7 @@ def detect_adult(
     category_keywords: tuple[str, ...] | list[str],
     title_keywords: tuple[str, ...] | list[str],
     probe_phrases: tuple[str, ...] | list[str] = (),
+    strict_keywords: tuple[str, ...] | list[str] = (),
 ) -> list[str]:
     """从首页分类名和探针搜索结果的分类/标题里识别成人内容。
 
@@ -1252,21 +1246,23 @@ def detect_adult(
                 add(keyword)
 
     phrases = [str(p) for p in probe_phrases if str(p).strip()]
+    strict = [str(k) for k in strict_keywords] or list(ADULT_TITLE_STRICT)
     for label in quality.get("probe_labels") or []:
         text = str(label)
-        for keyword in title_keywords:
+        # 只用严格短语匹配标题；品牌词（麻豆传媒等）在新闻标题里太常见会误伤。
+        for keyword in strict:
             if keyword and keyword.lower() in text.lower():
                 add(keyword)
+        # 探针原文：仅当标题**就是**探针词（或极短前缀），不做子串——
+        # 「麻豆传媒被捕案…」这类新闻标题含探针原文但不是成人内容。
         for phrase in phrases:
-            if phrase in text:
+            if text.strip() == phrase.strip():
                 add(f"探针:{phrase}")
 
-    # 搜索结果片名：识别「搜任何词都返回同一批成人片」的源。
-    # 这类源分类名干净、成人探针不命中（因为探针靠 home_ok 触发），
-    # 但搜索片名含成人词——1234影视 搜「仙逆」也返回成人片即此类。
+    # 搜索结果片名：同样只用严格短语匹配。
     for title in quality.get("search_titles") or []:
         text = str(title)
-        for keyword in title_keywords:
+        for keyword in strict:
             if keyword and keyword.lower() in text.lower():
                 add(keyword)
 

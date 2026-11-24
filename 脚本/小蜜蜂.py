@@ -355,7 +355,7 @@ class Spider:
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["普通线路一"]
+_TVBOX_DROP_LINES = ["普通线路一", "腾讯官方线路"]
 _TVBOX_LINE_ORDER = ["普通线路一", "自建线路", "腾讯官方线路"]
 
 _TVBOX_ZY_ENABLED = True

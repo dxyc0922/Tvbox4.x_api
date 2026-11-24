@@ -35,22 +35,10 @@
             "api": "./脚本/dd.py"
         },
         {
-            "key": "wzxxcz_3b024f6ec473",
-            "name": "huadouyingshi",
-            "type": 3,
-            "api": "./脚本/huadouyingshi.py"
-        },
-        {
             "key": "wzxxcz_ed31a5f38894",
             "name": "momo图鉴",
             "type": 3,
             "api": "./脚本/momo图鉴.py"
-        },
-        {
-            "key": "wzxxcz_c0d07c22ff93",
-            "name": "shoujizhushou",
-            "type": 3,
-            "api": "./脚本/shoujizhushou.py"
         },
         {
             "key": "wzxxcz_20199e825536",
@@ -167,6 +155,12 @@
             "api": "./脚本/咸鱼影视.py"
         },
         {
+            "key": "wzxxcz_a6ee670ae623",
+            "name": "哔哩哔哩",
+            "type": 3,
+            "api": "./脚本/哔哩哔哩.py"
+        },
+        {
             "key": "wzxxcz_7e26c1c3ed88",
             "name": "四级老片",
             "type": 3,
@@ -275,6 +269,12 @@
             "api": "./脚本/毒舌影视.py"
         },
         {
+            "key": "wzxxcz_39115710763c",
+            "name": "汤头条",
+            "type": 3,
+            "api": "./脚本/汤头条.py"
+        },
+        {
             "key": "wzxxcz_1701585ea278",
             "name": "河豚",
             "type": 3,
@@ -291,6 +291,12 @@
             "name": "热播",
             "type": 3,
             "api": "./脚本/热播.py"
+        },
+        {
+            "key": "wzxxcz_7af6ff43efff",
+            "name": "爱听音乐",
+            "type": 3,
+            "api": "./脚本/爱听音乐.py"
         },
         {
             "key": "wzxxcz_73270bd898ec",
@@ -351,6 +357,12 @@
             "name": "美剧侠",
             "type": 3,
             "api": "./脚本/美剧侠.py"
+        },
+        {
+            "key": "wzxxcz_1949d4788755",
+            "name": "腾讯4K",
+            "type": 3,
+            "api": "./脚本/腾讯4K.py"
         },
         {
             "key": "wzxxcz_c090da47d1b8",

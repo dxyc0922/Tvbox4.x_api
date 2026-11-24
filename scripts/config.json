@@ -78,10 +78,7 @@
     "prefer_keywords": [
       "仙逆"
     ],
-    "adult_probe_keywords": [
-      "麻豆传媒",
-      "被家长调教的女教师"
-    ],
+    "adult_probe_keywords": [],
     "timeout": 30,
     "workers": 12,
     "stream_workers": 12
