@@ -293,12 +293,6 @@
             "api": "./脚本/猎手.py"
         },
         {
-            "key": "wzxxcz_b693d06148a6",
-            "name": "瓜子APP",
-            "type": 3,
-            "api": "./脚本/瓜子APP.py"
-        },
-        {
             "key": "wzxxcz_5bf72f5af13e",
             "name": "电影侠",
             "type": 3,
