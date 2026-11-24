@@ -23,22 +23,10 @@
             "api": "./脚本/OK看剧网.py"
         },
         {
-            "key": "wzxxcz_6516bf6e388c",
-            "name": "VFsijilaopian",
-            "type": 3,
-            "api": "./脚本/VFsijilaopian.py"
-        },
-        {
             "key": "wzxxcz_d409b3bd01ea",
             "name": "dd",
             "type": 3,
             "api": "./脚本/dd.py"
-        },
-        {
-            "key": "wzxxcz_20199e825536",
-            "name": "xhamster",
-            "type": 3,
-            "api": "./脚本/xhamster.py"
         },
         {
             "key": "wzxxcz_e8d279df2881",
@@ -155,12 +143,6 @@
             "api": "./脚本/哔哩哔哩.py"
         },
         {
-            "key": "wzxxcz_7e26c1c3ed88",
-            "name": "四级老片",
-            "type": 3,
-            "api": "./脚本/四级老片.py"
-        },
-        {
             "key": "wzxxcz_82a9cbe6809c",
             "name": "壹影视",
             "type": 3,
@@ -261,12 +243,6 @@
             "name": "毒舌影视",
             "type": 3,
             "api": "./脚本/毒舌影视.py"
-        },
-        {
-            "key": "wzxxcz_39115710763c",
-            "name": "汤头条",
-            "type": 3,
-            "api": "./脚本/汤头条.py"
         },
         {
             "key": "wzxxcz_1701585ea278",

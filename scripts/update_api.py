@@ -1210,6 +1210,8 @@ ADULT_CATEGORY_KEYWORDS = (
 ADULT_TITLE_STRICT = (
     "无码", "里番", "三级片", "成人片", "18禁", "R18", "AV女优", "怀孕性爱",
     "大尺度", "私拍写真",  # 软色情写真片名（momo图鉴实测）
+    # 露骨成人片名（xhamster/VFsijilaopian/四级老片/汤头条实测）
+    "porn", "xxx", "hardcore", "性愛", "口爆", "中出",
 )
 # 成人品牌词：新闻/评论标题常提及（如「麻豆传媒落网」），只用于分类名精确匹配，
 # 不用于标题子串匹配，避免把新闻源误判成成人源。
@@ -2628,6 +2630,9 @@ def main(argv: list[str] | None = None) -> int:
             str(k) for k in (functional_cfg.get("adult_probe_keywords") or []) if str(k).strip()
         )
         adult_allow = {str(name) for name in (filter_cfg.get("adult_allow") or [])}
+        adult_sources = {
+            str(name).lower() for name in (filter_cfg.get("adult_sources") or [])
+        }
         min_grade = str(quality_cfg.get("min_grade") or "").strip().upper()
         drop_unverified = bool(quality_cfg.get("drop_unverified"))
         # 方向4：动态分级阈值（按源池分布分位数，默认关=固定阈值）
@@ -2781,11 +2786,13 @@ def main(argv: list[str] | None = None) -> int:
                     )
             # 成人过滤：放在功能→资源站之后执行（用户要求的过滤顺序）。
             if (
-                hits and exclude_adult and result.status == "valid"
+                (hits or Path(result.filename).name.lower() in adult_sources)
+                and exclude_adult and result.status == "valid"
                 and result.filename not in adult_allow
             ):
                 result.status = "excluded_adult"
-                result.error = "成人内容: " + "、".join(hits[:5])
+                reason = "、".join(hits[:5]) if hits else "成人源黑名单"
+                result.error = "成人内容: " + reason
         scores = Counter(
             int(result.quality.get("score") or 0)
             for result in results
