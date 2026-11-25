@@ -4,7 +4,6 @@
 
 - 接口：https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/refs/heads/main/接口.json
 - 加速：https://gh-proxy.com/https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/refs/heads/main/接口.json
-- 远程直链版（`脚本/` 目录缺失时可用）：https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/refs/heads/main/接口-remote.json
 
 ## 使用
 
@@ -17,7 +16,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1       # 注�
 `run_local.py` 每次：`git pull` → 可选功能校验（`--functional`）→ 重建 `接口.json` → 有变化才提交推送。
 日志在 `logs/local-run-<时间>.log`。
 
-生成站点的 `api` 指向仓库内 `./脚本/<脚本名>.py`；`接口-remote.json` 使用 gh-proxy 绝对链接。
+生成站点的 `api` 指向仓库内 `./脚本/<脚本名>.py`。
 
 ## 筛选规则
 
@@ -25,10 +24,10 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1       # 注�
 
 - 功能校验（`searchContent` / `detailContent` / `playerContent`）任一失败即剔除。搜索词默认固定 `仙逆`。
 - 成人内容多道门槛：分类命中 ≥2 → 纯色情源剔除；只命中 1 → 按色情片来源类型决定
-  「保留源并屏蔽该类型」或「剔除脚本」。不使用分类白名单。
+  「保留源并屏蔽该类型」或「剔除脚本」。
 - 纯资源站聚合源剔除，混合源只剔资源站线路；不通/低质线路走两振裁减。
-- 质量分级、低码率、速度过滤默认关闭（`quality.enabled=false`），等级只展示不过滤。
-- 站点不按质量重排，保持上游去重后的顺序。
+- 质量分级、低码率、速度过滤由 `quality.enabled` 控制。
+- 站点保持上游去重后的顺序。
 
 ## 配置
 
@@ -39,7 +38,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1       # 注�
 | `upstream` | 4 个仓库 | 上游 py 脚本仓库列表 |
 | `exclude_scripts` / `exclude_names` | `[]` | 排除指定脚本 / 站点 |
 | `filters.exclude_adult` | `true` | 成人内容过滤 |
-| `filters.adult_allow` | `["豆瓣.py"]` | 整源豁免（不参与成人门槛） |
+| `filters.adult_allow` | `["豆瓣.py"]` | 整源豁免名单 |
 | `filters.category_filter.enabled` | `true` | 固定分类混合源的三点分类过滤 |
 | `functional.fixed_keyword` | `"仙逆"` | 功能校验固定搜索词；`--keyword` 可覆盖 |
 | `functional.adult_probe_keywords` | `["女教师", "自拍"]` | 成人内容探针关键词 |

@@ -33,11 +33,6 @@
     "https://ghproxy.net/",
     "https://gh.ddlc.top/"
   ],
-  "self_repo": {
-    "owner": "dxyc0922",
-    "repo": "Tvbox4.x_api",
-    "branch": "main"
-  },
   "jsm_sync": {
     "enabled": true,
     "url": "{accelerator}https://raw.githubusercontent.com/qist/tvbox/master/jsm.json",

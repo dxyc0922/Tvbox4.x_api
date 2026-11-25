@@ -90,11 +90,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "output": "接口.json",
     "accelerator": "https://gh-proxy.com/",
-    "self_repo": {
-        "owner": "dxyc0922",
-        "repo": "Tvbox4.x_api",
-        "branch": "main"
-    },
     # 从 jsm.json 同步顶层字段。只同步用户明确要的 hosts/doh/rules/ads；
     # lives/wallpaper 是用户自定义（广东IPTV组播.txt、深色壁纸），保留 existing 原值，
     # 不从 jsm 覆盖。拉取失败时回退 existing，不中断。url 为空或 enabled=false 跳过。
@@ -403,29 +398,6 @@ def upstream_api_url(config: dict[str, Any], filename: str, src: int = 0) -> str
     return accels[0] + raw
 
 
-def local_api_to_remote(config: dict[str, Any], api: str) -> str:
-    """把本地 `./脚本/x.py` 链接转成仓库自身的绝对直链（用于 接口-remote.json）。
-
-    手动保留的自定义站点（豆瓣/哔哩）不在上游仓库里，无法用 upstream_api_url；
-    但脚本提交在本仓库 脚本/ 下，可用 self_repo 配置拼 raw 地址。没配 self_repo
-    时原样返回（保持相对路径，仍可随仓库一起托管）。
-    """
-    if not api.startswith("./"):
-        return api
-    self_repo = config.get("self_repo") or {}
-    owner = str(self_repo.get("owner") or "").strip()
-    repo = str(self_repo.get("repo") or "").strip()
-    branch = str(self_repo.get("branch") or "main").strip()
-    if not owner or not repo:
-        return api
-    rel = urllib.parse.quote(api[2:].strip("/"), safe="/")
-    raw = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{rel}"
-    accels = accelerator_list(config)
-    if not accels:
-        return raw
-    return accels[0] + raw
-
-
 def github_headers(token: str | None) -> dict[str, str]:
     headers = {
         "User-Agent": "Tvbox4.x_api-sync/1.0",
@@ -505,7 +477,7 @@ def get_upstream_filenames(
             path.relative_to(source_dir).as_posix()
             for path in source_dir.rglob("*.py")
         )
-        # 若 functional_check 写过 sources.json，恢复来源映射（接口-remote 需要真实上游）。
+        # 若 functional_check 写过 sources.json，恢复来源映射（拼正确的上游下载链接）。
         src_map: dict[str, int] = {}
         src_file = source_dir / "sources.json"
         if src_file.is_file():
@@ -3276,38 +3248,6 @@ def main(argv: list[str] | None = None) -> int:
     else:
         write_json(output, new_data, newline)
         print(f"已写入: {output}")
-
-        # 同时输出远程直链版：生成站点用 gh-proxy 绝对链接，兼容只发布单文件、不带脚本目录的托管。
-        if local_spider_dir:
-            remote_entries: list[dict[str, Any]] = []
-            for entry in entries:
-                result = result_by_entry.get(id(entry))
-                if result is not None:
-                    remote_entries.append(
-                        dict(
-                            entry,
-                            api=upstream_api_url(
-                                config, result.filename, filenames.get(result.filename, 0)
-                            ),
-                        )
-                    )
-                else:
-                    remote_entries.append(entry)
-            # 手动保留站点（豆瓣/哔哩等自定义）也用仓库自身绝对直链，单文件 CDN 发布才不失效。
-            remote_preserved = [
-                dict(site, api=local_api_to_remote(config, str(site.get("api") or "")))
-                if isinstance(site, dict)
-                else site
-                for site in preserved
-            ]
-            remote_data = dict(existing)
-            remote_data["sites"] = remote_preserved + remote_entries
-            sync_jsm_fields(config, remote_data, existing)
-            remote_path = output.with_name(
-                output.stem + "-remote" + output.suffix
-            )
-            write_json(remote_path, remote_data, newline)
-            print(f"已写入: {remote_path}")
 
         # 两振出局历史：追加本轮状态，保留最近 N 轮；连击/线路集合只存最后一轮。
         history["rounds"].append(history_statuses)

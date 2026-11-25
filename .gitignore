@@ -5,3 +5,4 @@ venv/
 reports/
 .cache/
 logs/
+_*.log
