@@ -2,21 +2,6 @@
     "wallpaper": "https://深色壁纸.xxooo.cf/",
     "sites": [
         {
-            "key": "1",
-            "name": "豆瓣",
-            "type": 3,
-            "api": "./脚本/豆瓣.py"
-        },
-        {
-            "key": "2",
-            "name": "哔哩",
-            "type": 3,
-            "api": "./脚本/哔哩.py",
-            "ext": {
-                "cookie": "file://storage/emulated/0/TV/bili_cookie.txt"
-            }
-        },
-        {
             "key": "wzxxcz_d409b3bd01ea",
             "name": "dd",
             "type": 3,
@@ -177,12 +162,6 @@
             "name": "懂片",
             "type": 3,
             "api": "./脚本/懂片.py"
-        },
-        {
-            "key": "wzxxcz_6383b1831c91",
-            "name": "抠爆B处",
-            "type": 3,
-            "api": "./脚本/抠爆B处.py"
         },
         {
             "key": "wzxxcz_0f3f79d2fbe7",

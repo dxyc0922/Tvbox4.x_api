@@ -127,6 +127,28 @@ def category_names(payload: Any) -> list[str]:
     return names
 
 
+# 纯色情源分类名特征（明确色情分类，命中即判成人源，跳过后续分析省时间）。
+# 与 update_api 的 ADULT_CATEGORY_EXACT 同口径，只读分类名不猜片名。
+PURE_ADULT_CATEGORIES = (
+    "无码", "有码", "里番", "三级", "成人", "伦理片", "情色", "色情",
+    "国产传媒", "麻豆传媒", "蜜桃传媒", "天美传媒", "精东传媒", "91制片",
+    "步兵", "骑兵", "巨乳", "熟女", "少妇", "内射", "口交", "偷拍自拍",
+    # 抠爆B处（kbbshape.buzz）分类名
+    "番号资源", "百万资源", "大地资源", "森林资源", "杏吧资源",
+    "奶香香资源", "奥斯卡资源", "黄色仓库", "麻豆资源",
+)
+
+
+def is_pure_adult(classes: list[str]) -> bool:
+    """分类名命中明确色情词 → 纯色情源。"""
+    for c in classes or []:
+        text = str(c)
+        for kw in PURE_ADULT_CATEGORIES:
+            if kw.lower() in text.lower():
+                return True
+    return False
+
+
 def item_labels(item: dict[str, Any]) -> list[str]:
     labels = []
     for key in ("vod_class", "type_name", "class", "vod_tag", "vod_name", "name"):
@@ -327,6 +349,12 @@ def main() -> int:
                 if classes:
                     reporter.set(classes=classes[:80])
             reporter.set(home_items=len(home_items), home_ok=bool(home_items))
+            # 纯色情源：分类名命中明确色情词 → 直接标记并跳过后续耗时分析
+            # （搜索/探针/详情/播放都省掉），既省时间又避免误判。
+            if classes and is_pure_adult(classes):
+                reporter.set(adult_by_category=True, stage="done")
+                reporter.flush()
+                return 0
         except Exception as exc:  # noqa: BLE001
             reporter.set(error=f"home: {type(exc).__name__}: {exc}")
         reporter.flush()
