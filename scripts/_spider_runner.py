@@ -214,6 +214,7 @@ PURE_ADULT_CATEGORIES = (
     "无码", "有码", "里番", "三级", "成人", "伦理片", "情色", "色情",
     "国产传媒", "麻豆传媒", "蜜桃传媒", "天美传媒", "精东传媒", "91制片",
     "步兵", "骑兵", "巨乳", "熟女", "少妇", "内射", "口交", "偷拍自拍",
+    "家庭伦理", "伦理现实",
     # 抠爆B处（kbbshape.buzz）分类名
     "番号资源", "百万资源", "大地资源", "森林资源", "杏吧资源",
     "奶香香资源", "奥斯卡资源", "黄色仓库", "麻豆资源",
@@ -222,25 +223,19 @@ PURE_ADULT_CATEGORIES = (
 
 # 正常影视分类：和成人分类并存时是混合源，不能早判成纯色情源，
 # 否则会跳过后续分析，update_api 也没法做「只屏蔽固定成人分类」的判定。
-NORMAL_CATEGORY_HINTS = (
-    "电影", "电视剧", "剧集", "综艺", "动漫", "动画", "短剧", "音乐",
-    "直播", "体育", "纪录片", "预告片", "新闻", "少儿", "有声",
-    # 短剧正常题材，别被「伦理」词表误伤（甜圈短剧/锦鲤短剧实测）。
-    "家庭伦理", "伦理现实", "情感关系", "成长逆袭",
-)
-
-
 def is_pure_adult(classes: list[str]) -> bool:
-    """分类名命中明确色情词 → 纯色情源；混有正常分类则是混合源，不早判。"""
+    """第一道门槛：命中 2 个及以上成人分类才是纯色情源。
+
+    只命中 1 个 → 混合源，继续跑色情关键词搜索等后续门槛；
+    甜圈短剧（只有一个「家庭伦理」）就走这条路径，不会在这里被剔。
+    """
     texts = [str(c) for c in classes or []]
-    for text in texts:
-        if any(hint in text for hint in NORMAL_CATEGORY_HINTS):
-            return False
-    for text in texts:
-        for kw in PURE_ADULT_CATEGORIES:
-            if kw.lower() in text.lower():
-                return True
-    return False
+    matched = sum(
+        1
+        for text in texts
+        if any(kw.lower() in text.lower() for kw in PURE_ADULT_CATEGORIES)
+    )
+    return matched >= 2
 
 
 def item_labels(item: dict[str, Any]) -> list[str]:
@@ -508,6 +503,8 @@ def main() -> int:
             budget = float(job.get("timeout") or 0)
             reporter.set(stage="adult_probe")
             labels: list[str] = []
+            probe_items: list[dict[str, Any]] = []
+            probe_porn_ids: list[str] = []
             hits = 0
             try:
                 search = getattr(spider, "searchContent", None)
@@ -526,6 +523,17 @@ def main() -> int:
                             nm = str((item or {}).get("vod_name") or (item or {}).get("name") or "").strip()
                             if nm:
                                 labels.append(nm)
+                            row = {"name": nm[:80]}
+                            porn_id = pick_id(item)
+                            if porn_id:
+                                row["vod_id"] = str(porn_id)
+                                if ADULT_TITLE_RE.search(nm):
+                                    probe_porn_ids.append(str(porn_id))
+                            for key in ("t_id", "d_type", "type_id", "tid", "vod_class", "type_name", "class"):
+                                value = (item or {}).get(key)
+                                if value not in (None, ""):
+                                    row[key] = str(value)[:60]
+                            probe_items.append(row)
                         if len(labels) >= 40:
                             break
             except Exception:  # noqa: BLE001
@@ -536,6 +544,10 @@ def main() -> int:
                     if value not in unique:
                         unique.append(value)
                 reporter.set(probe_hits=hits, probe_labels=unique[:40])
+            if probe_items:
+                reporter.set(probe_items=probe_items[:60])
+            if probe_porn_ids:
+                reporter.set(probe_porn_ids=probe_porn_ids[:10])
             reporter.flush()
 
         # 隐藏成人类型：首页没列出、但搜索/列表里带类型 id 且片名明显色情的类型。
@@ -548,11 +560,13 @@ def main() -> int:
             pass
         reporter.flush()
 
-        vod_id = None
-        for item in home_items + search_items:
-            vod_id = pick_id(item)
-            if vod_id:
-                break
+        # 有候选色情片时优先看它的详情，才能定出色情内容来自哪个分类类型。
+        vod_id = probe_porn_ids[0] if probe_porn_ids else None
+        if not vod_id:
+            for item in home_items + search_items:
+                vod_id = pick_id(item)
+                if vod_id:
+                    break
 
         reporter.set(stage="detail")
         vod: dict[str, Any] | None = None
@@ -563,6 +577,13 @@ def main() -> int:
                 videos = video_list(payload)
                 if videos:
                     vod = videos[0]
+                    detail_types: dict[str, str] = {}
+                    for key in ("t_id", "d_type", "type_id", "tid", "vod_class", "type_name", "class"):
+                        value = vod.get(key)
+                        if value not in (None, ""):
+                            detail_types[key] = str(value)[:60]
+                    if detail_types:
+                        reporter.set(detail_types=detail_types)
                     froms, episodes, sample, flag = play_stats(vod)
                     # declared_flags = **全部**声明线路名（vod_play_from 按 $$$ 拆开）。
                     # 采样（lines/line_streams）只取前 max_lines 条，但「纯资源站源」

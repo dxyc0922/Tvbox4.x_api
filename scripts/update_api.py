@@ -1163,9 +1163,6 @@ def sync_jsm_fields(
     return output
 
 
-# 正常短剧题材中被成人词表误伤的分类名：命中这些就不再判成人。
-CATEGORY_ALLOW_PHRASES = ("家庭伦理", "伦理现实")
-
 # 分类名精确匹配：这些词单独出现就是成人分类。
 ADULT_CATEGORY_EXACT = frozenset(
     {"伦理", "理论", "福利", "里番", "无码", "三级", "成人", "情色", "色情", "三级片", "成人片"}
@@ -1260,9 +1257,6 @@ def detect_adult(
 
     for label in quality.get("classes") or []:
         text = str(label).strip()
-        # 短剧题材里的「家庭伦理/伦理现实」是正常分类，不是色情分类。
-        if any( phrase in text for phrase in CATEGORY_ALLOW_PHRASES):
-            continue
         if text in ADULT_CATEGORY_EXACT:
             add(text)
         for keyword in category_keywords:
@@ -1286,53 +1280,85 @@ def detect_adult(
     return hits
 
 
-def is_fixed_category_mixed(
-    quality: dict[str, Any] | None,
-    hits: list[str],
-    block_names: list[str],
-    adult_terms: tuple[str, ...],
-) -> bool:
-    """成人内容是否集中在某个固定分类（如「伦理片」）。
+PORN_TITLE_RE = re.compile(
+    r"[A-Z]{2,6}-\d{3,5}"
+    r"|乱伦|强奸|迷奸|巨乳|口交|内射|调教|偷拍|探花|人妻|萝莉|性爱|做爱"
+    r"|颜射|群交|自慰|福利姬|痴女|淫|屌|操逼|无码|伦理片|成人动漫|成人视频",
+    re.I,
+)
 
-    判定条件：
-    1) 首页分类里命中成人词的只占少数（还有大量正常分类）；
-    2) 命中的成人分类全部属于可屏蔽的固定类型；
-    3) 其它成人命中（探针/片名）也都落在这些固定类型里。
-    满足才认为可以「只屏蔽分类、保留源」，否则按纯色情源整源剔除。
+
+def is_porn_title(name: str, porn_titles: tuple[str, ...]) -> bool:
+    text = str(name or "")
+    if any(t and t.lower() in text.lower() for t in porn_titles):
+        return True
+    return bool(PORN_TITLE_RE.search(text))
+
+
+def type_key(row: dict[str, Any]) -> str:
+    """从条目/详情里取分类类型：优先数字 id，其次分类名。"""
+    for key in ("t_id", "d_type", "type_id", "tid", "class_id"):
+        value = row.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    for key in ("vod_class", "type_name", "class"):
+        value = row.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
+
+def adult_gate(
+    quality: dict[str, Any] | None,
+    adult_terms: tuple[str, ...],
+    porn_titles: tuple[str, ...],
+) -> tuple[str, list[str]]:
+    """多道门槛判定成人源。返回 (verdict, blocked_types)。
+
+    verdict:
+      clean        - 没有成人信号（或混合源但第二道门槛没搜到色情片）
+      pure         - 第一道门槛：>=2 个分类命中成人词 → 纯色情源，剔脚本
+      mixed_fixed  - 第二道门槛：色情片来自同一个固定分类类型 → 保留源，过滤该类型
+      mixed_spread - 第二道门槛：色情片来自不同分类类型 → 剔脚本
     """
     if not quality:
-        return False
-    classes = [str(c) for c in (quality.get("classes") or [])]
-    if not classes:
-        return False
-    # 隐藏类型 id（首页没列出、但内容全是色情，如瓜子APP 的 75）：
-    # 只要还有正常分类，就可以按 id 屏蔽该类型、保留源。
-    if quality.get("adult_type_ids"):
-        return True
-    if not hits or not block_names:
-        return False
-
-    def is_adult_class(name: str) -> bool:
-        text = name.strip()
-        if not text:
-            return False
-        return text in ADULT_CATEGORY_EXACT or any(
-            term and term in text for term in adult_terms
-        )
-
-    adult_classes = [c for c in classes if is_adult_class(c)]
-    if not adult_classes or len(adult_classes) >= len(classes):
-        return False
-    def in_block(text: str) -> bool:
-        return any(b in text or text in b for b in block_names)
-
-    if not all(in_block(c) for c in adult_classes):
-        return False
-    # 搜索/探针命中的成人词必须也能归到可屏蔽分类（含「伦理」这类子词），
-    # 否则说明色情内容不只在这一个分类里，不能只靠分类屏蔽。
-    if any(not in_block(h) for h in hits):
-        return False
-    return True
+        return "clean", []
+    classes = [
+        str(c).strip() for c in (quality.get("classes") or []) if str(c).strip()
+    ]
+    adult_classes = [
+        c
+        for c in classes
+        if c in ADULT_CATEGORY_EXACT or any(t and t in c for t in adult_terms)
+    ]
+    hidden = [str(x) for x in (quality.get("adult_type_ids") or [])]
+    if not adult_classes and not hidden:
+        return "clean", []
+    # 第一道门槛：命中 2 个及以上分类 → 纯色情源。
+    if len(adult_classes) >= 2:
+        return "pure", []
+    # 第二道门槛：色情关键词搜索结果 + 色情片详情。
+    rows = quality.get("probe_items") or []
+    porn_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict) and is_porn_title(row.get("name"), porn_titles)
+    ]
+    if not porn_rows:
+        # 只命中 1 个分类，但没搜到色情片（甜圈短剧这类）→ 通过。
+        if hidden:
+            return "mixed_fixed", hidden[:1]
+        return "clean", []
+    keys = {k for k in (type_key(row) for row in porn_rows) if k}
+    if not keys:
+        # 列表没带分类时，用色情片详情里的分类。
+        detail = quality.get("detail_types") or {}
+        key = type_key(detail)
+        if key:
+            keys = {key}
+    if len(keys) != 1:
+        return "mixed_spread", []
+    return "mixed_fixed", [next(iter(keys))]
 
 
 def effective_grade(
@@ -2852,6 +2878,14 @@ def main(argv: list[str] | None = None) -> int:
                 if line.strip() and not line.startswith("#")
             )
         adult_keywords = tuple(filter_cfg.get("adult_keywords") or ai_adult_terms)
+        porn_titles_path = ROOT / "scripts" / "porn_titles.txt"
+        porn_titles: tuple[str, ...] = ()
+        if porn_titles_path.exists():
+            porn_titles = tuple(
+                line.strip()
+                for line in porn_titles_path.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.startswith("#")
+            )
         adult_title_keywords = tuple(
             filter_cfg.get("adult_title_keywords") or ADULT_TITLE_KEYWORDS
         )
@@ -3014,31 +3048,30 @@ def main(argv: list[str] | None = None) -> int:
                         f"{'、'.join(zs_cls['z_flags'][:6])}）"
                     )
             # 成人过滤：放在功能→资源站之后执行（用户要求的过滤顺序）。
-            # 先剔除纯色情源；剩下命中成人词的，再分析色情内容是否来自某个
-            # 固定分类类型（如「伦理片」）。是 → 保留源并注入三点分类过滤；
-            # 否 → 仍按整源剔除。
+            # 多道门槛：分类命中 >=2 → 纯色情源剔脚本；只命中 1 → 混合源进第二道；
+            # 色情关键词搜不到色情片 → 通过；色情片来自同一分类 → 保留源并过滤该分类；
+            # 来自不同分类 → 剔脚本。
             cat_cfg = filters.get("category_filter") or {}
-            cat_blocks = [
-                str(x) for x in (cat_cfg.get("categories") or []) if str(x).strip()
-            ]
-            fixed_mixed = bool(
-                cat_cfg.get("enabled", True)
-                and is_fixed_category_mixed(quality, hits, cat_blocks, adult_keywords)
-            )
+            if cat_cfg.get("enabled", True):
+                gate, gate_types = adult_gate(quality, adult_keywords, porn_titles)
+            else:
+                gate, gate_types = ("clean", [])
+            blacklist_hit = Path(result.filename).name.lower() in adult_sources
             if (
-                (hits or Path(result.filename).name.lower() in adult_sources)
-                and exclude_adult and result.status == "valid"
+                (gate in ("pure", "mixed_spread") or blacklist_hit)
+                and exclude_adult
+                and result.status == "valid"
                 and result.filename not in adult_allow
-                and not fixed_mixed
             ):
                 result.status = "excluded_adult"
                 reason = "、".join(hits[:5]) if hits else "成人源黑名单"
                 result.error = "成人内容: " + reason
-            elif fixed_mixed and result.status == "valid":
+            elif gate == "mixed_fixed" and result.status == "valid":
                 quality["category_filter"] = True
-                type_ids = [str(x) for x in (quality.get("adult_type_ids") or [])]
-                quality["category_filter_names"] = type_ids or cat_blocks
-                quality["category_filter_ids"] = type_ids
+                quality["category_filter_names"] = gate_types
+                quality["category_filter_ids"] = [
+                    t for t in gate_types if t.isdigit()
+                ]
         scores = Counter(
             int(result.quality.get("score") or 0)
             for result in results
