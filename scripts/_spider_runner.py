@@ -13,6 +13,7 @@ import inspect
 import ipaddress
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -97,6 +98,86 @@ def video_list(payload: Any) -> list[dict[str, Any]]:
     return []
 
 
+# 原始列表接口里抓到的条目，用于识别「首页没暴露但确实存在」的隐藏成人类型 id。
+RAW_TYPE_ITEMS: list[dict[str, Any]] = []
+ADULT_TITLE_RE = re.compile(
+    r"[A-Z]{2,6}-\d{3,5}"  # ADN-662 / IPZZ-205 / WHZ-1919 等番号
+    r"|乱伦|强奸|迷奸|巨乳|口交|内射|调教|偷拍|探花|人妻|萝莉|性爱|做爱"
+    r"|颜射|群交|自慰|福利姬|痴女|淫|屌|操逼|无码|伦理片|成人动漫|成人视频",
+    re.I,
+)
+
+
+def category_ids(payload: Any) -> list[str]:
+    """从 homeContent 的 class 里取已暴露的类型 id。"""
+    ids: list[str] = []
+    if not isinstance(payload, dict):
+        return ids
+    classes = payload.get("class") or payload.get("classes") or []
+    if isinstance(classes, list):
+        for item in classes:
+            if isinstance(item, dict):
+                value = item.get("type_id") or item.get("id") or item.get("tid")
+                if value not in (None, ""):
+                    ids.append(str(value))
+    return ids
+
+
+def install_raw_capture(spider: Any) -> None:
+    """包一层原始 API 方法，记录列表条目里的类型 id 和片名。"""
+    for name in dir(spider):
+        if not (name.endswith("_api") or name in ("fetch", "get_data", "request", "api")):
+            continue
+        try:
+            fn = getattr(spider, name)
+        except Exception:  # noqa: BLE001
+            continue
+        if not callable(fn):
+            continue
+
+        def make(fn: Any) -> Any:
+            def wrapped(*args: Any, **kwargs: Any) -> Any:
+                res = fn(*args, **kwargs)
+                if isinstance(res, dict):
+                    arr = res.get("list") or res.get("vod") or []
+                    if isinstance(arr, list):
+                        for item in arr[:60]:
+                            if isinstance(item, dict):
+                                RAW_TYPE_ITEMS.append(dict(item))
+                return res
+            return wrapped
+
+        try:
+            setattr(spider, name, make(fn))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def analyze_hidden_types(home_payload: Any) -> list[str]:
+    """找出首页没暴露、但内容明显色情的隐藏类型 id（如瓜子APP 的 75）。"""
+    exposed = set(category_ids(home_payload))
+    buckets: dict[str, list[str]] = {}
+    for item in RAW_TYPE_ITEMS[:500]:
+        ids = set()
+        for key in ("t_id", "d_type", "type_id", "tid"):
+            value = item.get(key)
+            if value not in (None, ""):
+                ids.add(str(value))
+        title = str(item.get("vod_name") or item.get("name") or "")
+        for cid in ids:
+            if cid in exposed:
+                continue
+            buckets.setdefault(cid, []).append(title)
+    adult_ids: list[str] = []
+    for cid, titles in buckets.items():
+        if len(titles) < 3:
+            continue
+        bad = sum(1 for t in titles if ADULT_TITLE_RE.search(t))
+        if bad / len(titles) >= 0.6:
+            adult_ids.append(cid)
+    return adult_ids[:12]
+
+
 def category_names(payload: Any) -> list[str]:
     """从 homeContent 的 class / filters 里取出分类名，用于识别成人站点。"""
     names: list[str] = []
@@ -144,6 +225,8 @@ PURE_ADULT_CATEGORIES = (
 NORMAL_CATEGORY_HINTS = (
     "电影", "电视剧", "剧集", "综艺", "动漫", "动画", "短剧", "音乐",
     "直播", "体育", "纪录片", "预告片", "新闻", "少儿", "有声",
+    # 短剧正常题材，别被「伦理」词表误伤（甜圈短剧/锦鲤短剧实测）。
+    "家庭伦理", "伦理现实", "情感关系", "成长逆袭",
 )
 
 
@@ -348,13 +431,16 @@ def main() -> int:
                 reporter.set(error=f"init: {type(exc).__name__}: {exc}")
         reporter.set(init_ok=True)
         reporter.flush()
+        install_raw_capture(spider)
 
         home_items: list[dict[str, Any]] = []
+        home_payload: Any = None
         reporter.set(stage="home")
         try:
             home = getattr(spider, "homeContent", None)
             if callable(home):
                 payload = call(home, [False])
+                home_payload = payload
                 home_items = video_list(payload)
                 classes = category_names(payload)
                 if classes:
@@ -451,6 +537,16 @@ def main() -> int:
                         unique.append(value)
                 reporter.set(probe_hits=hits, probe_labels=unique[:40])
             reporter.flush()
+
+        # 隐藏成人类型：首页没列出、但搜索/列表里带类型 id 且片名明显色情的类型。
+        # 供 update_api 决定「只屏蔽该类型、保留源」而不是整源剔除。
+        try:
+            hidden_adult = analyze_hidden_types(home_payload)
+            if hidden_adult:
+                reporter.set(adult_type_ids=hidden_adult)
+        except Exception:  # noqa: BLE001
+            pass
+        reporter.flush()
 
         vod_id = None
         for item in home_items + search_items:
