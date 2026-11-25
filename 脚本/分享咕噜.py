@@ -892,7 +892,7 @@ class Spider(_BaseSpider):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["蚂蚁资源", "非凡资源"]
+_TVBOX_DROP_LINES = ["玫瑰4K", "蚂蚁资源", "非凡资源"]
 _TVBOX_LINE_ORDER = ["咕噜4K", "蚂蚁资源", "旋风VIP", "玫瑰4K"]
 
 _TVBOX_ZY_ENABLED = True

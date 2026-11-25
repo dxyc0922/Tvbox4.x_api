@@ -1234,7 +1234,7 @@ if __name__ == "__main__":
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["天堂", "暴风", "极速", "量子", "非凡"]
+_TVBOX_DROP_LINES = ["天堂", "暴风", "极速", "菲乐4K", "量子", "非凡"]
 _TVBOX_LINE_ORDER = ["咕噜4K-2", "新咕噜4K", "神话", "菲乐4K"]
 
 _TVBOX_ZY_ENABLED = True

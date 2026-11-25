@@ -227,12 +227,6 @@
             "api": "./脚本/极速追剧.py"
         },
         {
-            "key": "wzxxcz_c9ca16acb7cf",
-            "name": "橙果",
-            "type": 3,
-            "api": "./脚本/橙果.py"
-        },
-        {
             "key": "wzxxcz_f8d1ac53b6b9",
             "name": "毒舌影视",
             "type": 3,
