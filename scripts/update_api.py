@@ -1210,8 +1210,9 @@ ADULT_CATEGORY_KEYWORDS = (
 ADULT_TITLE_STRICT = (
     "无码", "里番", "三级片", "成人片", "18禁", "R18", "AV女优", "怀孕性爱",
     "大尺度", "私拍写真",  # 软色情写真片名（momo图鉴实测）
-    # 露骨成人片名（xhamster/VFsijilaopian/四级老片/汤头条实测）
-    "porn", "xxx", "hardcore", "性愛", "口爆", "中出",
+    # 露骨成人片名（xhamster/VFsijilaopian/四级老片/汤头条/瓜子APP实测）
+    "porn", "hardcore", "性愛", "口爆", "中出",  # xxx 太短会误伤音乐源，去掉
+    "黑丝诱惑", "探花", "打桩机", "欲仙欲死", "丝袜诱惑",
 )
 # 成人品牌词：新闻/评论标题常提及（如「麻豆传媒落网」），只用于分类名精确匹配，
 # 不用于标题子串匹配，避免把新闻源误判成成人源。
@@ -1254,14 +1255,11 @@ def detect_adult(
     for label in quality.get("probe_labels") or []:
         text = str(label)
         # 只用严格短语匹配标题；品牌词（麻豆传媒等）在新闻标题里太常见会误伤。
+        # 不再用「探针原文完全相等」判定——搜「自拍」返回一条叫「自拍」的普通
+        # 视频就会误伤（哔哩哔哩/懂片实测），成人词表已足够可靠。
         for keyword in strict:
             if keyword and keyword.lower() in text.lower():
                 add(keyword)
-        # 探针原文：仅当标题**就是**探针词（或极短前缀），不做子串——
-        # 「麻豆传媒被捕案…」这类新闻标题含探针原文但不是成人内容。
-        for phrase in phrases:
-            if text.strip() == phrase.strip():
-                add(f"探针:{phrase}")
 
     # 搜索结果片名：同样只用严格短语匹配。
     for title in quality.get("search_titles") or []:

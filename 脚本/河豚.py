@@ -686,7 +686,7 @@ def _opt(name, values):
 
 
 # ---- TVBox 本地线路过滤（自动生成，勿改） ----
-_TVBOX_DROP_LINES = ["Y蓝光 (Dong)"]
+_TVBOX_DROP_LINES = []
 _TVBOX_LINE_ORDER = ["K蓝光 (Ksvideo)", "Z蓝光 (bytedance)", "蓝光4K (zijianm3u8)", "Y蓝光 (Dong)"]
 
 _TVBOX_ZY_ENABLED = True

@@ -62,9 +62,7 @@
     "adult_keywords": [],
     "adult_title_keywords": [],
     "adult_allow": [],
-    "adult_sources": [
-      "xhamster.py", "VFsijilaopian.py", "四级老片.py", "汤头条.py", "瓜子APP.py"
-    ],
+    "adult_sources": [],
     "ad_hosts": []
   },
   "functional": {
@@ -81,7 +79,9 @@
     "prefer_keywords": [
       "仙逆"
     ],
-    "adult_probe_keywords": [],
+    "adult_probe_keywords": [
+      "自拍", "偷拍", "人妻", "乱伦", "性爱"
+    ],
     "timeout": 30,
     "workers": 12,
     "stream_workers": 12
