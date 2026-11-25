@@ -49,7 +49,12 @@
   ],
   "preserve_sites": [
     "豆瓣.py",
-    "哔哩.py"
+    "哔哩.py",
+    "3Q影视.py",
+    "spider.py",
+    "spider_ok版.py",
+    "localProxy.py",
+    "local_cache_server.py"
   ],
   "preserve_non_http": true,
   "exclude_scripts": [],

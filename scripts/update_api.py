@@ -39,7 +39,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-import stream_check  # noqa: E402  # grade_of 按画质+速度重算等级
 import resource_station  # noqa: E402  # 资源站（采集站）线路检测：基本是低质源
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1288,52 +1287,6 @@ def adult_gate(
     return "mixed_fixed", [next(iter(keys))]
 
 
-def line_grade_order(quality: dict[str, Any] | None) -> list[str]:
-    """按画质速度重排线路名（最优在前）。
-
-    线路级推荐：TVBox 默认播 vod_play_url 第一条，把画质速度最好的线路排第一。
-    只排有画质数据的线路（grade_of 可判）；未知线路不在 order 里，注入时
-    稳定保持原序后置。同一 grade 内按 bpp（画质密度）→ 速度排序。
-    """
-    if not quality:
-        return []
-    scored: list[tuple[float, float, float, str]] = []
-    for entry in quality.get("line_streams") or []:
-        flag = str(entry.get("flag") or "").strip()
-        stream = entry.get("stream") or {}
-        if not flag or not stream:
-            continue
-        grade = stream_check.grade_of(stream)
-        rank = {"A": 0, "B": 1, "C": 2, "D": 3, "U": 4}.get(grade, 4)
-        scored.append(
-            (rank, -stream_bpp(stream), -float(stream.get("speed_ratio") or 0), flag)
-        )
-    scored.sort()
-    return [flag for _, _, _, flag in scored]
-
-
-def stream_fps(stream: dict[str, Any]) -> float:
-    """取 ffprobe 读到的帧率；取不到或异常时按 25 算。
-
-    实测绝大多数源是 25fps，少数 24/30 对阈值影响 <20%。
-    """
-    try:
-        fps = float(stream.get("fps") or 0)
-    except (TypeError, ValueError):
-        fps = 0.0
-    return fps if 0 < fps <= 120 else 25.0
-
-
-def stream_bpp(stream: dict[str, Any], bitrate: int | None = None) -> float:
-    """算实际 bpp（每像素每帧的比特数），用于线路画质排序。"""
-    width = int(stream.get("width") or 0)
-    height = int(stream.get("height") or 0)
-    kbps = int(bitrate if bitrate is not None else (stream.get("bitrate_kbps") or 0))
-    if not (width and height and kbps):
-        return 0.0
-    return kbps * 1000.0 / (width * height * stream_fps(stream))
-
-
 # ---------------------------------------------------------------------------
 # 线路级裁减：把脚本里「不通 / 明显低于质量线」的线路从播放列表里去掉。
 # 采用运行时注入：在脚本末尾包一层 detailContent，按线路名过滤。
@@ -1479,28 +1432,22 @@ def line_prune_drops(
 def inject_line_filter(
     source: str,
     drop_flags: list[str],
-    line_order: list[str] | None = None,
     zy_sigs: dict[str, Any] | None = None,
 ) -> str:
-    """在脚本末尾注入线路过滤 + 重排代码。
+    """在脚本末尾注入线路过滤代码。
 
-    不带 drop 时只打标记（方便后续清理）；line_order 非空时按画质速度重排
-    线路（最优在前，TVBox 默认播第一条），未知线路保持原序后置。
-    zy_sigs 非空时，额外内联资源站 URL 签名，运行时按播放 URL 实时判定——
-    动态 API 脚本（如猎手）的线路名每次请求都可能变，静态名字名单挡不住，
-    但资源站 CDN host 是固定的，按 URL 判定可覆盖所有动态线路。
+    不带 drop 时只打标记（方便后续清理）。zy_sigs 非空时，额外内联资源站
+    URL 签名，运行时按播放 URL 实时判定。
     """
     marker = LINE_FILTER_MARKER
     if marker in source:
         source = source.split(marker)[0].rstrip("\n")
     header = f"\n\n{marker}\n"
-    order = [str(f) for f in (line_order or []) if str(f).strip()]
-    if not drop_flags and not order and not zy_sigs:
+    if not drop_flags and not zy_sigs:
         return source + header
     lines: list[str] = [
         header.rstrip("\n"),
         f"_TVBOX_DROP_LINES = {json.dumps(sorted(drop_flags), ensure_ascii=False)}",
-        f"_TVBOX_LINE_ORDER = {json.dumps(order, ensure_ascii=False)}",
         "",
     ]
     if zy_sigs:
@@ -1609,42 +1556,12 @@ def inject_line_filter(
         "    item['vod_play_from'] = '$$$'.join(f for f, _ in keep)",
         "    item['vod_play_url'] = '$$$'.join(u for _, u in keep)",
         "",
-        "def _tvbox_sort_lines(result, order):",
-        "    if not order or not isinstance(result, dict):",
-        "        return result",
-        "    items = result.get('list')",
-        "    if isinstance(items, list):",
-        "        for item in items:",
-        "            _tvbox_sort_item(item, order)",
-        "    else:",
-        "        _tvbox_sort_item(result, order)",
-        "    return result",
-        "",
-        "def _tvbox_sort_item(item, order):",
-        "    froms = item.get('vod_play_from') or ''",
-        "    urls = item.get('vod_play_url') or ''",
-        "    if not isinstance(froms, str) or not isinstance(urls, str):",
-        "        return",
-        "    if '$$$' not in froms:",
-        "        return",
-        "    parts_from = [f.strip() for f in froms.split('$$$')]",
-        "    parts_url = urls.split('$$$')",
-        "    if len(parts_from) != len(parts_url):",
-        "        return",
-        "    known = {f: i for i, f in enumerate(order)}",
-        "    pairs = list(zip(parts_from, parts_url))",
-        "    # 已知线路按 order（画质速度最优在前），未知线路稳定保持原序后置。",
-        "    pairs.sort(key=lambda p: known.get(p[0], len(order)))",
-        "    item['vod_play_from'] = '$$$'.join(f for f, _ in pairs)",
-        "    item['vod_play_url'] = '$$$'.join(u for _, u in pairs)",
-        "",
         "def _tvbox_apply(cls):",
         "    fn = getattr(cls, 'detailContent', None)",
         "    if fn is None:",
         "        return",
         "    def wrapper(self, *a, _fn=fn, **k):",
-        "        res = _tvbox_filter_lines(_fn(self, *a, **k), _TVBOX_DROP_LINES)",
-        "        return _tvbox_sort_lines(res, _TVBOX_LINE_ORDER)",
+        "        return _tvbox_filter_lines(_fn(self, *a, **k), _TVBOX_DROP_LINES)",
         "    setattr(cls, 'detailContent', wrapper)",
         "",
         "_tvbox_apply(Spider)",
@@ -1975,7 +1892,6 @@ def write_local_spiders(
             text = inject_line_filter(
                 result.source,
                 sorted(drops),
-                line_grade_order(quality_map.get(result.filename)),
                 zy_sigs=resource_station.runtime_url_signatures() if has_zy else None,
             )
             # 成人分类过滤：只给上一步判定为「固定分类混合源」且保留下来的源注入。
@@ -2006,10 +1922,11 @@ def write_local_spiders(
     # 清理上一轮生成、这轮已不再保留的本地脚本。删两类：
     # ① 上游脚本（managed_scripts，无论是否带标记——被质量剔的源要清掉）
     # ② 带托管标记的旧文件（上游已下线但本地遗留、带标记的）
+    preserve_names = {str(x) for x in (config.get("preserve_sites") or [])}
     for old in script_out.rglob("*.py"):
         rel = old.relative_to(script_out).as_posix()
-        # 手动保留的自定义站点（豆瓣/哔哩等）即使本轮没被验证也不能删。
-        if rel in kept_files or rel in (protect_scripts or set()):
+        # 手动保留的自定义站点和基础模块即使本轮没被验证也不能删。
+        if rel in kept_files or rel in (protect_scripts or set()) or Path(rel).name in preserve_names:
             continue
         try:
             content = old.read_text(encoding="utf-8", errors="replace")
