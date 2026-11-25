@@ -52,6 +52,10 @@
   "preserve_api_prefixes": [
     "./"
   ],
+  "preserve_sites": [
+    "豆瓣.py",
+    "哔哩.py"
+  ],
   "preserve_non_http": true,
   "exclude_scripts": [],
   "exclude_names": [],
@@ -63,7 +67,11 @@
     "adult_title_keywords": [],
     "adult_allow": ["豆瓣.py"],
     "adult_sources": [],
-    "ad_hosts": []
+    "ad_hosts": [],
+    "category_filter": {
+      "enabled": true,
+      "categories": ["伦理片"]
+    }
   },
   "functional": {
     "enabled": true,

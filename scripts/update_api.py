@@ -1280,6 +1280,49 @@ def detect_adult(
     return hits
 
 
+def is_fixed_category_mixed(
+    quality: dict[str, Any] | None,
+    hits: list[str],
+    block_names: list[str],
+    adult_terms: tuple[str, ...],
+) -> bool:
+    """成人内容是否集中在某个固定分类（如「伦理片」）。
+
+    判定条件：
+    1) 首页分类里命中成人词的只占少数（还有大量正常分类）；
+    2) 命中的成人分类全部属于可屏蔽的固定类型；
+    3) 其它成人命中（探针/片名）也都落在这些固定类型里。
+    满足才认为可以「只屏蔽分类、保留源」，否则按纯色情源整源剔除。
+    """
+    if not quality or not hits or not block_names:
+        return False
+    classes = [str(c) for c in (quality.get("classes") or [])]
+    if not classes:
+        return False
+
+    def is_adult_class(name: str) -> bool:
+        text = name.strip()
+        if not text:
+            return False
+        return text in ADULT_CATEGORY_EXACT or any(
+            term and term in text for term in adult_terms
+        )
+
+    adult_classes = [c for c in classes if is_adult_class(c)]
+    if not adult_classes or len(adult_classes) >= len(classes):
+        return False
+    def in_block(text: str) -> bool:
+        return any(b in text or text in b for b in block_names)
+
+    if not all(in_block(c) for c in adult_classes):
+        return False
+    # 搜索/探针命中的成人词必须也能归到可屏蔽分类（含「伦理」这类子词），
+    # 否则说明色情内容不只在这一个分类里，不能只靠分类屏蔽。
+    if any(not in_block(h) for h in hits):
+        return False
+    return True
+
+
 def effective_grade(
     quality: dict[str, Any] | None, thresholds: dict[str, float] | None = None
 ) -> str:
@@ -1644,6 +1687,12 @@ def speed_verdict(
 
 # 标记注入代码块，用于识别「本仓库生成过、可安全清理」的本地脚本。
 LINE_FILTER_MARKER = "# ---- TVBox 本地线路过滤（自动生成，勿改） ----"
+
+# 成人分类过滤：色情内容集中在单一分类（如「伦理片」）的混合源，
+# 只屏蔽该分类，不整源剔除。注入后在三个入口生效：
+# ① homeContent 去掉该分类；② categoryContent 拒绝该 tid；
+# ③ homeVideoContent / searchContent 过滤该分类的资源。
+CATEGORY_FILTER_MARKER = "# ---- TVBox 成人分类过滤（自动生成，勿改） ----"
 
 # 两振出局：源要连续两轮被判「要剔除」才真剔除；第一轮保留（strike1）。
 # 源级剔除状态：命中即剔除（立即生效，不走两振）。
@@ -2040,6 +2089,126 @@ def inject_line_filter(
     return source + "\n" + "\n".join(lines)
 
 
+def inject_category_filter(source: str, categories: list[str]) -> str:
+    """给混合源注入三点成人分类过滤。
+
+    只用于色情内容集中在单一分类（如「伦理片」）的源：
+    ① homeContent 去掉该分类；② categoryContent 拒绝该 tid；
+    ③ homeVideoContent / searchContent 过滤该分类的资源。
+    """
+    marker = CATEGORY_FILTER_MARKER
+    if marker in source:
+        source = source.split(marker)[0].rstrip("\n")
+    block_json = json.dumps(
+        [str(c) for c in categories if str(c).strip()], ensure_ascii=False
+    )
+    code = """
+
+""" + marker + """
+_TVBOX_CAT_BLOCK = """ + block_json + """
+
+def _tvbox_cat_hit(value):
+    text = str(value or "")
+    for name in _TVBOX_CAT_BLOCK:
+        if name and name in text:
+            return True
+    return False
+
+def _tvbox_cat_text(item):
+    if not isinstance(item, dict):
+        return ""
+    return " ".join(str(item.get(k) or "") for k in ("type_name", "vod_class", "class", "category"))
+
+def _tvbox_cat_filter_raw(result):
+    if isinstance(result, dict):
+        for key in ("list", "vod"):
+            arr = result.get(key)
+            if isinstance(arr, list):
+                result[key] = [it for it in arr if not _tvbox_cat_hit(_tvbox_cat_text(it))]
+    return result
+
+def _tvbox_cat_filter_payload(payload):
+    if isinstance(payload, dict) and isinstance(payload.get("list"), list):
+        payload["list"] = [it for it in payload["list"] if not _tvbox_cat_hit(_tvbox_cat_text(it))]
+    return payload
+
+def _tvbox_install_cat_filter(cls):
+    originals = {}
+    for name in ("homeContent", "categoryContent", "homeVideoContent", "searchContent"):
+        fn = cls.__dict__.get(name)
+        if callable(fn):
+            originals[name] = fn
+
+    def blocked_ids(spider):
+        ids = getattr(spider, "_tvbox_blocked_ids", None)
+        if ids is not None:
+            return ids
+        ids = set()
+        fn = originals.get("homeContent")
+        if fn:
+            try:
+                payload = fn(spider, False)
+                for c in (payload or {}).get("class") or []:
+                    if _tvbox_cat_hit((c or {}).get("type_name")):
+                        ids.add(str((c or {}).get("type_id")))
+            except Exception:
+                pass
+        spider._tvbox_blocked_ids = ids
+        return ids
+
+    if "homeContent" in originals:
+        def home(self, *a, **kw):
+            payload = _tvbox_cat_filter_payload(originals["homeContent"](self, *a, **kw))
+            if isinstance(payload, dict):
+                classes = payload.get("class")
+                if isinstance(classes, list):
+                    removed = {str((c or {}).get("type_id")) for c in classes if _tvbox_cat_hit((c or {}).get("type_name"))}
+                    payload["class"] = [c for c in classes if not _tvbox_cat_hit((c or {}).get("type_name"))]
+                    filters = payload.get("filters")
+                    if isinstance(filters, dict):
+                        for tid in removed:
+                            filters.pop(tid, None)
+            return payload
+        setattr(cls, "homeContent", home)
+
+    if "categoryContent" in originals:
+        def category(self, tid, *a, **kw):
+            if str(tid) in blocked_ids(self):
+                pg = kw.get("pg") or (a[0] if a else 1)
+                try:
+                    pg = int(pg)
+                except Exception:
+                    pg = 1
+                return {"list": [], "page": pg, "pagecount": 1, "limit": 0, "total": 0}
+            return _tvbox_cat_filter_payload(originals["categoryContent"](self, tid, *a, **kw))
+        setattr(cls, "categoryContent", category)
+
+    for name in ("homeVideoContent", "searchContent"):
+        if name in originals:
+            def make(fn):
+                def wrapped(self, *a, **kw):
+                    return _tvbox_cat_filter_payload(fn(self, *a, **kw))
+                return wrapped
+            setattr(cls, name, make(originals[name]))
+
+    # MacCMS _api / fetch 返回的原始 list 带分类字段，先过滤再归一化。
+    for name in tuple(dir(cls)):
+        if not (name.endswith("_api") or name == "fetch"):
+            continue
+        fn = cls.__dict__.get(name)
+        if not callable(fn):
+            continue
+        def make_api(fn):
+            def wrapped(self, *a, **kw):
+                return _tvbox_cat_filter_raw(fn(self, *a, **kw))
+            return wrapped
+        setattr(cls, name, make_api(fn))
+
+_tvbox_install_cat_filter(Spider)
+"""
+    return source.rstrip("\n") + code
+
+
 def write_local_spiders(
     kept: list[ScriptResult],
     config: dict[str, Any],
@@ -2246,7 +2415,16 @@ def write_local_spiders(
                 line_grade_order(quality_map.get(result.filename)),
                 zy_sigs=resource_station.runtime_url_signatures() if has_zy else None,
             )
-            # 冒烟检查：注入后必须是合法 Python（线路过滤是运行时包装，不应破坏语法）。
+            # 成人分类过滤：只给上一步判定为「固定分类混合源」且保留下来的源注入。
+            q = quality_map.get(result.filename) or {}
+            if q.get("category_filter"):
+                cat_blocks = [
+                    str(x) for x in (q.get("category_filter_names") or []) if str(x).strip()
+                ]
+                if cat_blocks:
+                    text = inject_category_filter(text, cat_blocks)
+                    print(f"    {filename}: 注入成人分类过滤（{'、'.join(cat_blocks)}）")
+            # 冒烟检查：注入后必须是合法 Python（两种注入都是运行时包装，不应破坏语法）。
             try:
                 compile(text, filename, "exec")
             except SyntaxError as exc:  # noqa: PERF203
@@ -2802,14 +2980,29 @@ def main(argv: list[str] | None = None) -> int:
                         f"{'、'.join(zs_cls['z_flags'][:6])}）"
                     )
             # 成人过滤：放在功能→资源站之后执行（用户要求的过滤顺序）。
+            # 先剔除纯色情源；剩下命中成人词的，再分析色情内容是否来自某个
+            # 固定分类类型（如「伦理片」）。是 → 保留源并注入三点分类过滤；
+            # 否 → 仍按整源剔除。
+            cat_cfg = filters.get("category_filter") or {}
+            cat_blocks = [
+                str(x) for x in (cat_cfg.get("categories") or []) if str(x).strip()
+            ]
+            fixed_mixed = bool(
+                cat_cfg.get("enabled", True)
+                and is_fixed_category_mixed(quality, hits, cat_blocks, adult_keywords)
+            )
             if (
                 (hits or Path(result.filename).name.lower() in adult_sources)
                 and exclude_adult and result.status == "valid"
                 and result.filename not in adult_allow
+                and not fixed_mixed
             ):
                 result.status = "excluded_adult"
                 reason = "、".join(hits[:5]) if hits else "成人源黑名单"
                 result.error = "成人内容: " + reason
+            elif fixed_mixed and result.status == "valid":
+                quality["category_filter"] = True
+                quality["category_filter_names"] = cat_blocks
         scores = Counter(
             int(result.quality.get("score") or 0)
             for result in results
@@ -2890,6 +3083,10 @@ def main(argv: list[str] | None = None) -> int:
     if local_spider_dir:
         managed_files = {result.filename for result in results if result.status == "valid"}
         managed_scripts = set(filenames)  # 所有上游脚本（含被剔的），都是本流程托管
+        # 手动保留的自定义站点（豆瓣/哔哩等）永远不算托管，不能被重新生成或删除。
+        preserve_sites = {
+            str(x) for x in (config.get("preserve_sites") or [])
+        }
 
         def _is_managed(site: Any) -> bool:
             if not isinstance(site, dict):
@@ -2901,6 +3098,8 @@ def main(argv: list[str] | None = None) -> int:
             if len(parts) < 2 or parts[0] != local_spider_dir:
                 return False
             rel = "/".join(parts[1:])  # 完整相对路径（含子目录，如 综/1905.py）
+            if Path(rel).name in preserve_sites:
+                return False
             if rel in managed_files or rel in managed_scripts:
                 return True
             path = output.parent / local_spider_dir / rel

@@ -139,10 +139,21 @@ PURE_ADULT_CATEGORIES = (
 )
 
 
+# 正常影视分类：和成人分类并存时是混合源，不能早判成纯色情源，
+# 否则会跳过后续分析，update_api 也没法做「只屏蔽固定成人分类」的判定。
+NORMAL_CATEGORY_HINTS = (
+    "电影", "电视剧", "剧集", "综艺", "动漫", "动画", "短剧", "音乐",
+    "直播", "体育", "纪录片", "预告片", "新闻", "少儿", "有声",
+)
+
+
 def is_pure_adult(classes: list[str]) -> bool:
-    """分类名命中明确色情词 → 纯色情源。"""
-    for c in classes or []:
-        text = str(c)
+    """分类名命中明确色情词 → 纯色情源；混有正常分类则是混合源，不早判。"""
+    texts = [str(c) for c in classes or []]
+    for text in texts:
+        if any(hint in text for hint in NORMAL_CATEGORY_HINTS):
+            return False
+    for text in texts:
         for kw in PURE_ADULT_CATEGORIES:
             if kw.lower() in text.lower():
                 return True
