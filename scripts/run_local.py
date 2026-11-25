@@ -105,22 +105,6 @@ def run_step(logger: Logger, title: str, command: list[str], cwd: Path = ROOT) -
     return code
 
 
-def git_output(*args: str) -> str:
-    try:
-        result = subprocess.run(
-            ["git", *args],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=child_env(),
-        )
-        return result.stdout.strip()
-    except OSError:
-        return ""
-
-
 def git(*args: str) -> int:
     try:
         result = subprocess.run(

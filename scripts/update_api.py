@@ -1398,31 +1398,6 @@ def effective_grade(
 VIDEO_KINDS = ("hls", "mp4", "video")
 
 
-def quality_sort_key(
-    result: ScriptResult, thresholds: dict[str, float] | None = None
-) -> tuple:
-    """站点排序：等级（A>B>C>D>U）→ 最高 bpp（画质密度）→ 最快速度比 → 名称。
-
-    用户标准：三方法（search/detail/player）是硬门槛（任一失败=源废，不进评分），
-    homeContent/分类不重要。通过门槛后只按**画质**（最高，bpp 归一化）→ **加载速度**
-    排名，功能 score 不参与（score 只作门槛判定的诊断，不是评分项）。
-
-    bpp = 码率 ÷ (宽×高×fps)，把分辨率/帧率归一化，比绝对码率更能反映真实画质：
-    720p@2500kbps 的 bpp 是 1080p@2500kbps 的两倍多，应排前面；绝对码率会高估
-    高分辨率低码率源（如 1080p 但 2309kbps 的采集聚合）。
-    """
-    quality = result.quality or {}
-    grade = effective_grade(quality, thresholds)
-    grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3, "U": 4, "": 4}.get(grade, 4)
-    best_bpp = 0.0
-    best_speed = 0.0
-    for entry in quality.get("line_streams") or []:
-        stream = entry.get("stream") or {}
-        best_bpp = max(best_bpp, stream_bpp(stream))
-        best_speed = max(best_speed, float(stream.get("speed_ratio") or 0))
-    return (grade_rank, -best_bpp, -best_speed, result.name)
-
-
 def dynamic_grade_thresholds(
     quality_map: dict[str, dict[str, Any]],
     base: dict[str, float] | None = None,
@@ -3196,14 +3171,7 @@ def main(argv: list[str] | None = None) -> int:
         if result.entry is not None and result.status == "valid"
     }
 
-    # 排序已按用户要求去除：保持上游/去重后的原始顺序，不再按画质 bpp/速度重排。
-    # def _entry_sort_key(entry: dict[str, Any]) -> tuple:
-    #     result = result_by_entry.get(id(entry))
-    #     if result is None:
-    #         return (4, 0, 0.0, 0.0, str(entry.get("name") or ""))
-    #     return quality_sort_key(result, dyn_thresholds)
-    # entries.sort(key=_entry_sort_key)
-
+    # 不排序：保持上游/去重后的原始顺序（用户要求）。
     print("-" * 60)
     print(
         "校验结果: "
