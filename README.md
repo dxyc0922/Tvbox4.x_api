@@ -58,19 +58,19 @@ python scripts/search_new_sources.py --dry-run  # 只打印不写
 
 ## 筛选机制（概述）
 
-`接口.json` 只保留**验证过的高质量源**；源级质量过滤（低质/低码率/慢速）**立即剔除**，
-线路级走「两振出局」（连续两轮差才剔除）：
+`接口.json` 只保留验证可用、且不含成人内容的源；成人源 / 纯资源站聚合源 / 功能校验失败的源
+**立即剔除**，线路级问题走「两振出局」（连续两轮差才剔除）：
 
 | 机制 | 说明 |
 |---|---|
-| 功能校验 | **硬门槛**：真正调用 `searchContent`/`detailContent`/`playerContent`，任一失败=源废（不评分）；homeContent/分类不重要（豆瓣.py `categoryContent` 提供）。搜索词用**最新**动漫/剧集（豆瓣非凡分类），带**降级链**兼容同名不同源 |
-| 源质量分级 | A 高画质+快 / B 画质速度达标 / C 偏低 / U 画质未知；**只按画质+速度，不看链接类型**（直链/解析/page 无区别）；**音频**（听书/音乐）无分辨率**按码率分级**（≥320K+快=A、≥128K=B）；U 级**音频源保留、非音频剔**（用户实测 page/local/无线路/unknown 有问题） |
-| 低码率过滤 | 按分辨率分档 + bpp 下限（`min_bpp=0.05`），只留真正高码率源 |
-| 加载速度过滤 | 实测吞吐/启动耗时，只留流畅源 |
-| 线路级裁减 | 给脚本注入过滤，去掉不通/低质/慢速线路（同源另有达标线路才删）；线路级两振 |
+| 功能校验 | **硬门槛**：真正调用 `searchContent`/`detailContent`/`playerContent`，任一失败=源废。搜索词默认固定 `仙逆`（`functional.fixed_keyword`），已移除豆瓣动态词；调试可用 `functional_check.py --keyword` 覆盖。`homeContent` 分类现在用于成人过滤第一道门槛，**不是无用信息** |
+| 源质量分级 | 报告仍给 A/B/C/D/U（按画质+速度，音频按码率），但当前 `quality.enabled=false`，分级**只展示不过滤**；设 `true` 才会按 `min_grade` / `drop_unverified` 剔除 |
+| 低码率过滤 | 按分辨率分档 + bpp 下限（`min_bpp=0.05`）；**仅 `quality.enabled=true` 时生效** |
+| 加载速度过滤 | 实测吞吐/启动耗时；**仅 `quality.enabled=true` 时生效** |
+| 线路级裁减 | 给脚本注入过滤，去掉不通/低质/慢速线路（同源另有达标线路才删）；线路级两振，`line_prune.enabled=true` 时生效 |
 | 线路级推荐 | 注入脚本按画质速度**重排线路**（最优排第一，TVBox 默认播它）；未知线路保持原序后置 |
 | 成人内容过滤 | 多道门槛：分类命中 ≥2 → 纯色情源剔脚本；只命中 1 → 色情关键词搜索看色情片来自哪个分类类型，同一固定类型→保留源并屏蔽该类型，不同类型→剔脚本 |
-| 源级质量 | 低质（C/D/U）/低码率/慢速源**立即剔除**（不走两振），只留 A/B |
+| 资源站过滤 | 线路全是采集站/资源站的源整源剔除，混合源只剔资源站线路（`quality.resource_station`） |
 
 ### 成人内容多道门槛
 
@@ -87,7 +87,7 @@ python scripts/search_new_sources.py --dry-run  # 只打印不写
 
 分类白名单不参与判定，避免把正常短剧题材（家庭伦理、伦理现实等）永久豁免。
 
-站点按**质量排序**：等级 → 最高 bpp（画质密度）→ 速度比 → 名称（功能 score 不参与评分，只作门槛），接口第一个就是最好的源。
+站点**不再按质量重排**，保持上游去重后的原始顺序（用户要求）；接口第一个不一定是最好的源。功能 score 只作门槛，不参与排序。
 
 详细规则、阈值、判定逻辑见 [docs/技术说明.md](docs/技术说明.md)。
 
@@ -98,20 +98,20 @@ python scripts/search_new_sources.py --dry-run  # 只打印不写
 | 配置 | 默认 | 说明 |
 |---|---|---|
 | `upstream` | 4 个仓库 | 上游 py 脚本仓库列表（`owner/repo/branch/path`），按文件名去重合并 |
-| `quality.min_grade` | `"B"` | 最低源质量等级（A/B/C/D），设 `""` 不过滤 |
-| `quality.drop_unverified` | `true` | U 级**非音频**（page/local/无线路/unknown）源剔除；音频源（听书/音乐，无分辨率）保留 |
+| `quality.enabled` | `false` | 质量分级/低码率/速度过滤总开关；当前关闭，报告仍出等级但不剔除 |
+| `quality.min_grade` | `"B"` | 最低源质量等级（A/B/C/D），设 `""` 不过滤；**仅 `quality.enabled=true` 时生效** |
+| `quality.drop_unverified` | `true` | U 级**非音频**源剔除；音频源保留；**仅 `quality.enabled=true` 时生效** |
 | `quality.dynamic_grade_thresholds` | `false` | 按源池分布动态算分级阈值（P75/P50，只收紧），默认固定阈值 |
-| `quality.min_bpp` | `0.05` | 每像素每帧最低比特数，设 `0` 关闭 |
-| `quality.min_speed_ratio` | `0.7` | 实测吞吐 ÷ 码率下限，设 `0` 关闭 |
-| `quality.max_startup_ms` | `12000` | 播放列表+首个分片首字节耗时上限（毫秒） |
+| `quality.min_bpp` | `0.05` | 每像素每帧最低比特数，设 `0` 关闭；**仅 `quality.enabled=true` 时生效** |
+| `quality.min_speed_ratio` | `0.7` | 实测吞吐 ÷ 码率下限，设 `0` 关闭；**仅 `quality.enabled=true` 时生效** |
+| `quality.max_startup_ms` | `12000` | 播放列表+首个分片首字节耗时上限（毫秒）；**仅 `quality.enabled=true` 时生效** |
 | `quality.line_prune.dead_status_min` | `0` | 4xx 视为死线路的状态码下限；`0`=连续两轮 4xx 才删 |
 | `quality.line_prune.blacklist` | `{}` | 手动剔线路名，默认空（交给规则自动走两振） |
 | `exclude_scripts` / `exclude_names` | `[]` | 排除不想加入的脚本 / 站点 |
 | `quality.bitrate_allow` / `speed_allow` | `[]` | 码率 / 速度误判豁免 |
 | `filters.exclude_adult` | `true` | 成人内容过滤（多道门槛，见上文） |
 | `filters.adult_allow` | `["豆瓣.py"]` | 成人误判豁免（整源保留，不参与门槛） |
-| `filters.category_filter.enabled` | `true` | 固定分类混合源是否启用三点分类过滤 |
-| `filters.category_filter.categories` | `["伦理片"]` | 可按分类名屏蔽的成人类型（第一道门槛用） |
+| `filters.category_filter.enabled` | `true` | 固定分类混合源是否启用三点分类过滤；要屏蔽的类型由校验阶段自动识别（首页分类名 / 色情片详情里的类型 id），无需手配 |
 | `preserve_sites` | `["豆瓣.py", "哔哩.py"]` | 手动保留的自定义站点，更新时不重新生成、不删除 |
 | `jsm_sync` | 开启 | 从 `qist/tvbox` 的 `jsm.json` 同步 `hosts`/`doh`/`rules`/`ads` |
 

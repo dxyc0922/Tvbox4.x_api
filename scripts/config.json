@@ -69,8 +69,7 @@
     "adult_sources": [],
     "ad_hosts": [],
     "category_filter": {
-      "enabled": true,
-      "categories": ["伦理片"]
+      "enabled": true
     }
   },
   "functional": {
