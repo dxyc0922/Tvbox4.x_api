@@ -708,8 +708,7 @@ def find_m3u8(text: str, base: str) -> list[str]:
     return out
 
 
-# 质量分级默认阈值。方向4（动态阈值）可覆盖：update_api 按源分布算分位数传入，
-# 默认用固定值（行为不变），配置 quality.dynamic_grade_thresholds 启用。
+# 线路画质分级阈值，供线路推荐排序使用。
 GRADE_THRESHOLDS: dict[str, float] = {
     "bpp_a": 0.10, "speed_a": 0.7,   # A：画质密度 + 快（密度线参考 720p，随像素自适应）
     "bpp_b": 0.05, "speed_b": 0.3,   # B：画质速度达标

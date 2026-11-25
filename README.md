@@ -26,7 +26,6 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1       # 注�
 - 成人内容多道门槛：分类命中 ≥2 → 纯色情源剔除；只命中 1 → 按色情片来源类型决定
   「保留源并屏蔽该类型」或「剔除脚本」。
 - 纯资源站聚合源剔除，混合源只剔资源站线路；不通/低质线路走两振裁减。
-- 质量分级、低码率、速度过滤由 `quality.enabled` 控制。
 - 站点保持上游去重后的顺序。
 
 ## 配置
@@ -42,7 +41,6 @@ powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1       # 注�
 | `filters.category_filter.enabled` | `true` | 固定分类混合源的三点分类过滤 |
 | `functional.fixed_keyword` | `"仙逆"` | 功能校验固定搜索词；`--keyword` 可覆盖 |
 | `functional.adult_probe_keywords` | `["女教师", "自拍"]` | 成人内容探针关键词 |
-| `quality.enabled` | `false` | 质量分级 / 低码率 / 速度过滤总开关 |
 | `preserve_sites` | `["豆瓣.py", "哔哩.py"]` | 自定义站点，更新时不重新生成、不删除 |
 
 完整配置见 [docs/技术说明.md](docs/技术说明.md)。

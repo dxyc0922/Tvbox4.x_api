@@ -70,7 +70,6 @@
   "functional": {
     "enabled": true,
     "report": "reports/functional-report.json",
-    "min_score": 0,
     "fixed_keyword": "仙逆",
     "keyword": "庆余年",
     "keywords": [
@@ -89,25 +88,7 @@
     "stream_workers": 12
   },
   "quality": {
-    "enabled": false,
-    "min_grade": "B",
-    "drop_unverified": true,
-    "dynamic_grade_thresholds": false,
-    "min_bitrate_kbps": 800,
-    "min_bpp": 0.05,
-    "min_speed_ratio": 0.7,
-    "max_startup_ms": 12000,
-    "bitrate_thresholds": {
-      "3840": 6000,
-      "2560": 3500,
-      "1920": 2000,
-      "1280": 2000,
-      "854": 1000,
-      "640": 700
-    },
     "max_lines": 4,
-    "bitrate_allow": [],
-    "speed_allow": [],
     "line_prune": {
       "enabled": true,
       "dead_status_min": 0,

@@ -161,101 +161,21 @@ def source_hash(script: Path) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def line_clean(stream: dict[str, Any], config: dict[str, Any]) -> bool:
-    """一条线路采样是否干净：没有 4xx、广告、低码率、慢速（未知的按干净处理）。"""
-    status = int(stream.get("status") or 0)
-    if status >= 400:
-        return False
-    if int(stream.get("ad_score") or 0) >= 3:
-        return False
-    kind = str(stream.get("kind") or "")
-    if kind not in update_api.VIDEO_KINDS:
-        return True  # 非视频（解析/页面/未知）不参与码率判定
-    bitrate = int(stream.get("bitrate_kbps") or 0)
-    if bitrate <= 0:
-        return True  # 没测到码率，未知，不动
-    limit = stream_bitrate_limit(stream, config)
-    if bitrate < limit:
-        return False
-    min_speed = float((config.get("quality") or {}).get("min_speed_ratio") or 0)
-    speed = float(stream.get("speed_ratio") or 0)
-    if min_speed > 0 and speed > 0 and speed < min_speed:
-        return False
-    return True
-
-
-def stream_bitrate_limit(stream: dict[str, Any], config: dict[str, Any]) -> float:
-    """按配置计算一条采样的有效码率下限（含 bpp 校正）。"""
-    quality_cfg = config.get("quality") or {}
-    min_kbps = float(quality_cfg.get("min_bitrate_kbps") or 0)
-    min_bpp = float(quality_cfg.get("min_bpp") or 0)
-    thresholds = dict(update_api.DEFAULT_BITRATE_THRESHOLDS)
-    thresholds.update(quality_cfg.get("bitrate_thresholds") or {})
-    limit = update_api.resolution_threshold(stream, min_kbps, thresholds)
-    if min_bpp > 0 and stream.get("width") and stream.get("height"):
-        limit = max(
-            limit,
-            min_bpp
-            * int(stream["width"])
-            * int(stream["height"])
-            * update_api.stream_fps(stream)
-            / 1000.0,
-        )
-    return limit
-
-
-def line_critical(stream: dict[str, Any], config: dict[str, Any]) -> bool:
-    """线路采样是否落在「临界区」，需要第 2 集二次确认。
-
-    两种情况需要复测：
-    - **4xx/5xx**：单集 token 过期是 403/404 误报（华谊 K蓝光某集 403、换集就 200），
-      一次采样判死会误伤，用第 2 集确认线路是否真的不通。
-    - **码率/速度落在阈值 ±10%**：单集波动（某集恰好是低码率转码）会让一次采样
-      误判成低质，用第 2 集区分「线路真的差」和「只是这一集差」。
-    """
-    if int(stream.get("status") or 0) >= 400:
-        return True
-    kind = str(stream.get("kind") or "")
-    if kind not in update_api.VIDEO_KINDS:
-        return False
-    bitrate = int(stream.get("bitrate_kbps") or 0)
-    if bitrate > 0:
-        limit = stream_bitrate_limit(stream, config)
-        if limit > 0 and abs(bitrate - limit) / limit <= 0.10:
-            return True
-    min_speed = float((config.get("quality") or {}).get("min_speed_ratio") or 0)
-    speed = float(stream.get("speed_ratio") or 0)
-    if min_speed > 0 and speed > 0 and abs(speed - min_speed) / min_speed <= 0.10:
-        return True
-    return False
-
-
-def result_clean(row: dict[str, Any], config: dict[str, Any]) -> bool:
-    """整个结果是否干净：至少有一条线路分析结果，且每条都达标。"""
-    streams = row.get("line_streams") or []
-    if not streams:
-        return False  # 没有分析结果的不缓存（便宜，且避免漏检）
-    return all(line_clean((entry.get("stream") or {}), config) for entry in streams)
-
-
 def reusable_from_cache(
     script: Path,
     entry: dict[str, Any],
-    config: dict[str, Any],
     round_num: int,
     kw_fingerprint: str = "",
 ) -> bool:
-    """缓存结果是否可复用：脚本没变、关键词没变、上次分析干净、且未超过强制重测周期。"""
+    """缓存结果是否可复用：脚本没变、关键词没变、未超过强制重测周期。"""
     if not isinstance(entry, dict):
         return False
     if entry.get("sha256") != source_hash(script):
         return False
     if kw_fingerprint and entry.get("kw_fingerprint") != kw_fingerprint:
-        return False  # 搜索关键词变了（如从固定片换动态最新片），旧结果不可复用
-    last = int(entry.get("last_analyzed_round") or 0)
-    if last <= 0 or round_num - last >= REUSE_MAX_AGE_ROUNDS:
         return False
-    return result_clean(entry.get("result") or {}, config)
+    last = int(entry.get("last_analyzed_round") or 0)
+    return 0 < last and round_num - last < REUSE_MAX_AGE_ROUNDS
 
 
 def run_one(
@@ -564,10 +484,8 @@ def analyze_streams(
             if done % 20 == 0 or done == len(futures):
                 print(f"  已分析 {done}/{len(futures)}")
 
-    # N2 单轮临界线路复测：码率/速度落在阈值 ±10% 的线路，用第 2 集再测一次。
-    # 单集波动（某集恰好是低码率转码）会让一次采样误判成低质；二次采样能区分
-    # 「线路真的差」（两集都差）和「只是这一集差」（另一集达标）。取两样本中
-    # 更好的作为判定流，避免误删好线路。
+    # N2 单轮异常线路复测：返回 4xx/5xx 的线路用第 2 集再测一次，
+    # 区分单集 token 过期和整条线路不可用；取两样本中更好的作为判定流。
     retest_jobs: list[tuple[dict[str, Any], int, str, str, list[str]]] = []
     for row in rows:
         if str(row.get("file") or "") in skip:
@@ -581,13 +499,13 @@ def analyze_streams(
             if not alt_url:
                 continue
             stream = entry.get("stream") or {}
-            if not line_critical(stream, config):
+            if int(stream.get("status") or 0) < 400:
                 continue
             hosts = site_hosts(str(row.get("file") or ""))
             retest_jobs.append((row, index, str(entry.get("flag") or ""), alt_url, hosts))
 
     if retest_jobs:
-        print(f"  临界线路复测: {len(retest_jobs)} 条（阈值 ±10% 内，用第 2 集确认）")
+        print(f"  异常线路复测: {len(retest_jobs)} 条（4xx/5xx，用第 2 集确认）")
         retest_done = 0
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
@@ -726,7 +644,7 @@ def main(argv: list[str] | None = None) -> int:
         round_num = int(cache["round"])
         entries = cache.setdefault("entries", {})
         for script in scripts:
-            if reusable_from_cache(script, entries.get(script.name), config, round_num, kw_fingerprint):
+            if reusable_from_cache(script, entries.get(script.name), round_num, kw_fingerprint):
                 reuse.add(script.name)
         if reuse:
             print(f"增量缓存: 复用 {len(reuse)} 个未变化且结果干净的源（每 {REUSE_MAX_AGE_ROUNDS} 轮强制重测）")
@@ -844,11 +762,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     if stream_summary:
         print(
-            "源质量: "
-            f"A 高画质 {stream_summary.get('A', 0)}，"
-            f"B 画质达标 {stream_summary.get('B', 0)}，"
-            f"C 偏低 {stream_summary.get('C', 0)}，"
-            f"D 差 {stream_summary.get('D', 0)}"
+            "线路画质分布: "
+            f"A {stream_summary.get('A', 0)}，"
+            f"B {stream_summary.get('B', 0)}，"
+            f"C {stream_summary.get('C', 0)}，"
+            f"D {stream_summary.get('D', 0)}"
         )
     print(f"报告: {output}")
     return 0

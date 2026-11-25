@@ -45,41 +45,6 @@ import resource_station  # noqa: E402  # 资源站（采集站）线路检测：
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = ROOT / "scripts" / "config.json"
 
-# 按分辨率定最低码率，单位 kbps。阈值取在实测数据的空档里：
-# 按分辨率返回「最低达标码率」档位表。
-# 键 = **长边（max(宽,高)）**，决定码率门槛（码率需求随像素数/数据量增长）：
-#   3840 = 4K、2560 = 1440p、1920 = 1080p、1280 = 720p、854 = 480p、640 = 360p。
-# 用长边而非短边：2.35:1 电影（1280x544）长边 1280 属 720p 类（69.6 万像素），
-# 短边 544 会误判成 480p 档（只要求 1000kbps，1831kbps 虚高达标）；
-# 竖屏短剧（720x1280）长边 1280 属 720p 类，按垂直高度会误判成 1440p 档。
-# 注意：码率门槛看长边/像素数，与画质分级 grade_of 的**短边**清晰度判档是两个
-# 维度——清晰度看短边（1920x1080=1080p），码率看数据量，两者不矛盾。
-# 值 = 「好画质」最低线（用户实测 1280x544@1831 不达标，故 1280 宽档 ≥2000）。
-# 再叠加 min_bpp（每像素密度）挡「1080p 但码率低」的廉价转码。
-DEFAULT_BITRATE_THRESHOLDS: dict[str, int] = {
-    "3840": 6000,
-    "2560": 3500,
-    "1920": 2000,
-    "1280": 2000,
-    "854": 1000,
-    "640": 700,
-}
-
-# 每像素每帧最低码率（bits per pixel）。分辨率分档只能挡住「低分辨率高码率」，
-# 挡不住「1080p 但码率只有 1.6–1.8 Mbps」的廉价转码，所以再加一层 bpp 下限：
-#   最低码率 = max(分辨率档阈值, min_bpp × 宽 × 高 × fps / 1000)
-# 0.05 落在实测 1080p 的 2309 → 2488 kbps 空档里：拦掉 0.035–0.046 这一档
-# 「1080p 但码率 1.8–2.3 Mbps」的低质第三方源（采集聚合/达达兔/短剧等），
-# 只留 bpp≥0.05（1080p24 约 2488 kbps 以上）的真正高码率源。
-DEFAULT_MIN_BPP = 0.05
-
-# 加载速度：线路实测下载速度 / 码率。低于这个倍数说明 CDN 吐得比播放快不了多少，
-# 播放器会反复缓冲；0.7 留了约 40% 的余量。所有采样线路都低于它才剔除源。
-DEFAULT_MIN_SPEED_RATIO = 0.7
-# 播放列表 + 首个分片首字节的总耗时上限（毫秒）。超过说明「点开要等太久」，
-# 即使后续吞吐正常也算慢线路。取 12 秒：实测同一条线路的启动耗时能波动 2 倍
-# （麒麟/独播库一次 4 秒、一次 9 秒），阈值太低会按瞬时网络抖动误删。
-DEFAULT_MAX_STARTUP_MS = 12000
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "upstream": {
@@ -116,24 +81,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "functional": {
         "enabled": False,
         "report": "reports/functional-report.json",
-        "min_score": 0,
         "keyword": "庆余年",
         "timeout": 30,
         "workers": 12,
         "stream_workers": 12,
     },
     "quality": {
-        "min_grade": "",
-        "drop_unverified": False,
-        "min_bitrate_kbps": 800,
-        "min_bpp": DEFAULT_MIN_BPP,
-        "min_speed_ratio": DEFAULT_MIN_SPEED_RATIO,
-        "max_startup_ms": DEFAULT_MAX_STARTUP_MS,
-        "bitrate_thresholds": dict(DEFAULT_BITRATE_THRESHOLDS),
         "max_lines": 4,
-        "bitrate_allow": [],
-        "speed_allow": [],
-        # 线路级裁减：把脚本里「不通 / 明显低于质量线」的线路从播放列表里去掉。
+        # 线路级裁减：把脚本里不通的线路从播放列表里去掉。
         "line_prune": {
             "enabled": False,
             # HTTP 状态码 >= 此值算不可用（400 token 过期、404 失效等）。
@@ -266,7 +221,7 @@ class ProbeResult:
 class ScriptResult:
     filename: str
     name: str
-    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / functional_fail / low_quality / low_bitrate / slow_stream / resource_station / parse_required
+    status: str  # pending / valid / invalid / no_host / skipped / download_failed / duplicate / excluded / excluded_adult / functional_fail / resource_station / parse_required
     hosts: list[str] = field(default_factory=list)
     tier: str = ""
     checked_host: str | None = None
@@ -1333,95 +1288,6 @@ def adult_gate(
     return "mixed_fixed", [next(iter(keys))]
 
 
-def effective_grade(
-    quality: dict[str, Any] | None, thresholds: dict[str, float] | None = None
-) -> str:
-    """把功能校验结果换算成 A/B/C/D，无法验证画质的返回 U。
-
-    质量等级**只按画质（码率/分辨率/bpp）+ 速度**，不看链接类型（直链/解析/page）。
-    用 stream_check.grade_of 对每个 stream 重算（不依赖旧 stream.grade 链接类型值）。
-    thresholds 可覆盖分级阈值（方向4动态阈值，默认 GRADE_THRESHOLDS）。
-
-    优先看所有采样线路（line_streams），取其中最好的等级：实测华谊影视的
-    第一条线路经常连接失败，但 K蓝光线路正常，只看第一条会误判成 U。
-    没有 line_streams 时退回单条 stream。
-    """
-    streams: list[dict[str, Any]] = []
-    for entry in (quality or {}).get("line_streams") or []:
-        stream = entry.get("stream") or {}
-        if stream:
-            streams.append(stream)
-    if not streams:
-        stream = (quality or {}).get("stream") or {}
-        if stream:
-            streams.append(stream)
-    grades: list[str] = []
-    for stream in streams:
-        grade = stream_check.grade_of(stream, thresholds)
-        kind = str(stream.get("kind") or "")
-        if grade and kind and kind not in ("local", "unknown"):
-            grades.append(grade)
-    if not grades:
-        return "U"
-    rank = {"A": 0, "B": 1, "C": 2, "D": 3}
-    return min(grades, key=lambda grade: rank.get(grade, 9))
-
-
-VIDEO_KINDS = ("hls", "mp4", "video")
-
-
-def dynamic_grade_thresholds(
-    quality_map: dict[str, dict[str, Any]],
-    base: dict[str, float] | None = None,
-) -> dict[str, float]:
-    """按源池实际分布算动态分级阈值（bpp/speed 分位数）。
-
-    方向4：固定阈值（bpp 0.10/0.05）可能不适合源池变化。按高质量线路的
-    bpp/speed 分布取分位数自适应：bpp_a=P75、bpp_b=P50、speed_a=P75、
-    speed_b=P50。取 max(分位数, 默认) 只收紧不放宽（保证「只留高质量」），
-    且限制在默认值的 2 倍内（避免某周源池异常导致阈值过激）。
-
-    只统计视频线路（音频无分辨率、local/unknown 无法验证）。
-    """
-    base = {**stream_check.GRADE_THRESHOLDS, **(base or {})}
-    bpps: list[float] = []
-    speeds: list[float] = []
-    for quality in quality_map.values():
-        for entry in quality.get("line_streams") or []:
-            stream = entry.get("stream") or {}
-            kind = str(stream.get("kind") or "")
-            if kind in ("audio", "local", "unknown"):
-                continue
-            if not stream.get("bitrate_kbps") or not stream.get("width") or not stream.get("height"):
-                continue
-            bpps.append(stream_bpp(stream))
-            speeds.append(float(stream.get("speed_ratio") or 0))
-    if not bpps:
-        return dict(base)
-    bpps.sort()
-    speeds.sort()
-
-    def pct(arr: list[float], p: float) -> float:
-        return arr[min(int(len(arr) * p), len(arr) - 1)]
-
-    def clamp(value: float, default: float) -> float:
-        """只收紧不放宽，且不超过默认 2 倍。"""
-        return min(max(value, default), default * 2)
-
-    return {
-        "bpp_a": clamp(pct(bpps, 0.75), base["bpp_a"]),
-        "bpp_b": clamp(pct(bpps, 0.50), base["bpp_b"]),
-        "speed_a": clamp(pct(speeds, 0.75), base["speed_a"]),
-        "speed_b": clamp(pct(speeds, 0.50), base["speed_b"]),
-        "bpp_c": base["bpp_c"],
-        "res_a": base["res_a"], "res_b": base["res_b"], "res_c": base["res_c"],
-        "ref_pixels": base["ref_pixels"],
-        "audio_bitrate_a": base["audio_bitrate_a"],
-        "audio_speed_a": base["audio_speed_a"],
-        "audio_bitrate_b": base["audio_bitrate_b"],
-    }
-
-
 def line_grade_order(quality: dict[str, Any] | None) -> list[str]:
     """按画质速度重排线路名（最优在前）。
 
@@ -1446,43 +1312,6 @@ def line_grade_order(quality: dict[str, Any] | None) -> list[str]:
     return [flag for _, _, _, flag in scored]
 
 
-def resolution_threshold(
-    stream: dict[str, Any],
-    default_kbps: float,
-    thresholds: dict[str, Any] | None = None,
-) -> float:
-    """按分辨率返回最低达标码率。
-
-    码率档按**长边**（max(宽,高)）判：码率需求随水平分辨率/像素数增长，
-    2.35:1 电影 1280x544（69.6 万像素，接近 720p）按 1280 档要 2000kbps——
-    1831kbps 不达标被剔（用户实测）。竖屏短剧 720x1280 长边 1280 → 720p 档。
-    这与画质分级（grade_of 用**短边**判清晰度）是不同维度：清晰度看短边
-    （1920x1080=1080p），码率门槛看长边/像素数（决定数据量），不矛盾。
-    分辨率未知时退回 default_kbps。
-    """
-    table = thresholds or DEFAULT_BITRATE_THRESHOLDS
-    width = int(stream.get("width") or 0)
-    height = int(stream.get("height") or 0)
-    long_edge = max(width, height) if width and height else height
-    if long_edge <= 0:
-        return float(default_kbps)
-    best: tuple[int, float] | None = None
-    for key, value in table.items():
-        try:
-            level = int(key)
-        except (TypeError, ValueError):
-            continue
-        if long_edge >= level and (best is None or level > best[0]):
-            best = (level, float(value))
-    if best is not None:
-        return best[1]
-    # 比最低档还小（240p 之类），用最低档的阈值。
-    try:
-        return float(min(float(value) for value in table.values()))
-    except ValueError:
-        return float(default_kbps)
-
-
 def stream_fps(stream: dict[str, Any]) -> float:
     """取 ffprobe 读到的帧率；取不到或异常时按 25 算。
 
@@ -1496,173 +1325,13 @@ def stream_fps(stream: dict[str, Any]) -> float:
 
 
 def stream_bpp(stream: dict[str, Any], bitrate: int | None = None) -> float:
-    """算实际 bpp（每像素每帧的比特数），用于和 min_bpp 比较。"""
+    """算实际 bpp（每像素每帧的比特数），用于线路画质排序。"""
     width = int(stream.get("width") or 0)
     height = int(stream.get("height") or 0)
     kbps = int(bitrate if bitrate is not None else (stream.get("bitrate_kbps") or 0))
     if not (width and height and kbps):
         return 0.0
     return kbps * 1000.0 / (width * height * stream_fps(stream))
-
-
-def bitrate_verdict(
-    quality: dict[str, Any] | None,
-    min_kbps: float,
-    thresholds: dict[str, Any] | None = None,
-    min_bpp: float = 0.0,
-) -> dict[str, Any]:
-    """判断一个源的所有采样线路是否都低于对应分辨率的最低码率。
-
-    只有「每条视频线路都测到了码率，且都低于阈值」才算低码率源。
-    有任何一条线路测不出来（解析线路、页面、超时）就保留——没测到不等于低。
-    音频源（听书/音乐）不参与码率判定。
-
-    min_bpp > 0 时，阈值取 max(分辨率档阈值, min_bpp × 宽 × 高 × fps / 1000)，
-    用来挡住「1080p 但码率只有 1.6–1.8 Mbps」的低端转码源。
-    """
-    verdict: dict[str, Any] = {
-        "lines": [],
-        "measured": 0,
-        "unknown": 0,
-        "untested": 0,
-        "all_low": False,
-    }
-    if not quality:
-        return verdict
-    entries = list(quality.get("line_streams") or [])
-    if not entries:
-        stream = quality.get("stream") or {}
-        if stream:
-            entries = [{"flag": "", "stream": stream}]
-    measured = 0
-    unknown = 0
-    for entry in entries:
-        stream = entry.get("stream") or {}
-        kind = str(stream.get("kind") or "")
-        if kind == "audio":
-            continue
-        bitrate = int(stream.get("bitrate_kbps") or 0)
-        if kind in VIDEO_KINDS and bitrate > 0:
-            measured += 1
-            limit = resolution_threshold(stream, min_kbps, thresholds)
-            actual_bpp = stream_bpp(stream, bitrate)
-            if min_bpp > 0 and stream.get("width") and stream.get("height"):
-                limit = max(
-                    limit,
-                    min_bpp
-                    * int(stream["width"])
-                    * int(stream["height"])
-                    * stream_fps(stream)
-                    / 1000.0,
-                )
-            low = bitrate < limit
-        else:
-            limit = 0.0
-            actual_bpp = 0.0
-            unknown += 1
-            low = False
-        verdict["lines"].append(
-            {
-                "flag": str(entry.get("flag") or ""),
-                "kind": kind,
-                "bitrate_kbps": bitrate,
-                "min_kbps": round(limit),
-                "bpp": round(actual_bpp, 4),
-                "fps": float(stream.get("fps") or 0),
-                "width": int(stream.get("width") or 0),
-                "height": int(stream.get("height") or 0),
-                "low": low,
-            }
-        )
-    verdict["measured"] = measured
-    # 没测到的线路（解析线路、超出 max_lines 的线路）一律按「未知」处理，源保留。
-    raw_lines = list(quality.get("lines") or [])
-    untested = max(0, len(raw_lines) - len(entries))
-    declared = int(quality.get("play_from") or 0)
-    if declared > len(raw_lines):
-        untested += declared - len(raw_lines)
-    verdict["untested"] = untested
-    verdict["unknown"] = unknown + untested
-    verdict["all_low"] = bool(measured) and verdict["unknown"] == 0 and all(
-        item["low"] for item in verdict["lines"]
-    )
-    return verdict
-
-
-def speed_verdict(
-    quality: dict[str, Any] | None,
-    min_ratio: float,
-    max_startup_ms: int,
-) -> dict[str, Any]:
-    """判断一个源的所有采样线路是不是都加载慢。
-
-    每条线路看两个指标，任一不达标就算慢：
-    - `speed_ratio`（实测吞吐 / 码率）低于 min_ratio；
-    - `playlist_ms + ttfb_ms` 超过 max_startup_ms（点开要等太久）。
-
-    和码率过滤一样：只有「每条视频线路都测到了速度，且都慢」才剔除。
-    有任何一条线路测不出来（解析线路、页面、超时）就保留——没测到不等于慢。
-    音频源不参与判定。
-    """
-    verdict: dict[str, Any] = {
-        "lines": [],
-        "measured": 0,
-        "unknown": 0,
-        "untested": 0,
-        "all_slow": False,
-    }
-    if not quality:
-        return verdict
-    entries = list(quality.get("line_streams") or [])
-    if not entries:
-        stream = quality.get("stream") or {}
-        if stream:
-            entries = [{"flag": "", "stream": stream}]
-    measured = 0
-    unknown = 0
-    for entry in entries:
-        stream = entry.get("stream") or {}
-        kind = str(stream.get("kind") or "")
-        if kind == "audio":
-            continue
-        ratio = float(stream.get("speed_ratio") or 0)
-        if kind in VIDEO_KINDS and ratio > 0:
-            measured += 1
-            playlist_ms = int(stream.get("playlist_ms") or 0)
-            ttfb_ms = int(stream.get("ttfb_ms") or 0)
-            startup_ms = playlist_ms + ttfb_ms
-            slow = ratio < min_ratio or startup_ms > max_startup_ms
-        else:
-            ratio = 0.0
-            playlist_ms = 0
-            ttfb_ms = 0
-            startup_ms = 0
-            unknown += 1
-            slow = False
-        verdict["lines"].append(
-            {
-                "flag": str(entry.get("flag") or ""),
-                "kind": kind,
-                "speed_kbps": int(stream.get("speed_kbps") or 0),
-                "speed_ratio": round(ratio, 2),
-                "playlist_ms": playlist_ms,
-                "ttfb_ms": ttfb_ms,
-                "startup_ms": startup_ms,
-                "slow": slow,
-            }
-        )
-    verdict["measured"] = measured
-    raw_lines = list(quality.get("lines") or [])
-    untested = max(0, len(raw_lines) - len(entries))
-    declared = int(quality.get("play_from") or 0)
-    if declared > len(raw_lines):
-        untested += declared - len(raw_lines)
-    verdict["untested"] = untested
-    verdict["unknown"] = unknown + untested
-    verdict["all_slow"] = bool(measured) and verdict["unknown"] == 0 and all(
-        item["slow"] for item in verdict["lines"]
-    )
-    return verdict
 
 
 # ---------------------------------------------------------------------------
@@ -1683,7 +1352,7 @@ CATEGORY_FILTER_MARKER = "# ---- TVBox 成人分类过滤（自动生成，勿�
 # 源级剔除状态：命中即剔除（立即生效，不走两振）。
 # 资源站（resource_station）是结构性属性——线路的 CDN/名字固定，不像速度会抖动，
 # 一轮就能确定，且项目定位是「剔除低质源」，严格过滤立即剔。
-HISTORY_REMOVE_STATUSES = {"low_quality", "low_bitrate", "slow_stream", "resource_station", "parse_required"}
+HISTORY_REMOVE_STATUSES = {"resource_station", "parse_required"}
 HISTORY_MAX_ROUNDS = 8
 
 
@@ -1709,10 +1378,8 @@ def save_history(path: Path, data: dict[str, Any]) -> None:
 def apply_two_strike(
     results: list[ScriptResult], history: dict[str, Any]
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """源级质量剔除：立即生效（不走两振）。
+    """源级剔除：成人源、纯资源站源、功能校验失败源立即生效（不走两振）。
 
-    min_grade/drop_unverified/码率/速度过滤判定的 low_quality/low_bitrate/slow_stream
-    源直接剔除，不再首轮保留——项目定位是「只留高质量」，C/D/U 级源首轮就应筛掉。
     两振历史仅记录连续剔除轮数（供统计/将来恢复判断），不影响本轮结果。
     返回 (本轮最终 streaks, 本轮最终 statuses)。
     """
@@ -1736,31 +1403,17 @@ def apply_two_strike(
 def line_prune_drops(
     quality: dict[str, Any] | None,
     line_prune_cfg: dict[str, Any] | None,
-    min_kbps: float,
-    thresholds: dict[str, Any] | None,
-    min_bpp: float,
     source: str = "",
-    prev_low: set[str] | None = None,
     prev_dead: set[str] | None = None,
-    skip_quality: bool = False,
-    min_speed_ratio: float = 0.0,
-    max_startup_ms: int = 0,
-    skip_speed: bool = False,
 ) -> tuple[dict[str, str], set[str], set[str]]:
-    """计算线路裁减，返回 (要剔除的 {线路名: 原因}, 本轮低质量集合, 本轮疑似不通集合)。
+    """计算线路裁减，返回 (要剔除的 {线路名: 原因}, 空集合, 本轮疑似不通集合)。
 
-    剔除规则：
-    - **不可用**：HTTP >= 400，且**上一轮同样是 4xx/5xx**（连续两轮）才剔除。
-      单集 token 过期是 403/404 误报（华谊 K蓝光某集 403、换集就 200），一振不删。
-    - **低码率**：码率低于阈值（且同源另有达标线路），**一振即剔**——码率是
-      稳定属性（不像速度/HTTP 抖动），实测确认的低码率源不再等两振。
-    - **慢速**：加载速度低于阈值（且同源另有快速线路），**连续两轮**慢速才剔。
-    - 手动黑名单在调用方直接加入，不经过两振。
+    只处理不可用线路：HTTP >= 400 且上一轮同样是 4xx/5xx 才剔除；
+    单集 token 过期是 403/404 误报，一振不删。手动黑名单在调用方直接加入。
     """
     drops: dict[str, str] = {}
     current_low: set[str] = set()
     current_dead: set[str] = set()
-    prev_low = prev_low or set()
     prev_dead = prev_dead or set()
     if not quality:
         return drops, current_low, current_dead
@@ -1794,81 +1447,7 @@ def line_prune_drops(
             if (immediate or key(flag) in prev_dead) and flag not in drops:
                 drops[flag] = f"HTTP {status}" + ("" if immediate else "（连续两轮）")
 
-    # 2) 低码率线路：仅当同源存在至少一条达标线路时删（一振即剔，码率稳定）。
-    if not skip_quality:
-        passing: list[str] = []
-        failing: list[tuple[str, int, float]] = []
-        for entry in entries:
-            stream = entry.get("stream") or {}
-            kind = str(stream.get("kind") or "")
-            if kind not in VIDEO_KINDS:
-                continue
-            bitrate = int(stream.get("bitrate_kbps") or 0)
-            if bitrate <= 0:
-                continue  # 没测到码率，未知，不动。
-            flag = str(entry.get("flag") or "").strip()
-            if not flag:
-                continue
-            limit = resolution_threshold(stream, min_kbps, thresholds)
-            if min_bpp > 0 and stream.get("width") and stream.get("height"):
-                limit = max(
-                    limit,
-                    min_bpp
-                    * int(stream["width"])
-                    * int(stream["height"])
-                    * stream_fps(stream)
-                    / 1000.0,
-                )
-            if bitrate >= limit:
-                passing.append(flag)
-            else:
-                failing.append((flag, bitrate, limit))
-        if passing and failing:
-            for flag, bitrate, limit in failing:
-                current_low.add(flag)
-                # 码率是稳定属性（不像速度/HTTP 会抖动），且同源另有达标线路，
-                # 一振即剔：实测确认的低码率源不应再等一轮（用户反馈优先）。
-                if flag not in drops:
-                    drops[flag] = f"{bitrate}kbps<{round(limit)}kbps"
-
-        # 2b) 慢速线路：与码率同逻辑——同源另有快速线路才删；连续两轮慢速才删。
-        # 只对测到速度的线路判定；没测到的按未知处理，不删也不会被当作「快速」。
-        if not skip_speed and (min_speed_ratio > 0 or max_startup_ms > 0):
-            fast: list[str] = []
-            slow_lines: list[tuple[str, float, int]] = []
-            for entry in entries:
-                stream = entry.get("stream") or {}
-                kind = str(stream.get("kind") or "")
-                if kind not in VIDEO_KINDS:
-                    continue
-                flag = str(entry.get("flag") or "").strip()
-                if not flag:
-                    continue
-                speed_ratio = float(stream.get("speed_ratio") or 0)
-                startup = int(stream.get("playlist_ms") or 0) + int(
-                    stream.get("ttfb_ms") or 0
-                )
-                if speed_ratio <= 0 and startup <= 0:
-                    continue  # 没测到速度，未知，不动。
-                is_slow = (
-                    min_speed_ratio > 0 and speed_ratio > 0 and speed_ratio < min_speed_ratio
-                ) or (max_startup_ms > 0 and startup > max_startup_ms)
-                if is_slow:
-                    slow_lines.append((flag, speed_ratio, startup))
-                else:
-                    fast.append(flag)
-            if fast and slow_lines:
-                for flag, speed_ratio, startup in slow_lines:
-                    current_low.add(flag)
-                    if key(flag) in prev_low and flag not in drops:
-                        reason = f"speed {speed_ratio:g}x"
-                        if startup > max_startup_ms:
-                            reason += f"/{startup}ms"
-                        drops[flag] = f"{reason}（连续两轮）"
-
-    # 不剔空源：若全部线路都被剔，保留最优一条（最高码率、非不可用优先），
-    # 避免源无可播线路。码率检查的「达标线」可能被速度检查剔、速度检查的
-    # 「快速线」可能被码率检查剔——两套检查互不感知，需最后兜底。
+    # 不剔空源：若全部线路都被剔，保留一条，避免源无可播线路。
     if drops and entries:
         flags = [
             str(e.get("flag") or "").strip()
@@ -2232,21 +1811,12 @@ def write_local_spiders(
     """
     script_out.mkdir(parents=True, exist_ok=True)
     quality_cfg = config.get("quality") or {}
-    quality_enabled = bool(quality_cfg.get("enabled", True))
     line_prune_cfg = quality_cfg.get("line_prune") or {}
     enabled = bool(line_prune_cfg.get("enabled"))
     blacklist = {
         str(k): {str(v).strip() for v in (val or [])}
         for k, val in (line_prune_cfg.get("blacklist") or {}).items()
     }
-    min_kbps = float(quality_cfg.get("min_bitrate_kbps") or 0)
-    min_bpp = float(quality_cfg.get("min_bpp") or 0)
-    min_speed_ratio = float(quality_cfg.get("min_speed_ratio") or 0)
-    max_startup_ms = int(quality_cfg.get("max_startup_ms") or 0)
-    thresholds = dict(DEFAULT_BITRATE_THRESHOLDS)
-    thresholds.update(quality_cfg.get("bitrate_thresholds") or {})
-    bitrate_allow = {str(n) for n in (quality_cfg.get("bitrate_allow") or [])}
-    speed_allow = {str(n) for n in (quality_cfg.get("speed_allow") or [])}
     zs_cfg = quality_cfg.get("resource_station") or {}
     zs_drop_lines = bool(zs_cfg.get("enabled")) and bool(zs_cfg.get("drop_lines"))
     zs_allow = {str(name) for name in (zs_cfg.get("allow") or [])}
@@ -2264,24 +1834,12 @@ def write_local_spiders(
         kept_files.add(filename)
         drops: dict[str, str] = {}
         if enabled:
-            # quality.enabled=false 时关掉码率/速度线路裁剪，只留黑名单+资源站。
-            skip_quality = not quality_enabled or filename in bitrate_allow
-            skip_speed = not quality_enabled or filename in speed_allow
-            auto, low_flags, dead_flags = line_prune_drops(
+            auto, _low_flags, dead_flags = line_prune_drops(
                 quality_map.get(filename),
                 line_prune_cfg,
-                min_kbps,
-                thresholds,
-                min_bpp,
                 source=filename,
-                prev_low=prev_low,
                 prev_dead=prev_dead,
-                skip_quality=skip_quality,
-                min_speed_ratio=min_speed_ratio,
-                max_startup_ms=max_startup_ms,
-                skip_speed=skip_speed,
             )
-            new_low |= {f"{filename}::{f}" for f in low_flags}
             new_dead |= {f"{filename}::{f}" for f in dead_flags}
             for flag, reason in auto.items():
                 drops.setdefault(flag, reason)
@@ -2537,14 +2095,8 @@ def build_report(
     removed: list[Any],
     entries: list[dict[str, Any]],
     output: Path,
-    thresholds: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     counts = Counter(result.status for result in results)
-    grades = Counter(
-        effective_grade(result.quality, thresholds)
-        for result in results
-        if result.quality and result.status == "valid"
-    )
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "upstream": upstream_list(config),
@@ -2563,17 +2115,9 @@ def build_report(
             "excluded": counts.get("excluded", 0),
             "excluded_adult": counts.get("excluded_adult", 0),
             "functional_fail": counts.get("functional_fail", 0),
-            "low_quality": counts.get("low_quality", 0),
-            "low_bitrate": counts.get("low_bitrate", 0),
-            "slow_stream": counts.get("slow_stream", 0),
             "resource_station": counts.get("resource_station", 0),
             "parse_required": counts.get("parse_required", 0),
             "with_quality": sum(1 for result in results if result.quality),
-            "grade_a": grades.get("A", 0),
-            "grade_b": grades.get("B", 0),
-            "grade_c": grades.get("C", 0),
-            "grade_d": grades.get("D", 0),
-            "grade_unverified": grades.get("U", 0),
         },
         "host_checks": {
             origin: {
@@ -2806,11 +2350,7 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     reasons.append(f"{host} -> {check.error}")
             result.error = "; ".join(reasons)
-    # 动态分级阈值（方向4）：quality_map 块内计算，块外（build_report/排序）也要用。
-    dyn_thresholds: dict[str, float] | None = None
     if quality_map:
-        quality_enabled = bool((config.get("quality") or {}).get("enabled", True))
-        min_score = int(functional_cfg.get("min_score") or 0)
         quality_cfg = config.get("quality") or {}
         filter_cfg = config.get("filters") or {}
         exclude_adult = bool(filter_cfg.get("exclude_adult", True))
@@ -2843,35 +2383,12 @@ def main(argv: list[str] | None = None) -> int:
         adult_sources = {
             str(name).lower() for name in (filter_cfg.get("adult_sources") or [])
         }
-        min_grade = str(quality_cfg.get("min_grade") or "").strip().upper()
-        drop_unverified = bool(quality_cfg.get("drop_unverified"))
-        # 方向4：动态分级阈值（按源池分布分位数，默认关=固定阈值）
-        dyn_thresholds: dict[str, float] | None = None
-        if bool(quality_cfg.get("dynamic_grade_thresholds")):
-            dyn_thresholds = dynamic_grade_thresholds(quality_map)
-            print(f"动态分级阈值（P75/P50）: bpp_a={dyn_thresholds['bpp_a']:.3f} "
-                  f"bpp_b={dyn_thresholds['bpp_b']:.3f} "
-                  f"speed_a={dyn_thresholds['speed_a']:.2f} "
-                  f"speed_b={dyn_thresholds['speed_b']:.2f}")
-        min_bitrate = float(quality_cfg.get("min_bitrate_kbps") or 0)
-        min_bpp = float(quality_cfg.get("min_bpp") or 0)
-        bitrate_thresholds = dict(DEFAULT_BITRATE_THRESHOLDS)
-        bitrate_thresholds.update(quality_cfg.get("bitrate_thresholds") or {})
-        bitrate_allow = {
-            str(name) for name in (quality_cfg.get("bitrate_allow") or [])
-        }
-        min_speed_ratio = float(quality_cfg.get("min_speed_ratio") or 0)
-        max_startup_ms = int(quality_cfg.get("max_startup_ms") or 0)
-        speed_allow = {
-            str(name) for name in (quality_cfg.get("speed_allow") or [])
-        }
         # 资源站（采集站）线路过滤：资源站线路基本是低质源，严格过滤剔除。
         zs_cfg = quality_cfg.get("resource_station") or {}
         zs_enabled = bool(zs_cfg.get("enabled"))
         zs_drop_pure = bool(zs_cfg.get("drop_pure_source"))
         zs_drop_lines = bool(zs_cfg.get("drop_lines"))
         zs_allow = {str(name) for name in (zs_cfg.get("allow") or [])}
-        grade_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
         adult_hits: list[tuple[str, list[str]]] = []
         for result in results:
             quality = quality_map.get(result.filename)
@@ -2912,63 +2429,6 @@ def main(argv: list[str] | None = None) -> int:
                     f"所有线路需内置解析({len(parsed_lines)}条)，环境无内置解析器无法播放"
                 )
                 continue
-            if quality_enabled and min_score > 0 and int(quality.get("score") or 0) < min_score:
-                result.status = "low_quality"
-                result.error = f"功能校验 {quality.get('score')}/3 < {min_score}"
-                continue
-            if quality_enabled and min_grade in grade_rank:
-                grade = effective_grade(quality, dyn_thresholds)
-                if stream_check.is_audio_source(quality, result.filename):
-                    # 音频源（听书/音乐）：本质不同（无分辨率，画质按码率评），
-                    # 用户实测「正常保留」——不论 A/B/C/D/U 都保留，只按码率排序。
-                    pass
-                elif grade == "U":
-                    # 非音频画质未知：page/local/无线路/unknown 用户实测有问题 → 剔。
-                    if drop_unverified:
-                        result.status = "low_quality"
-                        result.error = "U级画质未知且非音频（page/local/无线路/unknown）"
-                elif grade_rank.get(grade, 3) > grade_rank[min_grade]:
-                    result.status = "low_quality"
-                    result.error = f"源质量 {grade} 低于 {min_grade}"
-            if (
-                quality_enabled and min_bitrate > 0
-                and result.status == "valid"
-                and result.filename not in bitrate_allow
-            ):
-                verdict = bitrate_verdict(
-                    quality, min_bitrate, bitrate_thresholds, min_bpp
-                )
-                quality["bitrate"] = verdict
-                if verdict["all_low"]:
-                    result.status = "low_bitrate"
-                    detail = "、".join(
-                        f"{item['bitrate_kbps']}kbps@"
-                        f"{min(item['width'], item['height']) if item['width'] and item['height'] else item['height']}p"
-                        f"<{item['min_kbps']}"
-                        + (f" bpp={item['bpp']:.3f}" if min_bpp > 0 else "")
-                        for item in verdict["lines"]
-                    )
-                    result.error = f"所有线路码率低于阈值（{detail}）"
-            if (
-                quality_enabled and min_speed_ratio > 0
-                and result.status == "valid"
-                and result.filename not in speed_allow
-            ):
-                verdict = speed_verdict(quality, min_speed_ratio, max_startup_ms)
-                quality["speed"] = verdict
-                if verdict["all_slow"]:
-                    result.status = "slow_stream"
-                    detail = "、".join(
-                        f"{item['flag'] or '线路'} {item['speed_kbps']}kbps"
-                        f"={item['speed_ratio']:.2f}x"
-                        + (
-                            f"/{item['startup_ms'] / 1000:.1f}s"
-                            if item["startup_ms"]
-                            else ""
-                        )
-                        for item in verdict["lines"]
-                    )
-                    result.error = f"所有线路加载慢（{detail}）"
             # 资源站（采集站）线路过滤：项目定位是「剔除低质源」，资源站线路
             # 内容来自第三方采集站聚合，质量不可控（转码/压缩/失效），基本是低质源。
             # 纯资源站源（所有视频线路都是资源站）→ 整源剔除；混合源 → 只剔资源站线路。
@@ -3029,17 +2489,6 @@ def main(argv: list[str] | None = None) -> int:
             f"3分 {scores.get(3, 0)}，2分 {scores.get(2, 0)}，"
             f"1分 {scores.get(1, 0)}，0分 {scores.get(0, 0)}"
         )
-        grades = Counter(
-            effective_grade(result.quality, dyn_thresholds)
-            for result in results
-            if result.quality and result.status == "valid"
-        )
-        print(
-            "源质量（有效站点）: "
-            f"A 高画质 {grades.get('A', 0)}，B 画质达标 {grades.get('B', 0)}，"
-            f"C 偏低 {grades.get('C', 0)}，D 差 {grades.get('D', 0)}，"
-            f"U 画质未知 {grades.get('U', 0)}"
-        )
         if adult_hits:
             print(
                 f"成人内容: 命中 {len(adult_hits)} 个"
@@ -3047,27 +2496,6 @@ def main(argv: list[str] | None = None) -> int:
             )
             for filename, hits in adult_hits[:10]:
                 print(f"  - {filename}: {'、'.join(hits[:5])}")
-        if min_bitrate > 0:
-            low_bitrate = [
-                result for result in results if result.status == "low_bitrate"
-            ]
-            print(
-                f"码率过滤: 剔除 {len(low_bitrate)} 个"
-                "（所有采样线路均低于对应分辨率阈值）"
-            )
-            for result in low_bitrate[:10]:
-                print(f"  - {result.filename}: {result.error}")
-        if min_speed_ratio > 0:
-            slow_stream = [
-                result for result in results if result.status == "slow_stream"
-            ]
-            print(
-                f"加载速度过滤: 剔除 {len(slow_stream)} 个"
-                f"（所有采样线路都低于 {min_speed_ratio:g}x 码率或启动超过 "
-                f"{max_startup_ms / 1000:g}s）"
-            )
-            for result in slow_stream[:10]:
-                print(f"  - {result.filename}: {result.error}")
         if zs_enabled:
             zs_dropped = [
                 result for result in results if result.status == "resource_station"
@@ -3080,13 +2508,13 @@ def main(argv: list[str] | None = None) -> int:
                 for result in zs_dropped[:20]:
                     print(f"  - {result.filename}: {result.error}")
 
-    # 质量剔除：min_grade/drop_unverified/码率/速度过滤立即生效，不留两振缓冲。
+    # 源级剔除立即生效，不留两振缓冲。
     if not args.dry_run:
         history_streaks, history_statuses = apply_two_strike(results, history)
         removed = [result for result in results if getattr(result, "strike", 0)]
         if removed:
             print(
-                "质量剔除（立即生效）: "
+                "源级剔除（立即生效）: "
                 + "、".join(
                     f"{result.filename}({result.pending})" for result in removed
                 )
@@ -3154,8 +2582,6 @@ def main(argv: list[str] | None = None) -> int:
         f"跳过 {counts.get('skipped', 0)}，"
         f"成人剔除 {counts.get('excluded_adult', 0)}，"
         f"功能门槛未过 {counts.get('functional_fail', 0)}，"
-        f"码率剔除 {counts.get('low_bitrate', 0)}，"
-        f"慢速剔除 {counts.get('slow_stream', 0)}，"
         f"资源站剔除 {counts.get('resource_station', 0)}"
     )
     print(
@@ -3184,7 +2610,6 @@ def main(argv: list[str] | None = None) -> int:
             removed,
             entries,
             output,
-            dyn_thresholds,
         )
         write_json(report_path, report, "\n")
         print(f"校验报告: {report_path}")
@@ -3195,8 +2620,6 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-
-    # 安全护栏已按用户要求去除：不再因站点数骤降/下载失败率而拒绝写入。
 
     # 同步脚本到本地目录并注入线路过滤（接口指向本地文件）。
     local_spider_dir = str(config.get("local_spider_dir") or "").strip().strip("/")
