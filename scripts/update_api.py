@@ -1207,13 +1207,13 @@ ADULT_CATEGORY_KEYWORDS = (
 
 # 标题只认工作室品牌和明确成人词；「调教」「人妻」这类词在正常短剧标题里也会出现。
 # 明确成人短语：标题含这些几乎必是成人内容（新闻标题不会用）。用于标题子串匹配。
+# 新逻辑：只用「女教师」关键词搜出的色情片名后缀模式。
+# 旧逻辑（porn/探花/打桩机/无码片名猜词等）已移除——识别率低、误伤高。
+# 分类名识别（无码/伦理/三级等）由 ADULT_CATEGORY_EXACT/KEYWORDS 负责，保留。
 ADULT_TITLE_STRICT = (
-    "无码", "里番", "三级片", "成人片", "18禁", "R18", "AV女优", "怀孕性爱",
-    "大尺度", "私拍写真",  # 软色情写真片名（momo图鉴实测）
-    # 露骨成人片名（xhamster/VFsijilaopian/四级老片/汤头条/瓜子APP实测）
-    "porn", "hardcore", "性愛", "口爆", "中出",  # xxx 太短会误伤音乐源，去掉
-    "黑丝诱惑", "探花", "打桩机", "欲仙欲死", "丝袜诱惑",
-    "秘密教学", "母上攻略", "操闺蜜", "离异妈妈",  # 成人向擦边短剧（橙果实测）
+    # 已AI确认的完整色情片名/稳定唯一片段（从 scripts/porn_titles.txt 加载）。
+    # 用完整片名匹配而非宽泛子串——色情片名同质化、多源共享，精确匹配零误伤。
+    # 见 detect_adult 里的 porn_titles 加载。
 )
 # 成人品牌词：新闻/评论标题常提及（如「麻豆传媒落网」），只用于分类名精确匹配，
 # 不用于标题子串匹配，避免把新闻源误判成成人源。
@@ -1238,6 +1238,18 @@ def detect_adult(
     if not quality:
         return []
     hits: list[str] = []
+    # 功能校验阶段已按分类名判定的纯色情源（runner 提前跳过分析省的标记）。
+    if quality.get("adult_by_category"):
+        return ["纯色情源(分类名)"]
+
+    # 完整色情片名清单（精确匹配，多源同质化片名）——运行时从文件加载。
+    porn_titles: tuple[str, ...] = ()
+    pt_path = Path(__file__).resolve().parent / "porn_titles.txt"
+    if pt_path.exists():
+        porn_titles = tuple(
+            line.strip() for line in pt_path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        )
 
     def add(value: str) -> None:
         if value not in hits:
@@ -1253,18 +1265,14 @@ def detect_adult(
 
     phrases = [str(p) for p in probe_phrases if str(p).strip()]
     strict = [str(k) for k in strict_keywords] or list(ADULT_TITLE_STRICT)
-    for label in quality.get("probe_labels") or []:
+    # 片名检测：先用完整色情片名清单精确匹配（同质化片名，多源共享），
+    # 再用严格短语。完整片名匹配最可靠，零误伤。
+    all_title_fields = list(quality.get("probe_labels") or []) + list(quality.get("search_titles") or [])
+    for label in all_title_fields:
         text = str(label)
-        # 只用严格短语匹配标题；品牌词（麻豆传媒等）在新闻标题里太常见会误伤。
-        # 不再用「探针原文完全相等」判定——搜「自拍」返回一条叫「自拍」的普通
-        # 视频就会误伤（哔哩哔哩/懂片实测），成人词表已足够可靠。
-        for keyword in strict:
-            if keyword and keyword.lower() in text.lower():
-                add(keyword)
-
-    # 搜索结果片名：同样只用严格短语匹配。
-    for title in quality.get("search_titles") or []:
-        text = str(title)
+        for title in porn_titles:
+            if title.lower() in text.lower():
+                add(title)
         for keyword in strict:
             if keyword and keyword.lower() in text.lower():
                 add(keyword)
@@ -2619,9 +2627,17 @@ def main(argv: list[str] | None = None) -> int:
         quality_cfg = config.get("quality") or {}
         filter_cfg = config.get("filters") or {}
         exclude_adult = bool(filter_cfg.get("exclude_adult", True))
-        adult_keywords = tuple(
-            filter_cfg.get("adult_keywords") or ADULT_CATEGORY_KEYWORDS
-        )
+        # 色情分类词表：优先用 AI 从全量脚本分类名提取的外部词表文件，
+        # config.filters.adult_keywords 可覆盖（为空则用词表）。
+        adult_terms_path = ROOT / "scripts" / "adult_categories.txt"
+        ai_adult_terms: tuple[str, ...] = ()
+        if adult_terms_path.exists():
+            ai_adult_terms = tuple(
+                line.strip()
+                for line in adult_terms_path.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.startswith("#")
+            )
+        adult_keywords = tuple(filter_cfg.get("adult_keywords") or ai_adult_terms)
         adult_title_keywords = tuple(
             filter_cfg.get("adult_title_keywords") or ADULT_TITLE_KEYWORDS
         )
