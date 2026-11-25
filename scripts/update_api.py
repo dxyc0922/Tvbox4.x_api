@@ -2049,6 +2049,7 @@ def write_local_spiders(
     prev_low: set[str] | None = None,
     prev_dead: set[str] | None = None,
     managed_scripts: set[str] | None = None,
+    protect_scripts: set[str] | None = None,
 ) -> tuple[dict[str, dict[str, str]], set[str], set[str]]:
     """把保留的源脚本写入本地目录并注入线路过滤。
 
@@ -2264,7 +2265,8 @@ def write_local_spiders(
     # ② 带托管标记的旧文件（上游已下线但本地遗留、带标记的）
     for old in script_out.rglob("*.py"):
         rel = old.relative_to(script_out).as_posix()
-        if rel in kept_files:
+        # 手动保留的自定义站点（豆瓣/哔哩等）即使本轮没被验证也不能删。
+        if rel in kept_files or rel in (protect_scripts or set()):
             continue
         try:
             content = old.read_text(encoding="utf-8", errors="replace")
@@ -3003,6 +3005,13 @@ def main(argv: list[str] | None = None) -> int:
             and id(result.entry) in entry_ids
         ]
         script_out = output.parent / local_spider_dir
+        # 保留站点指向的本地脚本不参与清理（--source-dir 本地调试时尤其重要）。
+        local_prefix = f"./{local_spider_dir}/"
+        protected_scripts = {
+            str(site.get("api"))[len(local_prefix):]
+            for site in preserved
+            if isinstance(site, dict) and str(site.get("api") or "").startswith(local_prefix)
+        }
         pruned, new_line_low, new_line_dead = write_local_spiders(
             kept,
             config,
@@ -3012,6 +3021,7 @@ def main(argv: list[str] | None = None) -> int:
             prev_low=prev_line_low,
             prev_dead=prev_line_dead,
             managed_scripts=set(filenames),
+            protect_scripts=protected_scripts,
         )
         pruned_flags = {f for drops in pruned.values() for f in drops}
         print(f"本地脚本: {len(kept)} 个 -> {script_out}，线路裁减 {len(pruned_flags)} 条")

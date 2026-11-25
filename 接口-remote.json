@@ -2,6 +2,21 @@
     "wallpaper": "https://深色壁纸.xxooo.cf/",
     "sites": [
         {
+            "key": "1",
+            "name": "豆瓣",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/main/%E8%84%9A%E6%9C%AC/%E8%B1%86%E7%93%A3.py"
+        },
+        {
+            "key": "2",
+            "name": "哔哩",
+            "type": 3,
+            "api": "https://gh-proxy.com/https://raw.githubusercontent.com/dxyc0922/Tvbox4.x_api/main/%E8%84%9A%E6%9C%AC/%E5%93%94%E5%93%A9.py",
+            "ext": {
+                "cookie": "file://storage/emulated/0/TV/bili_cookie.txt"
+            }
+        },
+        {
             "key": "wzxxcz_d409b3bd01ea",
             "name": "dd",
             "type": 3,
