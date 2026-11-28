@@ -83,12 +83,6 @@
             "api": "./脚本/剧透社.py"
         },
         {
-            "key": "wzxxcz_b3ca09b39432",
-            "name": "千千影视",
-            "type": 3,
-            "api": "./脚本/千千影视.py"
-        },
-        {
             "key": "wzxxcz_d882a09af99b",
             "name": "千千音乐",
             "type": 3,

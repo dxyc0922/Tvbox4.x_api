@@ -27,7 +27,7 @@ class Spider:
 sigs = rs.runtime_url_signatures()
 
 print("=== 动态线路名（采样时未出现）按 CDN 实时剔除 ===")
-code = ua.inject_line_filter(SRC, ["天堂线路"], line_order=[], zy_sigs=sigs)
+code = ua.inject_line_filter(SRC, ["天堂线路"], zy_sigs=sigs)
 ns: dict = {}
 exec(compile(code, "injected", "exec"), ns)  # noqa: S102
 result = {
@@ -90,7 +90,7 @@ check("音频线路全保留",
       result4["list"][0]["vod_play_from"] == "无损$$$标准音质")
 
 print("\n=== 无 drop/order/签名时不注入过滤 ===")
-code5 = ua.inject_line_filter(SRC, [], line_order=[], zy_sigs=None)
+code5 = ua.inject_line_filter(SRC, [], zy_sigs=None)
 ns5: dict = {}
 exec(compile(code5, "injected5", "exec"), ns5)  # noqa: S102
 check("不注入过滤代码", "_tvbox_filter_lines" not in ns5)
@@ -135,17 +135,16 @@ check("MY线路剔除(占位符+名字)", "MY线路" not in kept8)
 check("腾讯保留", "腾讯" in kept8)
 check("官方线路-C保留(否定词)", "官方线路-C" in kept8)
 
-print("\n=== 不剔空源：全是资源站线路时保留原样 ===")
+print("\n=== 全部线路不可播：置空而不是回退成资源站线路 ===")
 result6 = {
     "list": [{
         "vod_play_from": "暴风线路$$$魔都线路",
         "vod_play_url": "https://c1.rrcdnbf6.com/a.m3u8$$$https://play.modujx10.com/a.m3u8",
     }]
 }
-before6 = (result6["list"][0]["vod_play_from"], result6["list"][0]["vod_play_url"])
 ns["_tvbox_filter_lines"](result6, ns["_TVBOX_DROP_LINES"])
 after6 = (result6["list"][0]["vod_play_from"], result6["list"][0]["vod_play_url"])
-check("全资源站时不剔空（保持原样）", before6 == after6)
+check("全资源站时置空", after6 == ("", ""))
 
 print(f"\n{'ALL PASS' if not fails else 'FAILED: ' + ', '.join(fails)}")
 sys.exit(1 if fails else 0)

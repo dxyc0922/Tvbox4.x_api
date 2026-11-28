@@ -91,10 +91,11 @@ ZY_FLAG_KEYWORDS: tuple[str, ...] = (
 # 1080P / 360P 是**分辨率标注**（如「蓝光1080P(登录专享)」是自有线路），不是资源站；
 # 裸数字直接当关键词会把这类线路误判成资源站。
 ZY_FLAG_NUM_RE = re.compile(r"(?i)\b(1080|360)(?!p)")
-# 两字母资源站缩写（LZ=量子 FF=非凡 BF=暴风 HF/HN=红牛 YZ=云智 DY=DYTT），
+# 两字母资源站缩写（LZ=量子 FF=非凡 BF=暴风 HF/HN=红牛 YZ=云智 DY=DYTT
+# JS=极速——jsm3u8/jisuzyv，占位符型脚本拿不到真实 CDN，只能靠名字），
 # 只匹配「缩写+线路/线」组合，避免 OFF / FFF 之类误报。
 ZY_FLAG_CODE_RE = re.compile(
-    r"(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|DYTT|LZL|YZL|FFL|BFL|MY|"
+    r"(?i)\b(LZ|FF|BF|HF|HN|YZ|DY|DYTT|LZL|YZL|FFL|BFL|MY|JS|"
     r"IK|WL|TK|IQY|XL|WJ|BD|DB|SB|SN|MZ|PL)(?:线路|线)\b"
 )
 # lzm3u8 这类「缩写+m3u8」变体（云播(lzm3u8)），单独匹配避免误伤 lzvideo。

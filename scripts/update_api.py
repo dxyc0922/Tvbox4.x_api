@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import resource_station  # noqa: E402  # 资源站（采集站）线路检测：基本是低质源
+import parse_source  # noqa: E402  # 需第三方解析的平台线路检测：环境无解析器即不可播
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = ROOT / "scripts" / "config.json"
@@ -94,6 +95,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "dead_status_min": 400,
             # 手动指定要剔除的线路名，键是脚本文件名。
             "blacklist": {},
+        },
+        # 需第三方解析的平台线路（腾讯/爱奇艺等播放页）：环境无内置解析器 → 不可播。
+        "parse_required": {
+            "enabled": True,
+            "drop_lines": True,
+            "allow": [],
         },
     },
     "local_spider_dir": "",
@@ -1433,17 +1440,18 @@ def inject_line_filter(
     source: str,
     drop_flags: list[str],
     zy_sigs: dict[str, Any] | None = None,
+    parse_sigs: dict[str, Any] | None = None,
 ) -> str:
     """在脚本末尾注入线路过滤代码。
 
-    不带 drop 时只打标记（方便后续清理）。zy_sigs 非空时，额外内联资源站
-    URL 签名，运行时按播放 URL 实时判定。
+    不带 drop 时只打标记（方便后续清理）。zy_sigs / parse_sigs 非空时，
+    额外内联资源站 CDN 签名与平台播放页签名，运行时按 URL/线路名实时判定。
     """
     marker = LINE_FILTER_MARKER
     if marker in source:
         source = source.split(marker)[0].rstrip("\n")
     header = f"\n\n{marker}\n"
-    if not drop_flags and not zy_sigs:
+    if not drop_flags and not zy_sigs and not parse_sigs:
         return source + header
     lines: list[str] = [
         header.rstrip("\n"),
@@ -1516,13 +1524,42 @@ def inject_line_filter(
             "        return True",
             "    if any(kw in f for kw in _TVBOX_ZY_KW):",
             "        return True",
-            "    if re.search(r'(?i)\\b(LZ|FF|BF|HF|HN|YZ|DY|MY|IK|WL|TK|IQY|XL|WJ|BD|DB|SB|SN|MZ|PL)(?:线路|线)', f):",
+            "    if re.search(r'(?i)\\b(LZ|FF|BF|HF|HN|YZ|DY|MY|JS|IK|WL|TK|IQY|XL|WJ|BD|DB|SB|SN|MZ|PL)(?:线路|线)', f):",
             "        return True",
             "    return False",
             "",
         ])
     else:
         lines.extend(["_TVBOX_ZY_ENABLED = False", ""])
+    if parse_sigs:
+        lines.extend([
+            "_TVBOX_PARSE_ENABLED = True",
+            "_TVBOX_PARSE_NAMES = " + json.dumps(parse_sigs.get("names") or [], ensure_ascii=False),
+            "_TVBOX_PARSE_HOSTS = " + json.dumps(parse_sigs.get("hosts") or [], ensure_ascii=False),
+            "",
+            "def _tvbox_is_parse_url(url, flag=''):",
+            "    import re",
+            "    u = str(url or '')",
+            "    f = str(flag or '')",
+            "    m = re.match(r'https?://([^/?]+)', u)",
+            "    if m:",
+            "        h = m.group(1).split(':')[0].lower()",
+            "        for p in _TVBOX_PARSE_HOSTS:",
+            "            if h == p or h.endswith('.' + p):",
+            "                return True",
+            "    for n in _TVBOX_PARSE_NAMES:",
+            "        if n.lower() in f.lower():",
+            "            return True",
+            "    return False",
+            "",
+        ])
+    else:
+        lines.extend([
+            "_TVBOX_PARSE_ENABLED = False",
+            "def _tvbox_is_parse_url(url, flag=''):",
+            "    return False",
+            "",
+        ])
     lines.extend([
         "def _tvbox_filter_lines(result, drop):",
         "    if not isinstance(result, dict):",
@@ -1546,12 +1583,19 @@ def inject_line_filter(
         "    parts_url = urls.split('$$$')",
         "    if len(parts_from) != len(parts_url):",
         "        return",
-        "    if _TVBOX_ZY_ENABLED:",
+        "    if _TVBOX_ZY_ENABLED or _TVBOX_PARSE_ENABLED:",
         "        keep = [(f, u) for f, u in zip(parts_from, parts_url)",
-        "                if f not in drop and not _tvbox_is_zy_url(u, f)]",
+        "                if f not in drop",
+        "                and not (_TVBOX_ZY_ENABLED and _tvbox_is_zy_url(u, f))",
+        "                and not (_TVBOX_PARSE_ENABLED and _tvbox_is_parse_url(u, f))]",
         "    else:",
         "        keep = [(f, u) for f, u in zip(parts_from, parts_url) if f not in drop]",
-        "    if not keep or len(keep) == len(parts_from):",
+        "    if not keep:",
+        "        # 全部线路均不可播：严格过滤不保留资源站/需解析线路，置空播放列表。",
+        "        item['vod_play_from'] = ''",
+        "        item['vod_play_url'] = ''",
+        "        return",
+        "    if len(keep) == len(parts_from):",
         "        return",
         "    item['vod_play_from'] = '$$$'.join(f for f, _ in keep)",
         "    item['vod_play_url'] = '$$$'.join(u for _, u in keep)",
@@ -1737,6 +1781,9 @@ def write_local_spiders(
     zs_cfg = quality_cfg.get("resource_station") or {}
     zs_drop_lines = bool(zs_cfg.get("enabled")) and bool(zs_cfg.get("drop_lines"))
     zs_allow = {str(name) for name in (zs_cfg.get("allow") or [])}
+    parse_cfg = quality_cfg.get("parse_required") or {}
+    parse_drop_lines = bool(parse_cfg.get("enabled")) and bool(parse_cfg.get("drop_lines"))
+    parse_allow = {str(name) for name in (parse_cfg.get("allow") or [])}
     prev_low = prev_low or set()
     prev_dead = prev_dead or set()
 
@@ -1749,6 +1796,7 @@ def write_local_spiders(
             continue
         filename = result.filename
         kept_files.add(filename)
+        _q = quality_map.get(filename) or {}
         drops: dict[str, str] = {}
         if enabled:
             auto, _low_flags, dead_flags = line_prune_drops(
@@ -1764,7 +1812,6 @@ def write_local_spiders(
             # 纯资源站源已在源级被剔（status=resource_station），不会走到这里；
             # 这里再加一道护栏：剔完不能把所有视频线路都删空（保留最优一条）。
             if zs_drop_lines and filename not in zs_allow:
-                _q = quality_map.get(filename) or {}
                 zs_cls = resource_station.classify_source(
                     _q.get("line_streams") or [],
                     declared_flags=_q.get("declared_flags"),
@@ -1792,6 +1839,16 @@ def write_local_spiders(
                 if zs_flags and remaining:
                     for flag in sorted(zs_flags):
                         drops.setdefault(flag, "资源站线路")
+            # 需解析平台线路剔除（与资源站同一规则）：平台播放页无内置解析器即不可播。
+            if parse_drop_lines and filename not in parse_allow:
+                pr_entries = _q.get("lines") or _q.get("line_streams") or []
+                pr_cls = parse_source.classify_source(
+                    pr_entries,
+                    declared_flags=_q.get("declared_flags"),
+                    declared_total=int(_q.get("play_from") or 0),
+                )
+                for flag in sorted(set(pr_cls["flags"]) | set(pr_cls["declared_flags"])):
+                    drops.setdefault(flag, "需第三方解析")
             # 黑名单剔除：放在资源站之后执行（用户要求的过滤顺序）。
             for flag in blacklist.get(filename, ()):
                 drops.setdefault(flag, "手动配置")
@@ -1875,24 +1932,15 @@ def write_local_spiders(
                 + "、".join(dead_candidates)
             )
         if write:
-            # 仅对已识别出资源站线路的源内联运行时 URL 判定：这类源的线路是
-            # 上游 API 动态返回的（如猎手换集就变线路名），静态名单挡不住，
-            # 但资源站 CDN host 固定，按播放 URL 判定可覆盖所有动态线路。
-            # 音频源/纯自有源不注入，完全不受影响。
-            has_zy = any(
-                "资源站" in str(reason) for reason in drops.values()
-            )
-            # 声明线路比采样多 → 可能有未采样到的资源站线路（如分享者华谊采样4条
-            # 没采到 B超高清=rrcdnbf6），也启用运行时 URL 签名按 CDN 兜底。
-            _qz = quality_map.get(result.filename) or {}
-            _declared_n = len(_qz.get("declared_flags") or [])
-            _sampled_n = len(_qz.get("line_streams") or [])
-            if not has_zy and _declared_n > _sampled_n:
-                has_zy = True
+            # 运行时签名一律内联：采样只测前 4 条且可能挑到不同影片（如成人探针片
+            # 只有 1 条线路），静态名单挡不住上游动态返回的线路名。资源站 CDN host
+            # 与平台播放页域名固定，按 URL/线路名实时判定可覆盖未采样到的线路。
+            # 音频/自有线路不会命中这些签名，天然豁免。
             text = inject_line_filter(
                 result.source,
                 sorted(drops),
-                zy_sigs=resource_station.runtime_url_signatures() if has_zy else None,
+                zy_sigs=resource_station.runtime_url_signatures(),
+                parse_sigs=parse_source.runtime_signatures(),
             )
             # 成人分类过滤：只给上一步判定为「固定分类混合源」且保留下来的源注入。
             q = quality_map.get(result.filename) or {}
@@ -2306,6 +2354,14 @@ def main(argv: list[str] | None = None) -> int:
         zs_drop_pure = bool(zs_cfg.get("drop_pure_source"))
         zs_drop_lines = bool(zs_cfg.get("drop_lines"))
         zs_allow = {str(name) for name in (zs_cfg.get("allow") or [])}
+        # 需解析平台线路：平台播放页需第三方解析器，无解析器即不可播。
+        parse_cfg = quality_cfg.get("parse_required") or {}
+        parse_enabled = bool(parse_cfg.get("enabled"))
+        parse_allow = {str(name) for name in (parse_cfg.get("allow") or [])}
+        line_blacklist = {
+            str(k): {str(v).strip() for v in (val or [])}
+            for k, val in ((quality_cfg.get("line_prune") or {}).get("blacklist") or {}).items()
+        }
         adult_hits: list[tuple[str, list[str]]] = []
         for result in results:
             quality = quality_map.get(result.filename)
@@ -2371,6 +2427,46 @@ def main(argv: list[str] | None = None) -> int:
                         f"资源站聚合源（{shown}全是资源站："
                         f"{'、'.join(zs_cls['z_flags'][:6])}）"
                     )
+            # 需解析平台线路（与资源站同一规则）。
+            pr_cls = None
+            if parse_enabled and result.status == "valid" and result.filename not in parse_allow:
+                pr_entries = quality.get("lines") or quality.get("line_streams") or []
+                pr_cls = parse_source.classify_source(
+                    pr_entries,
+                    declared_flags=quality.get("declared_flags"),
+                    declared_total=int(quality.get("play_from") or 0),
+                )
+                quality["parse_required_lines"] = pr_cls
+            # 剔空检测：资源站 + 需解析 + 手动黑名单覆盖全部线路 → 整源无可用线路，
+            # 做成源级规则（和纯资源站/纯需解析一样），避免留下一个空白源。
+            if result.status == "valid":
+                declared_all = [
+                    str(f).strip()
+                    for f in (quality.get("declared_flags") or [])
+                    if str(f).strip()
+                ]
+                sampled_all = [
+                    str(e.get("flag") or "").strip()
+                    for e in (quality.get("lines") or quality.get("line_streams") or [])
+                    if str(e.get("flag") or "").strip()
+                ]
+                all_flags = declared_all or sampled_all
+                unplayable: set[str] = set()
+                zs_now = quality.get("resource_station") or {}
+                unplayable |= {str(f).strip() for f in (zs_now.get("z_flags") or [])}
+                unplayable |= {
+                    f for f in declared_all if resource_station.match_resource_station("", f)
+                }
+                if pr_cls:
+                    unplayable |= set(pr_cls["flags"]) | set(pr_cls["declared_flags"])
+                unplayable |= line_blacklist.get(result.filename, set())
+                if all_flags and unplayable.issuperset(set(all_flags)):
+                    result.status = "parse_required"
+                    result.error = (
+                        "所有线路均不可播（资源站/需第三方解析/黑名单）: "
+                        + "、".join(sorted(all_flags)[:6])
+                    )
+                    print(f"    {result.filename}: {result.error}")
             # 成人过滤：放在功能→资源站之后执行（用户要求的过滤顺序）。
             # 多道门槛：分类命中 >=2 → 纯色情源剔脚本；只命中 1 → 混合源进第二道；
             # 色情关键词搜不到色情片 → 通过；色情片来自同一分类 → 保留源并过滤该分类；
